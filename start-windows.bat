@@ -3,6 +3,11 @@ setlocal
 cd /d "%~dp0"
 title SmartClinic launcher
 
+rem ===== Change the ports here =====
+set WEB_PORT=5180
+set API_PORT=4000
+rem ==================================
+
 where node >nul 2>nul
 if errorlevel 1 (
   echo Node.js not found. Install Node 20 or newer from https://nodejs.org and run this again.
@@ -49,14 +54,14 @@ if not exist "backend\.db-ready" (
 )
 
 echo.
-echo Starting API (port 4000) and web app (port 5180)...
-start "SmartClinic API" /d "%~dp0backend" cmd /k npm run dev
-start "SmartClinic Web" /d "%~dp0frontend" cmd /k npm run dev
+echo Starting API (port %API_PORT%) and web app (port %WEB_PORT%)...
+start "SmartClinic API" /d "%~dp0backend" cmd /k "set PORT=%API_PORT%&& set CORS_ORIGIN=http://localhost:%WEB_PORT%&& npm run dev"
+start "SmartClinic Web" /d "%~dp0frontend" cmd /k "npm run dev -- --port %WEB_PORT% --strictPort"
 timeout /t 8 >nul
-start "" http://localhost:5180
+start "" http://localhost:%WEB_PORT%
 
 echo.
-echo SmartClinic is opening at http://localhost:5180
+echo SmartClinic is opening at http://localhost:%WEB_PORT%
 echo Login: superadmin / ChangeMe@123   (staff: cla.reception, cla.doctor, cla.pharmacy, cla.billing / Demo@123)
 echo Keep the two new windows open while you use the app.
 pause
