@@ -1,7 +1,7 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 
-const server = createApp().listen(env.port, () => {
+const server = createApp().listen(env.port, env.host, () => {
   console.log(`SmartClinic is running:  http://localhost:${env.port}`);
   console.log('Keep this window open while you use the app. Press Ctrl+C to stop.');
 });

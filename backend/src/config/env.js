@@ -4,6 +4,7 @@ const bool = (v, dflt) => (v === undefined || v === '' ? dflt : /^(1|true|yes)$/
 
 export const env = {
   port: Number(process.env.PORT || 5180),
+  host: process.env.HOST || undefined,            // e.g. 127.0.0.1 behind a reverse proxy
   corsOrigin: (process.env.CORS_ORIGIN || 'http://localhost:5180').split(',').map((s) => s.trim()),
   db: {
     host: process.env.DB_HOST || 'localhost',
