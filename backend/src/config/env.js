@@ -1,7 +1,7 @@
-import 'dotenv/config';
+import './load-env.js';
 
 export const env = {
-  port: Number(process.env.PORT || 4000),
+  port: Number(process.env.PORT || 5180),
   corsOrigin: (process.env.CORS_ORIGIN || 'http://localhost:5180').split(',').map((s) => s.trim()),
   db: {
     host: process.env.DB_HOST || 'localhost',

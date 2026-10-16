@@ -1,5 +1,7 @@
-import express from 'express';
-import cors from 'cors';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import express from './lib/mini-express.js';
 import { env } from './config/env.js';
 import { authenticate } from './middleware/auth.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
@@ -21,8 +23,18 @@ import billRoutes from './routes/branch/bills.js';
 
 export function createApp() {
   const app = express();
-  app.set('trust proxy', 1);
-  app.use(cors({ origin: env.corsOrigin, allowedHeaders: ['Content-Type', 'Authorization', 'X-Clinic-Id'] }));
+  // CORS for a separately hosted frontend (not needed when the API serves the web pages itself)
+  app.use((req, res, next) => {
+    const origin = req.get('origin');
+    if (origin && env.corsOrigin.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Clinic-Id');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
+    next();
+  });
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -45,7 +57,13 @@ export function createApp() {
   app.use('/api/dispense', dispenseRoutes);
   app.use('/api/bills', billRoutes);
 
-  app.use(notFoundHandler);
+  app.use('/api', notFoundHandler);
+
+  // The pre-built web app (frontend/dist) is served from the same port
+  const web = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../frontend/dist');
+  if (fs.existsSync(path.join(web, 'index.html'))) app.use(express.static(web));
+  else app.get('/', (_req, res) => res.json({ ok: true, note: 'Web app not built: run "npm run build" in frontend/' }));
+
   app.use(errorHandler);
   return app;
 }

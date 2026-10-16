@@ -1,5 +1,5 @@
 // Billing: Patient Bill = consultation fee + issued (unbilled) pharmacy items + extra lines
-import { Router } from 'express';
+import { Router } from '../../lib/mini-express.js';
 import { query, tx } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { nextSequence, formatBillNo } from '../../utils/codes.js';

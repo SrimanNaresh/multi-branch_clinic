@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from '../../lib/mini-express.js';
 import { query } from '../../config/db.js';
 import { requirePermission } from '../../middleware/access.js';
 import { addDays, isISODate, monthStartISO, todayISO } from '../../utils/dates.js';

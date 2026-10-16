@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import bcrypt from 'bcryptjs';
+import { Router } from '../lib/mini-express.js';
+import { checkPassword, hashPassword } from '../lib/security.js';
 import { query } from '../config/db.js';
 import { authenticate, signToken } from '../middleware/auth.js';
 import { HttpError, badRequest, requireFields } from '../utils/http.js';
@@ -45,7 +45,7 @@ router.post('/login', async (req, res) => {
     [String(username).trim()],
   );
   const emp = rows[0];
-  const ok = emp?.password_hash && (await bcrypt.compare(String(password), emp.password_hash));
+  const ok = emp?.password_hash && (await checkPassword(password, emp.password_hash));
   if (!ok) {
     recordFailure(key);
     throw new HttpError(401, 'Invalid username or password', 'BAD_CREDENTIALS');
@@ -67,10 +67,10 @@ router.post('/change-password', authenticate, async (req, res) => {
   requireFields({ current_password, new_password }, ['current_password', 'new_password']);
   if (String(new_password).length < 6) throw badRequest('New password must be at least 6 characters', 'VALIDATION');
   const [row] = await query('SELECT password_hash FROM employees WHERE id = ?', [req.user.id]);
-  if (!row?.password_hash || !(await bcrypt.compare(String(current_password), row.password_hash))) {
+  if (!row?.password_hash || !(await checkPassword(current_password, row.password_hash))) {
     throw badRequest('Current password is wrong', 'BAD_CREDENTIALS');
   }
-  await query('UPDATE employees SET password_hash = ? WHERE id = ?', [await bcrypt.hash(String(new_password), 10), req.user.id]);
+  await query('UPDATE employees SET password_hash = ? WHERE id = ?', [await hashPassword(new_password), req.user.id]);
   res.json({ ok: true });
 });
 

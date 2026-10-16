@@ -1,7 +1,7 @@
 // Creates the first Super Admin (and optional demo data). Safe to run twice.
 //   npm run seed
-import 'dotenv/config';
-import bcrypt from 'bcryptjs';
+import '../src/config/load-env.js';
+import { hashPassword, isCurrentHash } from '../src/lib/security.js';
 import { pool, query, tx } from '../src/config/db.js';
 import { nextSequence, formatAdminCode, formatEmployeeCode, GLOBAL_SEQ_CLINIC } from '../src/utils/codes.js';
 
@@ -10,13 +10,19 @@ const password = process.env.SEED_ADMIN_PASSWORD || 'ChangeMe@123';
 const name = process.env.SEED_ADMIN_NAME || 'Super Admin';
 
 async function ensureAdmin() {
-  const [existing] = await query('SELECT id FROM employees WHERE username = ?', [username]);
-  if (existing) return console.log(`Super Admin "${username}" already exists.`);
+  const [existing] = await query('SELECT id, password_hash FROM employees WHERE username = ?', [username]);
+  if (existing) {
+    if (!isCurrentHash(existing.password_hash)) {
+      await query('UPDATE employees SET password_hash = ? WHERE id = ?', [await hashPassword(password), existing.id]);
+      return console.log(`Super Admin "${username}" password reset to the one in .env.`);
+    }
+    return console.log(`Super Admin "${username}" already exists.`);
+  }
   await tx(async (q) => {
     const code = formatAdminCode(await nextSequence(q, GLOBAL_SEQ_CLINIC, 'employee'));
     await q('INSERT INTO employees SET ?', [{
       emp_code: code, name, role: 'super_admin', unit_type: 'main', clinic_id: null,
-      username, password_hash: await bcrypt.hash(password, 10), can_login: 1, status: 'active',
+      username, password_hash: await hashPassword(password), can_login: 1, status: 'active',
     }]);
   });
   console.log(`Created Super Admin  username: ${username}  password: ${password}  (change it after first login)`);
@@ -36,13 +42,16 @@ async function ensureUnit(table, unit) {
 }
 
 async function ensureStaff(clinicId, clinicCode, staff) {
-  const [row] = await query('SELECT id FROM employees WHERE username = ?', [staff.username]);
-  if (row) return;
+  const [row] = await query('SELECT id, password_hash FROM employees WHERE username = ?', [staff.username]);
+  if (row) {
+    if (!isCurrentHash(row.password_hash)) await query('UPDATE employees SET password_hash = ? WHERE id = ?', [await hashPassword('Demo@123'), row.id]);
+    return;
+  }
   await tx(async (q) => {
     const code = formatEmployeeCode(clinicCode, await nextSequence(q, clinicId, 'employee'));
     await q('INSERT INTO employees SET ?', [{
       ...staff, emp_code: code, clinic_id: clinicId,
-      password_hash: await bcrypt.hash('Demo@123', 10), can_login: 1, status: 'active',
+      password_hash: await hashPassword('Demo@123'), can_login: 1, status: 'active',
     }]);
   });
 }

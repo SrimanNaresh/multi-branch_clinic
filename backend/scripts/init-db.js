@@ -1,6 +1,6 @@
 // Creates the database and all tables from database/schema.sql
 //   npm run db:init
-import 'dotenv/config';
+import '../src/config/load-env.js';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';

@@ -1,5 +1,5 @@
 // Pharmacy dispensing: issue prescribed items to the patient and reduce stock.
-import { Router } from 'express';
+import { Router } from '../../lib/mini-express.js';
 import { query, tx } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, notFound, toAmount, toId } from '../../utils/http.js';

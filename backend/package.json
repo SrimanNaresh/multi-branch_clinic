@@ -1,10 +1,12 @@
 {
   "name": "smartclinic-api",
   "version": "1.0.0",
-  "description": "SmartClinic (Ayush Pro) multi-branch clinic API",
+  "description": "SmartClinic (Ayush Pro) multi-branch clinic API + web server (needs only Node.js and MySQL)",
   "type": "module",
   "main": "src/server.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
@@ -13,11 +15,6 @@
     "test": "node --test"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.11.3"
   }
 }

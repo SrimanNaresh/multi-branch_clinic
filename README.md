@@ -10,37 +10,33 @@ Patient flow: **Patient Registration → Confirm & Search (token) → Doctor Exa
 ```
 database/schema.sql      MySQL 8 schema (16 tables)
 shared/permissions.js    role → permission matrix, used by API and UI
-backend/                 Node 20 + Express 5 + mysql2 API
-frontend/                React 18 + Vite, English / தமிழ், mobile-responsive
+backend/                 Node 20 API + web server (built-in modules, bundled mysql2)
+frontend/                React 18 UI (pre-built in dist/), English / தமிழ், mobile-responsive
 ```
 
 ## Setup
 
-Needs Node 20+ and MySQL 8.0.16+.
+Needs only **Node.js 20+** and **MySQL 8** (or XAMPP MariaDB). No `npm install`: the web pages are pre-built in `frontend/dist`, and the backend uses Node's built-in modules plus the MySQL driver bundled in `backend/node_modules`.
 
-**Windows, one click:** double-click `start-windows.bat`. The first run asks for your MySQL login, installs packages, creates the database and demo data. After that it starts the API and opens http://localhost:5180.
+**Windows:** double-click `start-windows.bat`.
+- On the first run, Notepad opens `backend\.env`. Set `DB_USER` and `DB_PASSWORD`, save, and close it. The launcher then creates the database and demo data.
+- It then starts SmartClinic and opens **http://localhost:5180**. Keep the window open while you use the app.
+- To use another port, edit `set APP_PORT=5180` at the top of the file.
 
-Manual steps:
-
+**Any OS (manual):**
 ```bash
-# 1. API
 cd backend
-cp .env.example .env          # set DB_* and JWT_SECRET
-npm install
-npm run db:init               # creates database + tables from database/schema.sql
-npm run seed                  # creates the first Super Admin (+ demo clinics if SEED_DEMO=1)
-npm run dev                   # http://localhost:4000
-
-# 2. Web
-cd ../frontend
-npm install
-npm run dev                   # http://localhost:5180  (proxies /api to :4000)
+cp .env.example .env            # set DB_USER / DB_PASSWORD
+node scripts/init-db.js         # create database + tables
+node scripts/seed.js            # Super Admin + demo clinics
+node src/server.js              # http://localhost:5180
 ```
 
-Log in with `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` from `.env` (default `superadmin` / `ChangeMe@123`) and change the password.
-With `SEED_DEMO=1` you also get Clinic A (CLA) and Clinic B (CLB), plus Clinic A staff logins `cla.reception`, `cla.doctor`, `cla.pharmacy`, `cla.billing` (password `Demo@123`).
+Log in with `superadmin` / `ChangeMe@123` (from `SEED_ADMIN_*` in `.env`). With `SEED_DEMO=1` you also get Clinic A (CLA), Clinic B (CLB) and Clinic A staff `cla.reception`, `cla.doctor`, `cla.pharmacy`, `cla.billing` (password `Demo@123`).
 
-**Production:** `npm run build` in `frontend/` and serve `frontend/dist` as static files. Run the API with `NODE_ENV=production` and a real `JWT_SECRET`. Deploy the `shared/` folder alongside `backend/`, because both import it. If the API is on another domain, set `VITE_API_URL` before building and add the web origin to `CORS_ORIGIN`. Set MySQL (or `DB_TIME_ZONE`) to `+05:30` so "today" matches the clinic.
+**Editing the UI:** `cd frontend && npm install && npm run dev` starts Vite on :5181 with hot reload (it forwards `/api` to the server on :5180). Run `npm run build` to refresh `frontend/dist`.
+
+**Production:** run `node backend/src/server.js` with `NODE_ENV=production` and a long random `JWT_SECRET`, behind your web server (it serves both the pages and `/api`). Set MySQL (or `DB_TIME_ZONE`) to `+05:30` so "today" matches the clinic.
 
 ## How clinic isolation works
 
@@ -120,4 +116,4 @@ All menus and labels live in `frontend/src/i18n/en.js` and `ta.js` (same keys). 
 
 ## Tests
 
-`cd backend && npm test` runs unit tests for the permission matrix, code formats, dates (IST) and the clinic-scope / permission middleware.
+`cd backend && node --test` runs unit tests for the built-in router, login tokens and passwords, and for the permission matrix, code formats, dates (IST) and the clinic-scope / permission middleware.

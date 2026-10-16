@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from '../../lib/mini-express.js';
 import { query } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, notFound, oneOf, pick, requireFields, setClause, toId, like } from '../../utils/http.js';

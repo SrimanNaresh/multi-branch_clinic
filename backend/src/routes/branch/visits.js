@@ -1,5 +1,5 @@
 // Doctor: Examine + Patient History
-import { Router } from 'express';
+import { Router } from '../../lib/mini-express.js';
 import { query, tx } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, conflict, notFound, pick, toAmount, toId } from '../../utils/http.js';

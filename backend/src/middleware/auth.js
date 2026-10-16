@@ -1,10 +1,10 @@
-import jwt from 'jsonwebtoken';
+import { signJwt, verifyJwt } from '../lib/security.js';
 import { env } from '../config/env.js';
 import { query } from '../config/db.js';
 import { HttpError } from '../utils/http.js';
 
 export function signToken(employee) {
-  return jwt.sign({ sub: employee.id, role: employee.role }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
+  return signJwt({ sub: employee.id, role: employee.role }, env.jwtSecret, env.jwtExpiresIn);
 }
 
 /**
@@ -18,7 +18,7 @@ export async function authenticate(req, _res, next) {
 
   let payload;
   try {
-    payload = jwt.verify(token, env.jwtSecret);
+    payload = verifyJwt(token, env.jwtSecret);
   } catch {
     throw new HttpError(401, 'Session expired, please log in again', 'UNAUTHENTICATED');
   }

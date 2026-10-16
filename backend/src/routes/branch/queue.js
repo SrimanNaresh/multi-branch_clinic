@@ -1,5 +1,5 @@
 // Patient & Queue: Confirm & Search → Confirm List
-import { Router } from 'express';
+import { Router } from '../../lib/mini-express.js';
 import { query, tx } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { nextSequence, tokenKey } from '../../utils/codes.js';

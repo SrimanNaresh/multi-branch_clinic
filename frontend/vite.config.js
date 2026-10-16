@@ -2,11 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // Ports can be changed without editing this file:
-//   WEB_PORT  – where the web app runs (default 5180)
-//   API_PORT  – where the backend API runs (default 4000)
-// start-windows.bat sets both at the top of the file.
-const WEB_PORT = Number(process.env.WEB_PORT || 5180);
-const API_PORT = Number(process.env.API_PORT || 4000);
+//   WEB_PORT  – Vite dev server for editing the UI (default 5181)
+//   API_PORT  – the SmartClinic server (default 5180)
+// Normal use needs no Vite: the server on 5180 serves the pre-built pages in dist/.
+const WEB_PORT = Number(process.env.WEB_PORT || 5181);
+const API_PORT = Number(process.env.API_PORT || 5180);
 
 export default defineConfig({
   plugins: [react()],

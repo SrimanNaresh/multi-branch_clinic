@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import bcrypt from 'bcryptjs';
+import { Router } from '../../lib/mini-express.js';
+import { hashPassword } from '../../lib/security.js';
 import { query, tx } from '../../config/db.js';
 import { requirePermission } from '../../middleware/access.js';
 import { GLOBAL_ROLES, ROLES, isGlobalRole } from '../../../../shared/permissions.js';
@@ -128,7 +128,7 @@ router.post('/', requirePermission('employee.create'), async (req, res) => {
   requireFields(data, ['name', 'role']);
   normaliseLogin(data, body.password, { isNew: true });
   data = await resolveAssignment(data, req.user);
-  if (body.password) data.password_hash = await bcrypt.hash(String(body.password), 10);
+  if (body.password) data.password_hash = await hashPassword(body.password);
 
   const id = await tx(async (q) => {
     let empCode;
@@ -169,7 +169,7 @@ router.put('/:id', requirePermission('employee.edit'), async (req, res) => {
   }
   if (data.can_login && !current.username && !data.username) throw badRequest('Username is required for login', 'VALIDATION');
   if (data.can_login && !current.password_hash && !body.password) throw badRequest('Password is required for login', 'VALIDATION');
-  if (body.password) data.password_hash = await bcrypt.hash(String(body.password), 10);
+  if (body.password) data.password_hash = await hashPassword(body.password);
 
   const keys = Object.keys(data);
   if (!keys.length) throw badRequest('Nothing to update', 'VALIDATION');
