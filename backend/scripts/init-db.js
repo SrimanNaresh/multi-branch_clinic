@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import mysql from 'mysql2/promise';
+import { explainDbError } from './db-errors.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.resolve(here, '../../database/schema.sql');
@@ -22,7 +23,7 @@ const conn = await mysql.createConnection({
   password: process.env.DB_PASSWORD || '',
   multipleStatements: true,
   charset: 'utf8mb4',
-});
-await conn.query(sql);
+}).catch(explainDbError);
+await conn.query(sql).catch(explainDbError);
 await conn.end();
 console.log(`Schema applied to database "${dbName}".`);

@@ -3,6 +3,7 @@
 import '../src/config/load-env.js';
 import { hashPassword, isCurrentHash } from '../src/lib/security.js';
 import { pool, query, tx } from '../src/config/db.js';
+import { explainDbError } from './db-errors.js';
 import { nextSequence, formatAdminCode, formatEmployeeCode, GLOBAL_SEQ_CLINIC } from '../src/utils/codes.js';
 
 const username = process.env.SEED_ADMIN_USERNAME || 'superadmin';
@@ -74,6 +75,8 @@ async function seedDemo() {
 try {
   await ensureAdmin();
   if (process.env.SEED_DEMO === '1') await seedDemo();
+} catch (err) {
+  explainDbError(err);
 } finally {
   await pool.end();
 }
