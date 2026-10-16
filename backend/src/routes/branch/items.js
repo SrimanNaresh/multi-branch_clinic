@@ -1,6 +1,6 @@
 // Pharmacy: Item + Item List + stock in / adjustment
 import { Router } from '../../lib/mini-express.js';
-import { query, tx } from '../../config/db.js';
+import { query, tx, insertRow, pageSql } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, notFound, oneOf, paging, pick, requireFields, setClause, toAmount, toId, like } from '../../utils/http.js';
 
@@ -49,8 +49,8 @@ router.get('/', requirePermission('item.view'), async (req, res) => {
   const [{ total }] = await query(`SELECT COUNT(*) AS total FROM items i WHERE ${w}`, params);
   const rows = await query(
     `SELECT i.*, ph.name AS pharmacy_name FROM items i LEFT JOIN pharmacies ph ON ph.id = i.pharmacy_id
-      WHERE ${w} ORDER BY i.name LIMIT ? OFFSET ?`,
-    [...params, limit, offset],
+      WHERE ${w} ORDER BY i.name ${pageSql}`,
+    [...params, offset, limit],
   );
   res.json({ rows, total, page, limit });
 });
@@ -75,14 +75,14 @@ router.post('/', requirePermission('item.manage'), async (req, res) => {
   requireFields(data, ['name']);
   const opening = toAmount(req.body?.opening_stock, 'opening_stock');
   const id = await tx(async (q) => {
-    const r = await q('INSERT INTO items SET ?', [{ unit: 'nos', ...data, stock_qty: opening, clinic_id: req.clinicId, created_by: req.user.id }]);
+    const itemId = await insertRow(q, 'items', { unit: 'nos', ...data, stock_qty: opening, clinic_id: req.clinicId, created_by: req.user.id });
     if (opening > 0) {
-      await q('INSERT INTO stock_movements SET ?', [{
-        clinic_id: req.clinicId, item_id: r.insertId, qty_change: opening, balance_after: opening,
+      await insertRow(q, 'stock_movements', {
+        clinic_id: req.clinicId, item_id: itemId, qty_change: opening, balance_after: opening,
         reason: 'opening', created_by: req.user.id,
-      }]);
+      });
     }
-    return r.insertId;
+    return itemId;
   });
   res.status(201).json(await getItem(req.clinicId, id));
 });
@@ -91,7 +91,7 @@ router.post('/', requirePermission('item.manage'), async (req, res) => {
 router.put('/:id', requirePermission('item.manage'), async (req, res) => {
   const id = toId(req.params.id);
   const { sql, params } = setClause(await clean(req.body, req.clinicId));
-  const r = await query(`UPDATE items SET ${sql} WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
+  const r = await query(`UPDATE items SET ${sql}, updated_at = NOW() WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
   if (!r.affectedRows) throw notFound('Item');
   res.json(await getItem(req.clinicId, id));
 });
@@ -108,7 +108,7 @@ router.post('/:id/stock', requirePermission('stock.manage'), async (req, res) =>
   const supplierId = req.body?.supplier_id ? toId(req.body.supplier_id, 'supplier') : null;
 
   await tx(async (q) => {
-    const [item] = await q('SELECT stock_qty FROM items WHERE id = ? AND clinic_id = ? FOR UPDATE', [id, req.clinicId]);
+    const [item] = await q('SELECT stock_qty FROM items WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
     if (!item) throw notFound('Item');
     if (supplierId) {
       const [s] = await q('SELECT id FROM suppliers WHERE id = ? AND clinic_id = ?', [supplierId, req.clinicId]);
@@ -116,20 +116,20 @@ router.post('/:id/stock', requirePermission('stock.manage'), async (req, res) =>
     }
     const balance = Math.round((Number(item.stock_qty) + qty) * 100) / 100;
     if (balance < 0) throw badRequest(`Stock cannot go below zero (current ${item.stock_qty})`, 'VALIDATION');
-    await q('UPDATE items SET stock_qty = ? WHERE id = ?', [balance, id]);
-    await q('INSERT INTO stock_movements SET ?', [{
+    await q('UPDATE items SET stock_qty = ?, updated_at = NOW() WHERE id = ?', [balance, id]);
+    await insertRow(q, 'stock_movements', {
       clinic_id: req.clinicId, item_id: id, qty_change: qty, balance_after: balance, reason,
       supplier_id: supplierId, note: req.body?.note || null, created_by: req.user.id,
-    }]);
+    });
   });
   res.json(await getItem(req.clinicId, id));
 });
 
 router.get('/:id/movements', requirePermission('item.view'), async (req, res) => {
   const rows = await query(
-    `SELECT m.*, s.name AS supplier_name, e.name AS created_by_name
+    `SELECT TOP 200 m.*, s.name AS supplier_name, e.name AS created_by_name
        FROM stock_movements m LEFT JOIN suppliers s ON s.id = m.supplier_id LEFT JOIN employees e ON e.id = m.created_by
-      WHERE m.item_id = ? AND m.clinic_id = ? ORDER BY m.id DESC LIMIT 200`,
+      WHERE m.item_id = ? AND m.clinic_id = ? ORDER BY m.id DESC`,
     [toId(req.params.id), req.clinicId],
   );
   res.json({ rows });

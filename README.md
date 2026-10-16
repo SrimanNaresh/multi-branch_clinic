@@ -8,26 +8,26 @@ Two-level clinic management:
 Patient flow: **Patient Registration → Confirm & Search (token) → Doctor Examine → Pharmacy Dispense (stock reduces) → Patient Bill (print / PDF)**
 
 ```
-database/schema.sql      MySQL 8 schema (16 tables)
+database/schema.sql      Microsoft SQL Server schema (16 tables)
 shared/permissions.js    role → permission matrix, used by API and UI
-backend/                 Node 20 API + web server (built-in modules, bundled mysql2)
+backend/                 Node 20 API + web server (built-in modules, bundled SQL Server driver)
 frontend/                React 18 UI (pre-built in dist/), English / தமிழ், mobile-responsive
 ```
 
 ## Setup
 
-Needs only **Node.js 20+** and **MySQL 8** (or XAMPP MariaDB). No `npm install`: the web pages are pre-built in `frontend/dist`, and the backend uses Node's built-in modules plus the MySQL driver bundled in `backend/node_modules`.
+Needs only **Node.js 20+** and access to **Microsoft SQL Server 2016+**. No `npm install`: the web pages are pre-built in `frontend/dist`, and the backend uses Node's built-in modules plus the SQL Server driver (Tedious) bundled in `backend/node_modules`.
 
 **Windows:** double-click `start-windows.bat`.
-- On the first run, Notepad opens `backend\.env`. Set `DB_USER` and `DB_PASSWORD`, save, and close it. The launcher then creates the database and demo data.
+- Connection settings live in `backend\.env` (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`; `DB_INSTANCE` for a named instance). On the first run the launcher creates the tables and demo data in `DB_NAME`.
 - It then starts SmartClinic and opens **http://localhost:5180**. Keep the window open while you use the app.
 - To use another port, edit `set APP_PORT=5180` at the top of the file.
 
 **Any OS (manual):**
 ```bash
 cd backend
-cp .env.example .env            # set DB_USER / DB_PASSWORD
-node scripts/init-db.js         # create database + tables
+cp .env.example .env            # set DB_HOST / DB_USER / DB_PASSWORD / DB_NAME
+node scripts/init-db.js         # create tables in DB_NAME (creates the database if missing)
 node scripts/seed.js            # Super Admin + demo clinics
 node src/server.js              # http://localhost:5180
 ```
@@ -36,7 +36,7 @@ Log in with `superadmin` / `ChangeMe@123` (from `SEED_ADMIN_*` in `.env`). With 
 
 **Editing the UI:** `cd frontend && npm install && npm run dev` starts Vite on :5181 with hot reload (it forwards `/api` to the server on :5180). Run `npm run build` to refresh `frontend/dist`.
 
-**Production:** run `node backend/src/server.js` with `NODE_ENV=production` and a long random `JWT_SECRET`, behind your web server (it serves both the pages and `/api`). Set MySQL (or `DB_TIME_ZONE`) to `+05:30` so "today" matches the clinic.
+**Production:** run `node backend/src/server.js` with `NODE_ENV=production` and a long random `JWT_SECRET`, behind your web server (it serves both the pages and `/api`). Timestamps are stored in clinic time (`TZ_OFFSET_MINUTES`, 330 for India) whatever the SQL Server's own time zone.
 
 ## How clinic isolation works
 
@@ -68,7 +68,9 @@ Defined in `shared/permissions.js`. The API enforces them; the UI hides menus an
 
 Per the requirement, only Admin / Super Admin can create branches, employees and patients. If receptionists should register patients, add `'patient.create'` to `receptionist` in `shared/permissions.js`.
 
-## Database (database/schema.sql)
+## Database (database/schema.sql, SQL Server)
+
+Text columns are NVARCHAR (Tamil-safe). Status columns are NVARCHAR with CHECK constraints. Usernames and visit→queue links are unique through filtered indexes, so several rows may leave them empty. The schema can be pasted into SSMS or run with `node backend/scripts/init-db.js`, and is safe to re-run.
 
 | Table | Purpose |
 |---|---|

@@ -1,6 +1,6 @@
 // Pharmacy dispensing: issue prescribed items to the patient and reduce stock.
 import { Router } from '../../lib/mini-express.js';
-import { query, tx } from '../../config/db.js';
+import { query, tx, insertRow } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, notFound, toAmount, toId } from '../../utils/http.js';
 import { addDays, isISODate, todayISO } from '../../utils/dates.js';
@@ -15,17 +15,16 @@ router.get('/pending', async (req, res) => {
   const day = isISODate(req.query.date) ? req.query.date : todayISO();
   const rows = await query(
     `SELECT v.id AS visit_id, v.visit_date, v.status AS visit_status, p.id AS patient_id, p.patient_code, p.name AS patient_name,
-            p.mobile, q.token_no, d.name AS doctor_name,
-            COUNT(rx.id) AS rx_lines,
-            SUM(CASE WHEN rx.item_id IS NOT NULL AND rx.issued_qty < rx.quantity THEN 1 ELSE 0 END) AS pending_lines
+            p.mobile, q.token_no, d.name AS doctor_name, rx.rx_lines, rx.pending_lines
        FROM visits v
        JOIN patients p ON p.id = v.patient_id
-       JOIN prescriptions rx ON rx.visit_id = v.id
+       JOIN (SELECT visit_id, COUNT(*) AS rx_lines,
+                    SUM(CASE WHEN item_id IS NOT NULL AND issued_qty < quantity THEN 1 ELSE 0 END) AS pending_lines
+               FROM prescriptions GROUP BY visit_id) rx ON rx.visit_id = v.id
        LEFT JOIN queue_entries q ON q.id = v.queue_id
        LEFT JOIN employees d ON d.id = v.doctor_id
       WHERE v.clinic_id = ? AND v.visit_date >= ? AND v.visit_date < ?
-      GROUP BY v.id
-      ORDER BY pending_lines = 0, q.token_no, v.id`,
+      ORDER BY CASE WHEN rx.pending_lines = 0 THEN 1 ELSE 0 END, q.token_no, v.id`,
     [req.clinicId, day, addDays(day, 1)],
   );
   res.json({ date: day, rows });
@@ -65,12 +64,12 @@ router.post('/visit/:visitId', async (req, res) => {
   if (!lines.length) throw badRequest('Select at least one item with quantity', 'VALIDATION');
 
   const issueId = await tx(async (q) => {
-    const [visit] = await q('SELECT id, patient_id FROM visits WHERE id = ? AND clinic_id = ? FOR UPDATE', [visitId, req.clinicId]);
+    const [visit] = await q('SELECT id, patient_id FROM visits WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [visitId, req.clinicId]);
     if (!visit) throw notFound('Visit');
 
     // Lock items in id order to avoid deadlocks between two pharmacists
     const itemIds = [...new Set(lines.map((l) => toId(l.item_id, 'item')))].sort((a, b) => a - b);
-    const items = await q('SELECT id, name, price, gst_percent, stock_qty FROM items WHERE id IN (?) AND clinic_id = ? FOR UPDATE', [itemIds, req.clinicId]);
+    const items = await q('SELECT id, name, price, gst_percent, stock_qty FROM items WITH (UPDLOCK, ROWLOCK) WHERE id IN (?) AND clinic_id = ?', [itemIds, req.clinicId]);
     const byId = new Map(items.map((i) => [i.id, i]));
     const need = new Map();
     for (const l of lines) {
@@ -83,9 +82,9 @@ router.post('/visit/:visitId', async (req, res) => {
       if (Number(it.stock_qty) < qty) throw badRequest(`Not enough stock for ${it.name} (available ${it.stock_qty})`, 'OUT_OF_STOCK');
     }
 
-    const r = await q('INSERT INTO pharmacy_issues SET ?', [{
+    const newIssueId = await insertRow(q, 'pharmacy_issues', {
       clinic_id: req.clinicId, visit_id: visitId, patient_id: visit.patient_id, issued_by: req.user.id,
-    }]);
+    });
     let total = 0;
     for (const l of lines) {
       const it = byId.get(Number(l.item_id));
@@ -100,19 +99,19 @@ router.post('/visit/:visitId', async (req, res) => {
           await q('UPDATE prescriptions SET issued_qty = issued_qty + ?, item_id = COALESCE(item_id, ?) WHERE id = ?', [qty, it.id, rxId]);
         }
       }
-      await q('INSERT INTO pharmacy_issue_items SET ?', [{
-        clinic_id: req.clinicId, issue_id: r.insertId, prescription_id: rxId, item_id: it.id,
+      await insertRow(q, 'pharmacy_issue_items', {
+        clinic_id: req.clinicId, issue_id: newIssueId, prescription_id: rxId, item_id: it.id,
         qty, rate: it.price, gst_percent: it.gst_percent, amount,
-      }]);
+      });
       it.stock_qty = round2(Number(it.stock_qty) - qty);
-      await q('UPDATE items SET stock_qty = ? WHERE id = ?', [it.stock_qty, it.id]);
-      await q('INSERT INTO stock_movements SET ?', [{
+      await q('UPDATE items SET stock_qty = ?, updated_at = NOW() WHERE id = ?', [it.stock_qty, it.id]);
+      await insertRow(q, 'stock_movements', {
         clinic_id: req.clinicId, item_id: it.id, qty_change: -qty, balance_after: it.stock_qty,
-        reason: 'issue', ref_type: 'pharmacy_issue', ref_id: r.insertId, created_by: req.user.id,
-      }]);
+        reason: 'issue', ref_type: 'pharmacy_issue', ref_id: newIssueId, created_by: req.user.id,
+      });
     }
-    await q('UPDATE pharmacy_issues SET items_total = ? WHERE id = ?', [round2(total), r.insertId]);
-    return r.insertId;
+    await q('UPDATE pharmacy_issues SET items_total = ? WHERE id = ?', [round2(total), newIssueId]);
+    return newIssueId;
   });
 
   const [issue] = await query('SELECT * FROM pharmacy_issues WHERE id = ?', [issueId]);

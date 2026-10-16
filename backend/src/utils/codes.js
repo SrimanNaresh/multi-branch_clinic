@@ -5,12 +5,15 @@
 export const GLOBAL_SEQ_CLINIC = 0;
 
 export async function nextSequence(q, clinicId, key) {
-  await q(
-    `INSERT INTO code_sequences (clinic_id, seq_key, last_value) VALUES (?, ?, 1)
-     ON DUPLICATE KEY UPDATE last_value = last_value + 1`,
-    [clinicId, key],
+  // UPDLOCK + HOLDLOCK keeps the row (or the gap, for a new key) locked until commit
+  const rows = await q(
+    `UPDATE code_sequences WITH (UPDLOCK, HOLDLOCK) SET last_value = last_value + 1, updated_at = NOW()
+      WHERE clinic_id = ? AND seq_key = ?;
+     IF @@ROWCOUNT = 0
+       INSERT INTO code_sequences (clinic_id, seq_key, last_value) VALUES (?, ?, 1);
+     SELECT last_value FROM code_sequences WHERE clinic_id = ? AND seq_key = ?;`,
+    [clinicId, key, clinicId, key, clinicId, key],
   );
-  const rows = await q('SELECT last_value FROM code_sequences WHERE clinic_id = ? AND seq_key = ?', [clinicId, key]);
   return rows[0].last_value;
 }
 

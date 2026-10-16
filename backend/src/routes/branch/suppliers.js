@@ -1,5 +1,5 @@
 import { Router } from '../../lib/mini-express.js';
-import { query } from '../../config/db.js';
+import { query, insertRow } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, notFound, oneOf, pick, requireFields, setClause, toId, like } from '../../utils/http.js';
 
@@ -41,15 +41,15 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const data = clean(req.body);
   requireFields(data, ['name']);
-  const r = await query('INSERT INTO suppliers SET ?', [{ ...data, clinic_id: req.clinicId, created_by: req.user.id }]);
-  const [row] = await query('SELECT * FROM suppliers WHERE id = ?', [r.insertId]);
+  const newId = await insertRow(query, 'suppliers', { ...data, clinic_id: req.clinicId, created_by: req.user.id });
+  const [row] = await query('SELECT * FROM suppliers WHERE id = ?', [newId]);
   res.status(201).json(row);
 });
 
 router.put('/:id', async (req, res) => {
   const id = toId(req.params.id);
   const { sql, params } = setClause(clean(req.body));
-  const r = await query(`UPDATE suppliers SET ${sql} WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
+  const r = await query(`UPDATE suppliers SET ${sql}, updated_at = NOW() WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
   if (!r.affectedRows) throw notFound('Supplier');
   const [row] = await query('SELECT * FROM suppliers WHERE id = ?', [id]);
   res.json(row);

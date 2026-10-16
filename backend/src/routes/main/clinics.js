@@ -1,5 +1,5 @@
 import { Router } from '../../lib/mini-express.js';
-import { query } from '../../config/db.js';
+import { query, insertRow } from '../../config/db.js';
 import { requirePermission } from '../../middleware/access.js';
 import { isGlobalRole } from '../../../../shared/permissions.js';
 import { badRequest, conflict, notFound, oneOf, pick, requireFields, setClause, toAmount, toId, like } from '../../utils/http.js';
@@ -57,8 +57,8 @@ router.get('/:id', async (req, res) => {
 router.post('/', requirePermission('clinic.manage'), async (req, res) => {
   const data = clean(req.body);
   requireFields(data, ['name', 'code']);
-  const result = await query('INSERT INTO clinics SET ?', [{ ...data, created_by: req.user.id }]);
-  const [row] = await query('SELECT * FROM clinics WHERE id = ?', [result.insertId]);
+  const newId = await insertRow(query, 'clinics', { ...data, created_by: req.user.id });
+  const [row] = await query('SELECT * FROM clinics WHERE id = ?', [newId]);
   res.status(201).json(row);
 });
 
@@ -74,7 +74,7 @@ router.put('/:id', requirePermission('clinic.manage'), async (req, res) => {
     if (n > 0) throw conflict('Clinic code cannot change after patients are registered', 'CODE_LOCKED');
   }
   const { sql, params } = setClause(data);
-  await query(`UPDATE clinics SET ${sql} WHERE id = ?`, [...params, id]);
+  await query(`UPDATE clinics SET ${sql}, updated_at = NOW() WHERE id = ?`, [...params, id]);
   const [row] = await query('SELECT * FROM clinics WHERE id = ?', [id]);
   res.json(row);
 });

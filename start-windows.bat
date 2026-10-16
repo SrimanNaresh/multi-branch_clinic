@@ -14,7 +14,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "backend\node_modules\mysql2" (
+if not exist "backend\node_modules\tedious\index.js" (
   echo The folder backend\node_modules is missing. Unzip the full multi-branch_clinic.zip again.
   pause
   exit /b 1
@@ -24,13 +24,13 @@ if not exist "backend\.env" (
   copy "backend\.env.example" "backend\.env" >nul
   echo.
   echo First run: Notepad will open backend\.env
-  echo Set DB_USER and DB_PASSWORD for your MySQL, then SAVE and CLOSE Notepad.
+  echo Set DB_HOST, DB_USER, DB_PASSWORD and DB_NAME for your SQL Server, then SAVE and CLOSE Notepad.
   start /wait notepad "backend\.env"
 )
 
 if not exist "backend\.db-ready" (
   echo.
-  echo Creating the database and demo data...
+  echo Creating the SmartClinic tables and demo data in SQL Server...
   pushd backend
   node scripts\init-db.js
   if errorlevel 1 goto dbfail
@@ -57,8 +57,8 @@ exit /b 0
 popd
 echo.
 echo Could not set up the database.
-echo  - Make sure MySQL is running (XAMPP: click Start next to MySQL).
-echo  - Check DB_USER / DB_PASSWORD in backend\.env  (opening it now)
+echo  - Make sure SQL Server is running and this PC can reach it (port 1433).
+echo  - Check DB_HOST / DB_USER / DB_PASSWORD / DB_NAME in backend\.env  (opening it now)
 start notepad "backend\.env"
 echo Then run start-windows.bat again. If it still fails, send a screenshot of this window to Claude.
 pause

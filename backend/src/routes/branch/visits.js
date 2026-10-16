@@ -1,6 +1,6 @@
 // Doctor: Examine + Patient History
 import { Router } from '../../lib/mini-express.js';
-import { query, tx } from '../../config/db.js';
+import { query, tx, insertRow, updateRow } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, conflict, notFound, pick, toAmount, toId } from '../../utils/http.js';
 import { isISODate } from '../../utils/dates.js';
@@ -13,7 +13,7 @@ async function loadVisit(clinicId, id) {
     `SELECT v.*, p.patient_code, p.name AS patient_name, p.gender, p.age_years, p.dob, p.mobile, p.blood_group,
             d.name AS doctor_name, q.token_no, q.queue_date,
             (SELECT COUNT(*) FROM pharmacy_issues pi WHERE pi.visit_id = v.id) AS issue_count,
-            (SELECT b.id FROM bills b WHERE b.visit_id = v.id AND b.status <> 'cancelled' LIMIT 1) AS bill_id
+            (SELECT TOP 1 b.id FROM bills b WHERE b.visit_id = v.id AND b.status <> 'cancelled') AS bill_id
        FROM visits v
        JOIN patients p ON p.id = v.patient_id
        LEFT JOIN employees d ON d.id = v.doctor_id
@@ -22,7 +22,7 @@ async function loadVisit(clinicId, id) {
     [id, clinicId],
   );
   if (!visit) return null;
-  if (typeof visit.vitals === 'string') visit.vitals = JSON.parse(visit.vitals);
+  if (typeof visit.vitals === 'string') { try { visit.vitals = JSON.parse(visit.vitals); } catch { visit.vitals = null; } }
   visit.prescriptions = await query(
     `SELECT rx.*, i.stock_qty, i.price, i.unit
        FROM prescriptions rx LEFT JOIN items i ON i.id = rx.item_id
@@ -36,7 +36,7 @@ async function loadVisit(clinicId, id) {
 router.post('/start', requirePermission('visit.examine'), async (req, res) => {
   const queueId = toId(req.body?.queue_id, 'queue');
   const visitId = await tx(async (q) => {
-    const [entry] = await q('SELECT * FROM queue_entries WHERE id = ? AND clinic_id = ? FOR UPDATE', [queueId, req.clinicId]);
+    const [entry] = await q('SELECT * FROM queue_entries WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [queueId, req.clinicId]);
     if (!entry) throw notFound('Queue entry');
     if (entry.status === 'cancelled') throw badRequest('This token was cancelled', 'BAD_TRANSITION');
     const [existing] = await q('SELECT id FROM visits WHERE queue_id = ?', [queueId]);
@@ -44,15 +44,15 @@ router.post('/start', requirePermission('visit.examine'), async (req, res) => {
 
     const doctorId = req.user.role === 'doctor' ? req.user.id : entry.doctor_id;
     const [clinic] = await q('SELECT consultation_fee FROM clinics WHERE id = ?', [req.clinicId]);
-    const r = await q('INSERT INTO visits SET ?', [{
+    const newVisitId = await insertRow(q, 'visits', {
       clinic_id: req.clinicId, patient_id: entry.patient_id, queue_id: queueId, doctor_id: doctorId,
       consultation_fee: clinic.consultation_fee || 0,
-    }]);
+    });
     await q(
       "UPDATE queue_entries SET status = 'with_doctor', called_at = COALESCE(called_at, NOW()), doctor_id = COALESCE(?, doctor_id) WHERE id = ?",
       [doctorId, queueId],
     );
-    return r.insertId;
+    return newVisitId;
   });
   res.status(201).json(await loadVisit(req.clinicId, visitId));
 });
@@ -78,7 +78,7 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
       [visits.map((v) => v.id), req.clinicId],
     );
     for (const v of visits) {
-      if (typeof v.vitals === 'string') v.vitals = JSON.parse(v.vitals);
+      if (typeof v.vitals === 'string') { try { v.vitals = JSON.parse(v.vitals); } catch { v.vitals = null; } }
       v.prescriptions = rx.filter((r) => r.visit_id === v.id);
     }
   }
@@ -101,9 +101,9 @@ router.put('/:id', requirePermission('visit.examine'), async (req, res) => {
   if (body.vitals !== undefined) data.vitals = body.vitals ? JSON.stringify(body.vitals) : null;
 
   await tx(async (q) => {
-    const [visit] = await q('SELECT * FROM visits WHERE id = ? AND clinic_id = ? FOR UPDATE', [id, req.clinicId]);
+    const [visit] = await q('SELECT * FROM visits WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
     if (!visit) throw notFound('Visit');
-    const [billed] = await q("SELECT id FROM bills WHERE visit_id = ? AND status <> 'cancelled' LIMIT 1", [id]);
+    const [billed] = await q("SELECT TOP 1 id FROM bills WHERE visit_id = ? AND status <> 'cancelled'", [id]);
     if (billed && data.consultation_fee !== undefined && data.consultation_fee !== Number(visit.consultation_fee)) {
       throw conflict('Visit is already billed – fee cannot change', 'BILLED');
     }
@@ -124,16 +124,16 @@ router.put('/:id', requirePermission('visit.examine'), async (req, res) => {
           itemId = item.id;
         }
         const qty = toAmount(line.quantity ?? 1, 'quantity');
-        await q('INSERT INTO prescriptions SET ?', [{
+        await insertRow(q, 'prescriptions', {
           clinic_id: req.clinicId, visit_id: id, item_id: itemId, medicine_name: name.slice(0, 200),
           dosage: line.dosage || null, frequency: line.frequency || null, duration: line.duration || null,
           quantity: qty || 1, instructions: line.instructions || null, sort_order: order++,
-        }]);
+        });
       }
     }
 
     if (body.complete) data.status = 'completed';
-    if (Object.keys(data).length) await q('UPDATE visits SET ? WHERE id = ?', [data, id]);
+    if (Object.keys(data).length) await updateRow(q, 'visits', data, 'id = ?', [id]);
     if (body.complete && visit.queue_id) {
       await q("UPDATE queue_entries SET status = 'done', completed_at = NOW() WHERE id = ? AND status <> 'cancelled'", [visit.queue_id]);
     }

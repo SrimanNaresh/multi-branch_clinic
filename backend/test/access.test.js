@@ -41,8 +41,8 @@ test('per-clinic codes', () => {
 test('http helpers', () => {
   assert.deepEqual(pick({ a: ' x ', b: '', c: 3, d: 4 }, ['a', 'b', 'c']), { a: 'x', b: null, c: 3 });
   assert.deepEqual(paging({ page: '3', limit: '500' }), { limit: 100, page: 3, offset: 200 });
-  assert.equal(like('50%_off'), '%50\\%\\_off%');
-  assert.deepEqual(setClause({ name: 'A', status: 'active' }), { sql: '`name` = ?, `status` = ?', params: ['A', 'active'] });
+  assert.equal(like('50%_off[x]'), '%50[%][_]off[[]x]%');
+  assert.deepEqual(setClause({ name: 'A', status: 'active' }), { sql: '[name] = ?, [status] = ?', params: ['A', 'active'] });
   assert.equal(toAmount('12.345', 'x'), 12.35);
   assert.throws(() => toAmount('-1', 'x'));
 });

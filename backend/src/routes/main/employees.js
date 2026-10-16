@@ -1,6 +1,6 @@
 import { Router } from '../../lib/mini-express.js';
 import { hashPassword } from '../../lib/security.js';
-import { query, tx } from '../../config/db.js';
+import { query, tx, insertRow, updateRow, pageSql, isDuplicateKey } from '../../config/db.js';
 import { requirePermission } from '../../middleware/access.js';
 import { GLOBAL_ROLES, ROLES, isGlobalRole } from '../../../../shared/permissions.js';
 import { nextSequence, formatEmployeeCode, formatAdminCode, GLOBAL_SEQ_CLINIC } from '../../utils/codes.js';
@@ -112,7 +112,7 @@ router.get('/', requirePermission('employee.view'), async (req, res) => {
   }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
   const [{ total }] = await query(`SELECT COUNT(*) AS total ${FROM} ${whereSql}`, params);
-  const rows = await query(`SELECT ${PUBLIC_COLUMNS} ${FROM} ${whereSql} ORDER BY e.name LIMIT ? OFFSET ?`, [...params, limit, offset]);
+  const rows = await query(`SELECT ${PUBLIC_COLUMNS} ${FROM} ${whereSql} ORDER BY e.name ${pageSql}`, [...params, offset, limit]);
   res.json({ rows, total, page, limit });
 });
 
@@ -138,8 +138,7 @@ router.post('/', requirePermission('employee.create'), async (req, res) => {
     } else {
       empCode = formatAdminCode(await nextSequence(q, GLOBAL_SEQ_CLINIC, 'employee'));
     }
-    const r = await q('INSERT INTO employees SET ?', [{ ...data, emp_code: empCode, created_by: req.user.id }]);
-    return r.insertId;
+    return insertRow(q, 'employees', { ...data, emp_code: empCode, created_by: req.user.id });
   });
   res.status(201).json(await getEmployee(id));
 });
@@ -174,9 +173,9 @@ router.put('/:id', requirePermission('employee.edit'), async (req, res) => {
   const keys = Object.keys(data);
   if (!keys.length) throw badRequest('Nothing to update', 'VALIDATION');
   try {
-    await query('UPDATE employees SET ? WHERE id = ?', [data, id]);
+    await updateRow(query, 'employees', data, 'id = ?', [id]);
   } catch (e) {
-    if (e.code === 'ER_DUP_ENTRY') throw conflict('Username already taken', 'DUPLICATE');
+    if (isDuplicateKey(e)) throw conflict('Username already taken', 'DUPLICATE');
     throw e;
   }
   res.json(await getEmployee(id));

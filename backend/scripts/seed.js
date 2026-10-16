@@ -2,7 +2,7 @@
 //   npm run seed
 import '../src/config/load-env.js';
 import { hashPassword, isCurrentHash } from '../src/lib/security.js';
-import { pool, query, tx } from '../src/config/db.js';
+import { closePool, query, tx, insertRow } from '../src/config/db.js';
 import { explainDbError } from './db-errors.js';
 import { nextSequence, formatAdminCode, formatEmployeeCode, GLOBAL_SEQ_CLINIC } from '../src/utils/codes.js';
 
@@ -21,10 +21,10 @@ async function ensureAdmin() {
   }
   await tx(async (q) => {
     const code = formatAdminCode(await nextSequence(q, GLOBAL_SEQ_CLINIC, 'employee'));
-    await q('INSERT INTO employees SET ?', [{
+    await insertRow(q, 'employees', {
       emp_code: code, name, role: 'super_admin', unit_type: 'main', clinic_id: null,
       username, password_hash: await hashPassword(password), can_login: 1, status: 'active',
-    }]);
+    });
   });
   console.log(`Created Super Admin  username: ${username}  password: ${password}  (change it after first login)`);
 }
@@ -32,14 +32,13 @@ async function ensureAdmin() {
 async function ensureClinic(clinic) {
   const [row] = await query('SELECT id FROM clinics WHERE code = ?', [clinic.code]);
   if (row) return row.id;
-  const r = await query('INSERT INTO clinics SET ?', [clinic]);
-  return r.insertId;
+  return insertRow(query, 'clinics', clinic);
 }
 
 async function ensureUnit(table, unit) {
   const [row] = await query(`SELECT id FROM ${table} WHERE code = ?`, [unit.code]);
   if (row) return row.id;
-  return (await query(`INSERT INTO ${table} SET ?`, [unit])).insertId;
+  return insertRow(query, table, unit);
 }
 
 async function ensureStaff(clinicId, clinicCode, staff) {
@@ -50,10 +49,10 @@ async function ensureStaff(clinicId, clinicCode, staff) {
   }
   await tx(async (q) => {
     const code = formatEmployeeCode(clinicCode, await nextSequence(q, clinicId, 'employee'));
-    await q('INSERT INTO employees SET ?', [{
+    await insertRow(q, 'employees', {
       ...staff, emp_code: code, clinic_id: clinicId,
       password_hash: await hashPassword('Demo@123'), can_login: 1, status: 'active',
-    }]);
+    });
   });
 }
 
@@ -78,5 +77,5 @@ try {
 } catch (err) {
   explainDbError(err);
 } finally {
-  await pool.end();
+  await closePool();
 }

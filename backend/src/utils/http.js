@@ -57,7 +57,8 @@ export function paging(query, { maxLimit = 100, defaultLimit = 25 } = {}) {
 export function setClause(fields) {
   const keys = Object.keys(fields);
   if (!keys.length) throw badRequest('Nothing to update', 'VALIDATION');
-  return { sql: keys.map((k) => `\`${k}\` = ?`).join(', '), params: keys.map((k) => fields[k]) };
+  return { sql: keys.map((k) => `[${k}] = ?`).join(', '), params: keys.map((k) => fields[k]) };
 }
 
-export const like = (q) => `%${String(q).replace(/[\\%_]/g, (m) => '\\' + m)}%`;
+// SQL Server LIKE: wrap % _ [ in brackets so they match literally
+export const like = (q) => `%${String(q).replace(/[%_[]/g, (m) => `[${m}]`)}%`;

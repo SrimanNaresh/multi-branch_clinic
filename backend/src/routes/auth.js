@@ -70,7 +70,7 @@ router.post('/change-password', authenticate, async (req, res) => {
   if (!row?.password_hash || !(await checkPassword(current_password, row.password_hash))) {
     throw badRequest('Current password is wrong', 'BAD_CREDENTIALS');
   }
-  await query('UPDATE employees SET password_hash = ? WHERE id = ?', [await hashPassword(new_password), req.user.id]);
+  await query('UPDATE employees SET password_hash = ?, updated_at = NOW() WHERE id = ?', [await hashPassword(new_password), req.user.id]);
   res.json({ ok: true });
 });
 

@@ -1,6 +1,6 @@
 // Patient & Queue: Confirm & Search → Confirm List
 import { Router } from '../../lib/mini-express.js';
-import { query, tx } from '../../config/db.js';
+import { query, tx, insertRow } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { nextSequence, tokenKey } from '../../utils/codes.js';
 import { badRequest, conflict, notFound, oneOf, toId, like } from '../../utils/http.js';
@@ -32,15 +32,16 @@ router.get('/search', requirePermission('queue.confirm'), async (req, res) => {
   if (q.length < 1) return res.json({ rows: [] });
   const today = todayISO();
   const rows = await query(
-    `SELECT p.id, p.patient_code, p.name, p.mobile, p.gender, p.age_years, p.city,
+    `SELECT TOP 25 p.id, p.patient_code, p.name, p.mobile, p.gender, p.age_years, p.city,
             (SELECT MAX(v.visit_date) FROM visits v WHERE v.patient_id = p.id AND v.clinic_id = p.clinic_id) AS last_visit,
             qe.id AS queue_id, qe.token_no, qe.status AS queue_status
        FROM patients p
-       LEFT JOIN queue_entries qe
-              ON qe.patient_id = p.id AND qe.clinic_id = p.clinic_id AND qe.queue_date = ? AND qe.status <> 'cancelled'
+       OUTER APPLY (SELECT TOP 1 x.id, x.token_no, x.status FROM queue_entries x
+                     WHERE x.patient_id = p.id AND x.clinic_id = p.clinic_id AND x.queue_date = ? AND x.status <> 'cancelled'
+                     ORDER BY x.id DESC) qe
       WHERE p.clinic_id = ? AND p.status = 'active'
         AND (p.name LIKE ? OR p.mobile LIKE ? OR p.patient_code LIKE ?)
-      ORDER BY p.name LIMIT 25`,
+      ORDER BY p.name`,
     [today, req.clinicId, like(q), like(q), like(q)],
   );
   res.json({ rows });
@@ -83,7 +84,7 @@ router.post('/', requirePermission('queue.confirm'), async (req, res) => {
   const today = todayISO();
 
   const id = await tx(async (q) => {
-    const [patient] = await q("SELECT id FROM patients WHERE id = ? AND clinic_id = ? AND status = 'active' FOR UPDATE", [patientId, req.clinicId]);
+    const [patient] = await q("SELECT id FROM patients WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ? AND status = 'active'", [patientId, req.clinicId]);
     if (!patient) throw notFound('Patient');
     if (doctorId) {
       const [doc] = await q("SELECT id FROM employees WHERE id = ? AND clinic_id = ? AND role = 'doctor' AND status = 'active'", [doctorId, req.clinicId]);
@@ -96,11 +97,10 @@ router.post('/', requirePermission('queue.confirm'), async (req, res) => {
     if (existing) throw conflict(`Already in today's queue (token ${existing.token_no})`, 'ALREADY_IN_QUEUE');
 
     const token = await nextSequence(q, req.clinicId, tokenKey(today));
-    const r = await q('INSERT INTO queue_entries SET ?', [{
+    return insertRow(q, 'queue_entries', {
       clinic_id: req.clinicId, patient_id: patientId, queue_date: today, token_no: token,
       visit_type: visitType, doctor_id: doctorId, confirmed_by: req.user.id,
-    }]);
-    return r.insertId;
+    });
   });
   const [row] = await query(`${QUEUE_SELECT} WHERE q.id = ?`, [id]);
   res.status(201).json(row);

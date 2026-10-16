@@ -1,6 +1,6 @@
 // Pharmacy Generation and Lab Generation share one implementation.
 import { Router } from '../../lib/mini-express.js';
-import { query } from '../../config/db.js';
+import { query, insertRow } from '../../config/db.js';
 import { requirePermission } from '../../middleware/access.js';
 import { isGlobalRole } from '../../../../shared/permissions.js';
 import { badRequest, notFound, oneOf, pick, requireFields, setClause, toId, like } from '../../utils/http.js';
@@ -57,8 +57,8 @@ function unitRouter({ table, permission, label, extraFields = [] }) {
   router.post('/', requirePermission(permission), async (req, res) => {
     const data = await clean(req.body);
     requireFields(data, ['clinic_id', 'name', 'code']);
-    const r = await query(`INSERT INTO ${table} SET ?`, [{ ...data, created_by: req.user.id }]);
-    const [row] = await query(`${selectSql} WHERE u.id = ?`, [r.insertId]);
+    const newId = await insertRow(query, table, { ...data, created_by: req.user.id });
+    const [row] = await query(`${selectSql} WHERE u.id = ?`, [newId]);
     res.status(201).json(row);
   });
 
@@ -67,7 +67,7 @@ function unitRouter({ table, permission, label, extraFields = [] }) {
     const [current] = await query(`SELECT id FROM ${table} WHERE id = ?`, [id]);
     if (!current) throw notFound(label);
     const { sql, params } = setClause(await clean(req.body));
-    await query(`UPDATE ${table} SET ${sql} WHERE id = ?`, [...params, id]);
+    await query(`UPDATE ${table} SET ${sql}, updated_at = NOW() WHERE id = ?`, [...params, id]);
     const [row] = await query(`${selectSql} WHERE u.id = ?`, [id]);
     res.json(row);
   });

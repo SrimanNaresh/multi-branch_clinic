@@ -28,7 +28,7 @@ router.get('/summary', requirePermission('dashboard.view'), async (req, res) => 
        (SELECT COUNT(*) FROM labs l WHERE l.clinic_id = c.id) AS labs,
        (SELECT COUNT(*) FROM items i WHERE i.clinic_id = c.id AND i.status = 'active' AND i.stock_qty <= i.reorder_level) AS low_stock_items
      FROM clinics c
-     ORDER BY c.status = 'active' DESC, c.name`,
+     ORDER BY CASE WHEN c.status = 'active' THEN 0 ELSE 1 END, c.name`,
     [day, next, day, day, day, day, day, next, day, next, monthStart, next],
   );
 

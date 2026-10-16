@@ -1,5 +1,5 @@
 import { Router } from '../../lib/mini-express.js';
-import { query, tx } from '../../config/db.js';
+import { query, tx, insertRow, pageSql } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { nextSequence, formatPatientCode } from '../../utils/codes.js';
 import { badRequest, conflict, notFound, oneOf, paging, pick, requireFields, setClause, toId, like } from '../../utils/http.js';
@@ -53,8 +53,8 @@ router.get('/', requirePermission('patient.view'), async (req, res) => {
   const [{ total }] = await query(`SELECT COUNT(*) AS total FROM patients p WHERE ${w}`, params);
   const rows = await query(
     `SELECT p.id, p.patient_code, p.name, p.gender, p.age_years, p.dob, p.mobile, p.city, p.status, p.created_at
-       FROM patients p WHERE ${w} ORDER BY p.id DESC LIMIT ? OFFSET ?`,
-    [...params, limit, offset],
+       FROM patients p WHERE ${w} ORDER BY p.id DESC ${pageSql}`,
+    [...params, offset, limit],
   );
   res.json({ rows, total, page, limit });
 });
@@ -73,7 +73,7 @@ router.post('/', requirePermission('patient.create'), async (req, res) => {
 
   if (!req.body.force) {
     const dupes = await query(
-      'SELECT id, patient_code, name, mobile FROM patients WHERE clinic_id = ? AND mobile = ? AND name = ? LIMIT 5',
+      'SELECT TOP 5 id, patient_code, name, mobile FROM patients WHERE clinic_id = ? AND mobile = ? AND name = ?',
       [req.clinicId, data.mobile, data.name],
     );
     if (dupes.length) {
@@ -86,10 +86,9 @@ router.post('/', requirePermission('patient.create'), async (req, res) => {
   const id = await tx(async (q) => {
     const [clinic] = await q('SELECT code FROM clinics WHERE id = ?', [req.clinicId]);
     const n = await nextSequence(q, req.clinicId, 'patient');
-    const r = await q('INSERT INTO patients SET ?', [{
+    return insertRow(q, 'patients', {
       ...data, clinic_id: req.clinicId, patient_code: formatPatientCode(clinic.code, n), created_by: req.user.id,
-    }]);
-    return r.insertId;
+    });
   });
   res.status(201).json(await getPatient(req.clinicId, id));
 });
@@ -97,7 +96,7 @@ router.post('/', requirePermission('patient.create'), async (req, res) => {
 router.put('/:id', requirePermission('patient.edit'), async (req, res) => {
   const id = toId(req.params.id);
   const { sql, params } = setClause(clean(req.body));
-  const r = await query(`UPDATE patients SET ${sql} WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
+  const r = await query(`UPDATE patients SET ${sql}, updated_at = NOW() WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
   if (!r.affectedRows) throw notFound('Patient');
   res.json(await getPatient(req.clinicId, id));
 });
