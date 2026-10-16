@@ -18,6 +18,10 @@ frontend/                React 18 + Vite, English / தமிழ், mobile-resp
 
 Needs Node 20+ and MySQL 8.0.16+.
 
+**Windows, one click:** double-click `start-windows.bat`. The first run asks for your MySQL login, installs packages, creates the database and demo data. After that it starts the API and opens http://localhost:5180.
+
+Manual steps:
+
 ```bash
 # 1. API
 cd backend
@@ -30,7 +34,7 @@ npm run dev                   # http://localhost:4000
 # 2. Web
 cd ../frontend
 npm install
-npm run dev                   # http://localhost:5173  (proxies /api to :4000)
+npm run dev                   # http://localhost:5180  (proxies /api to :4000)
 ```
 
 Log in with `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` from `.env` (default `superadmin` / `ChangeMe@123`) and change the password.
