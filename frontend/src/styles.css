@@ -308,11 +308,6 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 /* ---------- examine ---------- */
 .split { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
 .split-side { position: sticky; top: 72px; }
-/* Examine: queue pane keeps its own scroll so it stays beside the patient */
-.examine-split { grid-template-columns: 280px minmax(0, 1fr); }
-.examine-split > .split-side { max-height: calc(100vh - 96px); overflow-y: auto; }
-.examine-split > .split-side .card { margin-bottom: 0; }
-.examine-split .queue-mini { max-height: none; }
 .queue-mini { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
 .queue-mini button { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid transparent; background: transparent; padding: 8px; border-radius: 8px; font: inherit; text-align: left; cursor: pointer; }
 .queue-mini button:hover { background: var(--surface-2); }
@@ -372,12 +367,6 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .split { grid-template-columns: 1fr; }
   .split-side { position: static; }
   .split.main-first .split-main { order: -1; }
-  /* Examine stays split down to tablet width */
-  .split.examine-split { grid-template-columns: 230px minmax(0, 1fr); }
-  .split.examine-split > .split-side { position: sticky; }
-  .split.examine-split.main-first .split-main { order: 0; }
-  .examine-split .queue-mini button { display: grid; grid-template-columns: auto minmax(0, 1fr); row-gap: 4px; }
-  .examine-split .queue-mini .badge { grid-column: 2; justify-self: start; }
   .slot-row { grid-template-columns: 28px repeat(3, minmax(0, 1fr)); }
   .slot-row > .slot-no { grid-row: span 2; }
   .rx-row { grid-template-columns: 1fr 1fr 1fr; }
@@ -415,12 +404,6 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .login-screen { grid-template-columns: 1fr; }
   .login-art { display: none; }
   .login-panel { padding: 64px 20px 32px; justify-content: flex-start; }
-}
-
-@media (max-width: 760px) {
-  .split.examine-split { grid-template-columns: 1fr; }
-  .split.examine-split > .split-side { position: static; max-height: none; }
-  .split.examine-split.main-first .split-main { order: -1; }
 }
 
 /* laptops / tablet landscape with the sidebar open: tighter tables, optional columns hidden */

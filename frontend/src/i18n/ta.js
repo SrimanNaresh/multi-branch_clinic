@@ -334,6 +334,9 @@ export default {
 
   // examine / history
   'examine.todayQueue': 'இன்றைய வரிசை',
+  'examine.backToQueue': 'வரிசைக்குத் திரும்பு',
+  'examine.continue': 'தொடர்',
+  'examine.noVitals': 'உயிர் அறிகுறிகள் இன்னும் இல்லை',
   'examine.patientDetails': 'நோயாளர் விவரங்கள்',
   'examine.noneWaiting': 'பரிசோதனைக்கு முன் நிலையில் நோயாளிகள் இல்லை.',
   'examine.pickPatient': 'தொடங்க வரிசையிலிருந்து ஒரு நோயாளியைத் தேர்ந்தெடுக்கவும்.',

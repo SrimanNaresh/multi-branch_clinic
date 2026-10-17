@@ -5,15 +5,17 @@ import { useAuth } from '../../lib/auth.jsx';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel } from '../../lib/format.js';
-import { Badge, Button, Card, Empty, ErrorBox, Input, Loading, PageHeader, StatusBadge, TextArea, useAsync, useToast } from '../../components/ui.jsx';
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Input, Loading, PageHeader, StatusBadge, TextArea, useAsync, useToast } from '../../components/ui.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
 import Icon from '../../components/Icon.jsx';
-import { VitalsForm } from '../../components/VitalSigns.jsx';
+import { VitalsForm, vitalsSummary } from '../../components/VitalSigns.jsx';
 
 const emptyLine = () => ({ key: Math.random().toString(36).slice(2), medicine_name: '', item_id: null, dosage: '', frequency: '', duration: '', quantity: 1, instructions: '' });
 
-function QueuePanel({ currentVisitId }) {
+// Page 1 – Doctor → Examine: today's patients still to be seen (Pre-Examine / With doctor)
+function QueuePage() {
   const { t } = useT();
+  const auth = useAuth();
   const toast = useToast();
   const queue = useAsync(() => api('/queue'), []);
   const rows = (queue.data?.rows || []).filter((r) => r.status === 'waiting' || r.status === 'with_doctor');
@@ -28,21 +30,30 @@ function QueuePanel({ currentVisitId }) {
   }
 
   return (
-    <Card title={t('examine.todayQueue')} actions={<Button size="sm" variant="ghost" onClick={queue.reload}>{t('common.refresh')}</Button>} className="queue-panel">
-      {queue.loading && !queue.data ? <Loading /> : <ErrorBox error={queue.error} />}
-      {queue.data && !rows.length && <Empty>{t('examine.noneWaiting')}</Empty>}
-      <ul className="queue-mini">
-        {rows.map((r) => (
-          <li key={r.id} className={String(r.visit_id) === String(currentVisitId) ? 'current' : ''}>
-            <button onClick={() => open(r)}>
-              <span className="token-chip">#{r.token_no}</span>
-              <span className="qm-name">{r.patient_name}<small className="muted">{r.patient_code}</small></span>
-              <StatusBadge status={r.status} />
-            </button>
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <>
+      <PageHeader title={t('examine.todayQueue')} subtitle={auth.activeClinic?.name}
+        actions={<Button variant="ghost" onClick={queue.reload}>{t('common.refresh')}</Button>} />
+      {queue.loading && !queue.data ? <Loading /> : <ErrorBox error={queue.error} onRetry={queue.reload} />}
+      {queue.data && (
+        <Card>
+          <DataTable rows={rows} empty={t('examine.noneWaiting')} onRowClick={open} columns={[
+            { key: 'token_no', label: t('queue.token'), render: (r) => <span className="token-chip">#{r.token_no}</span> },
+            { key: 'patient_name', label: t('field.name'), render: (r) => <><b>{r.patient_name}</b><br /><span className="muted small">{r.patient_code}</span></> },
+            { key: 'ga', label: t('field.genderAge'), render: (r) => `${genderLabel(r.gender, t)} / ${ageLabel(r)}` },
+            { key: 'doctor_name', label: t('menu.doctor'), render: (r) => (r.doctor_name
+              ? <>{r.doctor_name}{r.slot_time && <><br /><span className="muted small"><Icon name="clock" size={12} /> {r.slot_time}</span></>}</>
+              : '—') },
+            { key: 'vitals', label: t('vitals.title'), render: (r) => <span className="small">{r.vitals_id ? vitalsSummary(r, t) || t('vitals.commentsOnly') : <span className="muted">{t('examine.noVitals')}</span>}</span> },
+            { key: 'status', label: t('field.status'), render: (r) => <StatusBadge status={r.status} /> },
+            { key: '_a', label: '', className: 'col-actions', render: (r) => (
+              <Button size="sm" onClick={(e) => { e.stopPropagation(); open(r); }}>
+                <Icon name="stethoscope" size={15} /> {r.visit_id ? t('examine.continue') : t('queue.examine')}
+              </Button>
+            ) },
+          ]} />
+        </Card>
+      )}
+    </>
   );
 }
 
@@ -202,19 +213,14 @@ export default function Examine({ params }) {
   const { t } = useT();
   const auth = useAuth();
   const visitId = params.visitId;
+  if (!visitId) return <QueuePage />;
 
-  // Two panes: today's queue (left, stays in view) | the open patient's details (right)
+  // Page 2 – one patient's details (previous visits, vitals, examination)
   return (
     <>
-      <PageHeader title={t('menu.examine')} subtitle={auth.activeClinic?.name} />
-      <div className={`split examine-split ${visitId ? 'main-first' : ''}`}>
-        <aside className="split-side">
-          <QueuePanel currentVisitId={visitId} />
-        </aside>
-        <section className="split-main" aria-label={t('examine.patientDetails')}>
-          {visitId ? <VisitForm visitId={visitId} /> : <Card><Empty>{t('examine.pickPatient')}</Empty></Card>}
-        </section>
-      </div>
+      <PageHeader title={t('examine.patientDetails')} subtitle={auth.activeClinic?.name}
+        actions={<Button variant="ghost" onClick={() => navigate('/doctor/examine')}>← {t('examine.backToQueue')}</Button>} />
+      <VisitForm visitId={visitId} />
     </>
   );
 }

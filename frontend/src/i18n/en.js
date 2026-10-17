@@ -333,6 +333,9 @@ export default {
 
   // examine / history
   'examine.todayQueue': "Today's queue",
+  'examine.backToQueue': 'Back to queue',
+  'examine.continue': 'Continue',
+  'examine.noVitals': 'No vital signs yet',
   'examine.patientDetails': 'Patient details',
   'examine.noneWaiting': 'No patients in Pre-Examine.',
   'examine.pickPatient': 'Pick a patient from the queue to start.',
