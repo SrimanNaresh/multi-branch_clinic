@@ -212,6 +212,15 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_queue_patient' AND object_id = OBJECT_ID(N'dbo.queue_entries'))
   CREATE INDEX ix_queue_patient ON dbo.queue_entries(clinic_id, patient_id, queue_date);
 GO
+/* Tokens: a queue entry booked into one of the doctor's time slots (start time of the slot). */
+IF COL_LENGTH(N'dbo.queue_entries', N'slot_time') IS NULL
+  ALTER TABLE dbo.queue_entries ADD slot_time TIME(0) NULL;
+GO
+-- one patient per doctor per slot per day (a cancelled entry frees its slot)
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_queue_doctor_slot' AND object_id = OBJECT_ID(N'dbo.queue_entries'))
+  CREATE UNIQUE INDEX uq_queue_doctor_slot ON dbo.queue_entries(clinic_id, queue_date, doctor_id, slot_time)
+    WHERE slot_time IS NOT NULL AND status <> N'cancelled';
+GO
 
 /* Vital signs: the next step after a patient is confirmed into the queue (one record per queue entry).
    Recorded at reception, can be edited later (also by the doctor in Examine). */

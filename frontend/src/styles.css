@@ -83,6 +83,21 @@ input.invalid { border-color: var(--danger); }
 .vitals-meta { margin: 10px 0 0; }
 .vitals-cell { display: inline-flex; align-items: center; gap: 4px; }
 .perm-layout { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
+.token-session + .token-session { margin-top: 14px; }
+.token-session-head { margin-bottom: 8px; }
+.token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.token-tile { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface); text-align: left; font: inherit; color: inherit; min-height: 78px; }
+.token-tile .tt-head { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.token-tile .tt-body { display: flex; flex-direction: column; font-size: 13px; line-height: 1.3; }
+.token-tile .tt-foot { display: flex; align-items: center; gap: 4px; margin-top: auto; }
+.token-tile .tt-foot .badge { margin-right: auto; }
+.token-tile.free { border-style: dashed; border-color: var(--brand-100); background: var(--surface-2); cursor: pointer; }
+.token-tile.free:hover:not(:disabled) { border-color: var(--brand); background: var(--brand-50); }
+.token-tile.free:disabled { cursor: default; }
+.token-tile.past { opacity: .55; }
+.token-tile.booked { border-left: 4px solid var(--brand); }
+.token-tile.booked.st-with_doctor { border-left-color: var(--info); }
+.token-tile.booked.st-done { border-left-color: var(--success); background: var(--surface-2); }
 .perm-picker .toolbar { display: grid; gap: 8px; }
 .perm-picker .search-box { max-width: none; }
 .perm-picker .toolbar select { width: 100%; }

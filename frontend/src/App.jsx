@@ -20,6 +20,7 @@ import PatientList from './pages/branch/PatientList.jsx';
 import PatientView from './pages/branch/PatientView.jsx';
 import ConfirmSearch from './pages/branch/ConfirmSearch.jsx';
 import ConfirmList from './pages/branch/ConfirmList.jsx';
+import Tokens from './pages/branch/Tokens.jsx';
 import Examine from './pages/branch/Examine.jsx';
 import PatientHistory from './pages/branch/PatientHistory.jsx';
 import ItemForm from './pages/branch/ItemForm.jsx';
@@ -51,6 +52,7 @@ const ROUTES = [
 
   { path: '/queue/confirm', perm: 'queue.confirm', el: ConfirmSearch, branch: true },
   { path: '/queue', perm: 'queue.view', el: ConfirmList, branch: true },
+  { path: '/queue/tokens', perm: 'queue.view', el: Tokens, branch: true },
 
   { path: '/doctor/examine', perm: 'visit.examine', el: Examine, branch: true },
   { path: '/doctor/examine/:visitId', perm: 'visit.examine', el: Examine, branch: true },

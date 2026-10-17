@@ -1,17 +1,19 @@
 // Patient & Queue: Confirm & Search → Confirm List
 import { Router } from '../../lib/mini-express.js';
-import { query, tx, insertRow } from '../../config/db.js';
+import { query, tx, insertRow, isDuplicateKey } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { nextSequence, tokenKey } from '../../utils/codes.js';
 import { badRequest, conflict, notFound, oneOf, toId, like } from '../../utils/http.js';
 import { isISODate, todayISO } from '../../utils/dates.js';
 import { checkVitals, VITAL_ERRORS, VITAL_FIELDS } from '../../../../shared/vitals.js';
+import { expandTokens } from '../../../../shared/timeSlots.js';
 
 const router = Router();
 router.use(clinicScope());
 
 const QUEUE_SELECT = `
   SELECT q.id, q.queue_date, q.token_no, q.visit_type, q.status, q.confirmed_at, q.called_at, q.completed_at,
+         CONVERT(char(5), q.slot_time, 108) AS slot_time,
          q.patient_id, p.patient_code, p.name AS patient_name, p.mobile, p.gender, p.age_years,
          q.doctor_id, d.name AS doctor_name, v.id AS visit_id, v.status AS visit_status,
          pv.id AS vitals_id, pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm,
@@ -36,6 +38,55 @@ const TRANSITIONS = {
   done: [],
   cancelled: ['waiting'],
 };
+
+/** A doctor's time-slot rows (doctor_time_slots) as 'HH:MM' strings. */
+async function doctorSlotRows(q, doctorId) {
+  return q(
+    `SELECT CONVERT(char(5), start_time, 108) AS start_time, CONVERT(char(5), end_time, 108) AS end_time, slot_minutes,
+            CONVERT(char(5), break_start, 108) AS break_start, CONVERT(char(5), break_end, 108) AS break_end
+       FROM doctor_time_slots WHERE employee_id = ? ORDER BY start_time`,
+    [doctorId],
+  );
+}
+
+/**
+ * Checks that slotTime is one of the doctor's tokens and still free today (inside a transaction).
+ * Returns the token ({ no, start, end }).
+ */
+async function claimSlot(q, clinicId, doctorId, slotTime, today, exceptQueueId = 0) {
+  const token = expandTokens(await doctorSlotRows(q, doctorId)).find((t) => t.start === slotTime);
+  if (!token) throw badRequest('This time is not one of the doctor’s time slots', 'VALIDATION');
+  const [taken] = await q(
+    `SELECT TOP 1 q.token_no, p.name FROM queue_entries q WITH (UPDLOCK, HOLDLOCK) JOIN patients p ON p.id = q.patient_id
+      WHERE q.clinic_id = ? AND q.queue_date = ? AND q.doctor_id = ? AND q.slot_time = ? AND q.status <> 'cancelled' AND q.id <> ?`,
+    [clinicId, today, doctorId, slotTime, exceptQueueId],
+  );
+  if (taken) throw conflict(`${slotTime} is already booked for ${taken.name} (token ${taken.token_no})`, 'SLOT_TAKEN');
+  return token;
+}
+
+const SLOT_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+// GET /api/queue/tokens?doctor_id=  – today's tokens per doctor (from their time slots) with who is booked
+router.get('/tokens', requirePermission('queue.view'), async (req, res) => {
+  const today = todayISO();
+  const params = [req.clinicId];
+  let where = "clinic_id = ? AND role = 'doctor' AND status = 'active'";
+  if (req.query.doctor_id) { where += ' AND id = ?'; params.push(toId(req.query.doctor_id, 'doctor')); }
+  const doctors = await query(`SELECT id, name, designation FROM employees WHERE ${where} ORDER BY name`, params);
+  const entries = await query(`${QUEUE_SELECT} WHERE q.clinic_id = ? AND q.queue_date = ? AND q.status <> 'cancelled' AND q.doctor_id IS NOT NULL ORDER BY q.token_no`,
+    [req.clinicId, today]);
+
+  const out = [];
+  for (const d of doctors) {
+    const sessions = await doctorSlotRows(query, d.id);
+    const mine = entries.filter((e) => e.doctor_id === d.id);
+    const tokens = expandTokens(sessions).map((t) => ({ ...t, entry: mine.find((e) => e.slot_time === t.start) || null }));
+    const unslotted = mine.filter((e) => !e.slot_time || !tokens.some((t) => t.start === e.slot_time));
+    out.push({ ...d, sessions, tokens, unslotted });
+  }
+  res.json({ date: today, doctors: out });
+});
 
 // GET /api/queue/search?q=  – find patients and show whether they are already in today's queue
 router.get('/search', requirePermission('queue.confirm'), async (req, res) => {
@@ -92,6 +143,9 @@ router.post('/', requirePermission('queue.confirm'), async (req, res) => {
   const visitType = req.body?.visit_type || 'new';
   oneOf(visitType, ['new', 'follow_up'], 'visit_type');
   const doctorId = req.body?.doctor_id ? toId(req.body.doctor_id, 'doctor') : null;
+  const slotTime = req.body?.slot_time || null;
+  if (slotTime && !SLOT_TIME.test(slotTime)) throw badRequest('Invalid slot time', 'VALIDATION');
+  if (slotTime && !doctorId) throw badRequest('Choose the doctor for this time slot', 'VALIDATION');
   const today = todayISO();
 
   const id = await tx(async (q) => {
@@ -107,12 +161,14 @@ router.post('/', requirePermission('queue.confirm'), async (req, res) => {
     );
     if (existing) throw conflict(`Already in today's queue (token ${existing.token_no})`, 'ALREADY_IN_QUEUE');
 
+    if (slotTime) await claimSlot(q, req.clinicId, doctorId, slotTime, today);
+
     const token = await nextSequence(q, req.clinicId, tokenKey(today));
     return insertRow(q, 'queue_entries', {
       clinic_id: req.clinicId, patient_id: patientId, queue_date: today, token_no: token,
-      visit_type: visitType, doctor_id: doctorId, confirmed_by: req.user.id,
+      visit_type: visitType, doctor_id: doctorId, slot_time: slotTime, confirmed_by: req.user.id,
     });
-  });
+  }).catch((e) => { throw isDuplicateKey(e) ? conflict('This time slot was just booked by someone else', 'SLOT_TAKEN') : e; });
   const [row] = await query(`${QUEUE_SELECT} WHERE q.id = ?`, [id]);
   res.status(201).json(row);
 });
@@ -128,7 +184,37 @@ router.patch('/:id/status', requirePermission('queue.update'), async (req, res) 
     throw badRequest(`Cannot move from ${current.status} to ${status}`, 'BAD_TRANSITION');
   }
   const extra = status === 'with_doctor' ? ', called_at = NOW()' : status === 'done' ? ', completed_at = NOW()' : '';
-  await query(`UPDATE queue_entries SET status = ?${extra} WHERE id = ? AND clinic_id = ?`, [status, id, req.clinicId]);
+  try {
+    await query(`UPDATE queue_entries SET status = ?${extra} WHERE id = ? AND clinic_id = ?`, [status, id, req.clinicId]);
+  } catch (e) {
+    if (isDuplicateKey(e)) throw conflict('Its time slot has been booked by another patient – free or change the slot first', 'SLOT_TAKEN');
+    throw e;
+  }
+  const [row] = await query(`${QUEUE_SELECT} WHERE q.id = ?`, [id]);
+  res.json(row);
+});
+
+// PATCH /api/queue/:id/slot { doctor_id, slot_time }  – give a waiting patient a time slot, move it, or free it (slot_time null)
+router.patch('/:id/slot', requirePermission('queue.confirm'), async (req, res) => {
+  const id = toId(req.params.id);
+  const slotTime = req.body?.slot_time || null;
+  if (slotTime && !SLOT_TIME.test(slotTime)) throw badRequest('Invalid slot time', 'VALIDATION');
+  await tx(async (q) => {
+    const [entry] = await q('SELECT id, status, queue_date, doctor_id FROM queue_entries WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+    if (!entry) throw notFound('Queue entry');
+    if (entry.queue_date !== todayISO()) throw badRequest('Only today’s tokens can be changed', 'VALIDATION');
+    if (entry.status !== 'waiting') throw conflict('Only a waiting patient can change time slot', 'BAD_STATUS');
+    if (!slotTime) {
+      await q('UPDATE queue_entries SET slot_time = NULL WHERE id = ?', [id]);
+      return;
+    }
+    const doctorId = req.body?.doctor_id ? toId(req.body.doctor_id, 'doctor') : entry.doctor_id;
+    if (!doctorId) throw badRequest('Choose the doctor for this time slot', 'VALIDATION');
+    const [doc] = await q("SELECT id FROM employees WHERE id = ? AND clinic_id = ? AND role = 'doctor' AND status = 'active'", [doctorId, req.clinicId]);
+    if (!doc) throw badRequest('Doctor not found in this clinic', 'VALIDATION');
+    await claimSlot(q, req.clinicId, doctorId, slotTime, entry.queue_date, id);
+    await q('UPDATE queue_entries SET doctor_id = ?, slot_time = ? WHERE id = ?', [doctorId, slotTime, id]);
+  }).catch((e) => { throw isDuplicateKey(e) ? conflict('This time slot was just booked by someone else', 'SLOT_TAKEN') : e; });
   const [row] = await query(`${QUEUE_SELECT} WHERE q.id = ?`, [id]);
   res.json(row);
 });

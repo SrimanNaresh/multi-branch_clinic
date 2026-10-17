@@ -35,6 +35,30 @@ export function appointmentCount(s) {
   return Math.floor((end - start) / dur);
 }
 
+export const fromMinutes = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+/**
+ * Splits a doctor's time-slot rows into bookable tokens, skipping each break:
+ * [{ no: 1, start: '09:00', end: '09:15', session: 0 }, …] numbered through the day.
+ */
+export function expandTokens(rows) {
+  const tokens = [];
+  const sorted = [...rows].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+  sorted.forEach((s, session) => {
+    const end = toMinutes(s.end_time);
+    const dur = Number(s.slot_minutes);
+    const bStart = s.break_start ? toMinutes(s.break_start) : null;
+    const bEnd = s.break_end ? toMinutes(s.break_end) : null;
+    let t = toMinutes(s.start_time);
+    while (dur > 0 && t + dur <= end) {
+      if (bStart != null && t < bEnd && t + dur > bStart) { t = Math.max(t, bEnd); continue; }
+      tokens.push({ no: tokens.length + 1, start: fromMinutes(t), end: fromMinutes(t + dur), session });
+      t += dur;
+    }
+  });
+  return tokens;
+}
+
 /**
  * @returns {{ slots: object[], errors: { row: number, field: string, code: string }[] }}
  * slots are normalised ('HH:MM', integer minutes, null when no break); row is 0-based.

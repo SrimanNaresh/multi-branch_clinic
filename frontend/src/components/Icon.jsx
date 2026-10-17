@@ -1,5 +1,6 @@
 // Small stroke icons (24×24, currentColor)
 const PATHS = {
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18m0-14v5l3 2',
   dashboard: 'M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z',
   userPlus: 'M15 19c0-2.8-2.7-5-6-5s-6 2.2-6 5M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m10-3v6m3-3h-6',
   users: 'M17 19c0-2.8-2.7-5-6-5s-6 2.2-6 5M11 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m10 8c0-2.2-1.6-4-3.8-4.7M16 3.3a4 4 0 0 1 0 7.4',

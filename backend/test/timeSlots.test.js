@@ -32,3 +32,18 @@ test('several slots are allowed but must not overlap', () => {
   assert.deepEqual(codes([ok, { ...evening, start_time: '12:00' }]), ['1:overlap']);
   assert.equal(checkTimeSlots([ok, evening]).slots[1].break_start, null);
 });
+
+test('time slots split into tokens, skipping the break', async () => {
+  const { expandTokens } = await import('../../shared/timeSlots.js');
+  const tokens = expandTokens([
+    { start_time: '16:00', end_time: '17:00', slot_minutes: 20 },
+    ok,                                                  // 09:00–13:00, 15 min, break 11:00–11:30
+  ]);
+  assert.equal(tokens.length, 14 + 3);
+  assert.deepEqual(tokens[0], { no: 1, start: '09:00', end: '09:15', session: 0 });
+  assert.deepEqual(tokens.slice(7, 9).map((t) => t.start), ['10:45', '11:30']); // nothing inside the break
+  assert.deepEqual(tokens.slice(-3).map((t) => `${t.no} ${t.start}`), ['15 16:00', '16 16:20', '17 16:40']);
+  // a break that does not line up with the slot length still leaves the break free
+  const odd = expandTokens([{ start_time: '09:00', end_time: '10:00', slot_minutes: 20, break_start: '09:30', break_end: '09:40' }]);
+  assert.deepEqual(odd.map((t) => t.start), ['09:00', '09:40']);
+});

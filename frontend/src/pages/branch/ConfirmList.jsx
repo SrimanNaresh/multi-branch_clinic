@@ -79,7 +79,9 @@ export default function ConfirmList() {
     { key: 'ga', label: t('field.genderAge'), render: (r) => `${genderLabel(r.gender, t)} / ${ageLabel(r)}` },
     { key: 'mobile', label: t('field.mobile') },
     { key: 'visit_type', label: t('queue.visitType'), render: (r) => t(`queue.${r.visit_type}`) },
-    { key: 'doctor_name', label: t('menu.doctor'), render: (r) => r.doctor_name || '—' },
+    { key: 'doctor_name', label: t('menu.doctor'), render: (r) => (r.doctor_name
+      ? <>{r.doctor_name}{r.slot_time && <><br /><span className="muted small"><Icon name="clock" size={12} /> {r.slot_time}</span></>}</>
+      : '—') },
     { key: 'vitals', label: t('vitals.title'), render: (r) => {
       const canEdit = auth.can('vitals.record') && r.status !== 'cancelled';
       if (r.vitals_id) {

@@ -176,6 +176,28 @@ export default {
   'employees.allRoles': 'அனைத்து பொறுப்புகள்',
   'employees.noLogin': 'உள்நுழைவு இல்லை',
 
+  // Tokens (doctor time slots, today)
+  'menu.tokens': 'டோக்கன்கள்',
+  'tokens.today': 'இன்று',
+  'tokens.allDoctors': 'அனைத்து மருத்துவர்களும்',
+  'tokens.available': 'காலியாக உள்ளது',
+  'tokens.passed': 'நேரம் கடந்தது',
+  'tokens.clickToBook': 'நோயாளரை முன்பதிவு செய்ய அழுத்தவும்',
+  'tokens.book': 'முன்பதிவு',
+  'tokens.giveSlot': 'இந்த நேரத்தைக் கொடு',
+  'tokens.bookTitle': '{time} முன்பதிவு · {doctor}',
+  'tokens.booked': '{time} {name} அவர்களுக்கு முன்பதிவு (டோக்கன் {n})',
+  'tokens.alreadyInQueue': 'இன்றைய வரிசையில் ஏற்கனவே உள்ளார் (டோக்கன் {n})',
+  'tokens.free': 'இந்த நேரத்தை விடுவி',
+  'tokens.freeConfirm': '{name} அவர்களின் {time} நேரத்தை விடுவிக்கவா? அவர் நேரமின்றி வரிசையில் இருப்பார்.',
+  'tokens.bookedOf': '{total} இல் {n} முன்பதிவு',
+  'tokens.minutesEach': 'ஒவ்வொன்றும் {n} நிமி',
+  'tokens.break': 'இடைவேளை',
+  'tokens.noDoctors': 'இந்த கிளினிக்கில் செயலில் உள்ள மருத்துவர்கள் இல்லை.',
+  'tokens.noSlots': 'இந்த மருத்துவருக்கு நேரங்கள் அமைக்கப்படவில்லை.',
+  'tokens.setSlots': 'நேரங்களை அமை',
+  'tokens.unslotted': 'இந்த மருத்துவரின் வரிசையில் நேரமின்றி {n} பேர்',
+
   // Menu Permission (user-wise access)
   'menu.menuPermission': 'மெனு அனுமதி',
   'perms.subtitle': 'ஒவ்வொரு ஊழியரும் பயன்படுத்தக்கூடிய மெனுக்கள், செயல்களைத் தேர்ந்தெடுக்கவும்',

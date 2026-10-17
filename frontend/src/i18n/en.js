@@ -175,6 +175,28 @@ export default {
   'employees.allRoles': 'All roles',
   'employees.noLogin': 'No login',
 
+  // Tokens (doctor time slots, today)
+  'menu.tokens': 'Tokens',
+  'tokens.today': 'Today',
+  'tokens.allDoctors': 'All doctors',
+  'tokens.available': 'Available',
+  'tokens.passed': 'Time passed',
+  'tokens.clickToBook': 'Click to book a patient',
+  'tokens.book': 'Book',
+  'tokens.giveSlot': 'Give this slot',
+  'tokens.bookTitle': 'Book {time} · {doctor}',
+  'tokens.booked': '{time} booked for {name} (token {n})',
+  'tokens.alreadyInQueue': 'Already in today’s queue (token {n})',
+  'tokens.free': 'Free this slot',
+  'tokens.freeConfirm': 'Free the {time} slot of {name}? They stay in the queue without a time.',
+  'tokens.bookedOf': '{n} of {total} booked',
+  'tokens.minutesEach': '{n} min each',
+  'tokens.break': 'Break',
+  'tokens.noDoctors': 'No active doctors in this clinic.',
+  'tokens.noSlots': 'No time slots set for this doctor.',
+  'tokens.setSlots': 'Set time slots',
+  'tokens.unslotted': '{n} in the queue for this doctor without a time slot',
+
   // Menu Permission (user-wise access)
   'menu.menuPermission': 'Menu Permission',
   'perms.subtitle': 'Choose which menus and actions each employee can use',

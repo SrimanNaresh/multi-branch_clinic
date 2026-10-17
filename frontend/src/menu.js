@@ -28,6 +28,7 @@ export const MENU = [
     items: [
       { path: '/queue/confirm', label: 'menu.confirmSearch', perm: 'queue.confirm', icon: 'search' },
       { path: '/queue', label: 'menu.confirmList', perm: 'queue.view', icon: 'ticket' },
+      { path: '/queue/tokens', label: 'menu.tokens', perm: 'queue.view', icon: 'clock' },
     ],
   },
   {
