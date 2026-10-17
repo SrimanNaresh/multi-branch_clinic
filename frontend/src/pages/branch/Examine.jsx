@@ -134,6 +134,8 @@ function VisitForm({ visitId }) {
         {visit.bill_id && <Badge tone="success">{t('status.billed')}</Badge>}
       </div>
 
+      <PastVisits patientId={visit.patient_id} excludeId={visit.id} />
+
       {visit.queue_id && <QueueVitals queueId={visit.queue_id} readOnly={visit.queue_status === 'cancelled'} />}
       {visit.vitals && Object.values(visit.vitals).some(Boolean) && (
         <p className="muted small">{t('vitals.olderNote')}: {[
@@ -200,19 +202,18 @@ export default function Examine({ params }) {
   const { t } = useT();
   const auth = useAuth();
   const visitId = params.visitId;
-  const visit = useAsync(() => (visitId ? api(`/visits/${visitId}`) : Promise.resolve(null)), [visitId]);
 
+  // Two panes: today's queue (left, stays in view) | the open patient's details (right)
   return (
     <>
       <PageHeader title={t('menu.examine')} subtitle={auth.activeClinic?.name} />
-      <div className="split">
-        <div className="split-side">
+      <div className={`split examine-split ${visitId ? 'main-first' : ''}`}>
+        <aside className="split-side">
           <QueuePanel currentVisitId={visitId} />
-          {visit.data && <PastVisits patientId={visit.data.patient_id} excludeId={visit.data.id} />}
-        </div>
-        <div className="split-main">
+        </aside>
+        <section className="split-main" aria-label={t('examine.patientDetails')}>
           {visitId ? <VisitForm visitId={visitId} /> : <Card><Empty>{t('examine.pickPatient')}</Empty></Card>}
-        </div>
+        </section>
       </div>
     </>
   );

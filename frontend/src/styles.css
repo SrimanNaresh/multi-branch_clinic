@@ -83,6 +83,7 @@ input.invalid { border-color: var(--danger); }
 .vitals-meta { margin: 10px 0 0; }
 .vitals-cell { display: inline-flex; align-items: center; gap: 4px; }
 .perm-layout { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
+.book-toolbar .search-box { max-width: none; }
 .token-session + .token-session { margin-top: 14px; }
 .token-session-head { margin-bottom: 8px; }
 .token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
@@ -195,7 +196,9 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .dropdown button { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; font: inherit; padding: 8px 10px; border-radius: 6px; cursor: pointer; text-align: left; }
 .dropdown button:hover { background: var(--brand-50); }
 
-.content { padding: 22px 24px 48px; max-width: 1320px; width: 100%; }
+.content { padding: 22px 24px 48px; width: 100%; }
+/* very large monitors: keep lines readable, centred next to the sidebar */
+@media (min-width: 2000px) { .content { max-width: 1800px; margin: 0 auto; } }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
 .page-header h1 { font-size: 22px; }
 .page-header p { margin: 4px 0 0; }
@@ -305,6 +308,11 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 /* ---------- examine ---------- */
 .split { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
 .split-side { position: sticky; top: 72px; }
+/* Examine: queue pane keeps its own scroll so it stays beside the patient */
+.examine-split { grid-template-columns: 280px minmax(0, 1fr); }
+.examine-split > .split-side { max-height: calc(100vh - 96px); overflow-y: auto; }
+.examine-split > .split-side .card { margin-bottom: 0; }
+.examine-split .queue-mini { max-height: none; }
 .queue-mini { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
 .queue-mini button { display: flex; align-items: center; gap: 10px; width: 100%; border: 1px solid transparent; background: transparent; padding: 8px; border-radius: 8px; font: inherit; text-align: left; cursor: pointer; }
 .queue-mini button:hover { background: var(--surface-2); }
@@ -363,6 +371,15 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 @media (max-width: 1100px) {
   .split { grid-template-columns: 1fr; }
   .split-side { position: static; }
+  .split.main-first .split-main { order: -1; }
+  /* Examine stays split down to tablet width */
+  .split.examine-split { grid-template-columns: 230px minmax(0, 1fr); }
+  .split.examine-split > .split-side { position: sticky; }
+  .split.examine-split.main-first .split-main { order: 0; }
+  .examine-split .queue-mini button { display: grid; grid-template-columns: auto minmax(0, 1fr); row-gap: 4px; }
+  .examine-split .queue-mini .badge { grid-column: 2; justify-self: start; }
+  .slot-row { grid-template-columns: 28px repeat(3, minmax(0, 1fr)); }
+  .slot-row > .slot-no { grid-row: span 2; }
   .rx-row { grid-template-columns: 1fr 1fr 1fr; }
   .rx-row > .picker, .rx-row > .rx-locked { grid-column: 1 / -1; }
   .rx-row > input:last-of-type { grid-column: span 2; }
@@ -380,28 +397,10 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .topbar { padding: 8px 12px; gap: 8px; }
   .user-meta { display: none; }
   .content { padding: 16px 16px 40px; }
-  .login-screen { grid-template-columns: 1fr; }
-  .login-art { display: none; }
-  .login-panel { padding: 64px 20px 32px; justify-content: flex-start; }
-}
-
-@media (max-width: 640px) {
-  .clinic-switcher select { max-width: 150px; }
-  .page-header h1 { font-size: 19px; }
-  .page-header { align-items: flex-start; }
-  .card { padding: 12px; }
-  .search-box { max-width: none; }
-  .form-grid { grid-template-columns: 1fr; }
-  .form-grid.cols-4 { grid-template-columns: 1fr 1fr; }
-  .form-actions .btn { flex: 1; }
-  .slot-row { grid-template-columns: 1fr 1fr; }
   .perm-layout { grid-template-columns: 1fr; }
-  .slot-no { margin-top: 0; }
-  .slot-side { margin-top: 0; grid-column: 2; }
-  .result-list li { flex-wrap: wrap; }
-  .result-list li > .btn { width: 100%; }
+  .perm-people { max-height: 40vh; }
 
-  /* tables become stacked cards */
+  /* tables become stacked cards (tablet portrait and phones) */
   .table-wrap { margin: 0; padding: 0; overflow: visible; }
   .table thead { display: none; }
   .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
@@ -413,11 +412,75 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .table td[data-label='']::before { content: none; }
   .table td.col-actions { justify-content: flex-end; padding-top: 8px; }
   .table .num { text-align: right; }
+  .login-screen { grid-template-columns: 1fr; }
+  .login-art { display: none; }
+  .login-panel { padding: 64px 20px 32px; justify-content: flex-start; }
+}
+
+@media (max-width: 760px) {
+  .split.examine-split { grid-template-columns: 1fr; }
+  .split.examine-split > .split-side { position: static; max-height: none; }
+  .split.examine-split.main-first .split-main { order: -1; }
+}
+
+/* laptops / tablet landscape with the sidebar open: tighter tables, optional columns hidden */
+@media (min-width: 901px) and (max-width: 1200px) {
+  .table th, .table td { padding-left: 7px; padding-right: 7px; }
+  .table .col-wide-only { display: none; }
+}
+
+/* tablets: table cards and token rows two across */
+@media (min-width: 641px) and (max-width: 900px) {
+  .table tbody { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .table tr { margin-bottom: 0; }
+}
+
+@media (max-width: 640px) {
+  .clinic-switcher { padding-left: 8px; gap: 6px; }
+  .clinic-switcher select { max-width: 150px; }
+  .topbar-right { gap: 8px; }
+  .lang-toggle button { padding: 6px 8px; }
+  .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { padding: 10px 12px; }
+  .stat-value { font-size: 20px; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex-shrink: 0; }
+  .page-actions { width: 100%; }
+  .page-actions > .btn, .page-actions > select, .page-actions > input { flex: 1 1 auto; }
+  .page-header h1 { font-size: 19px; }
+  .page-header { align-items: flex-start; }
+  .card { padding: 12px; }
+  .search-box { max-width: none; }
+  .form-grid { grid-template-columns: 1fr; }
+  .form-grid.cols-4 { grid-template-columns: 1fr 1fr; }
+  .form-actions .btn { flex: 1; }
+  .slot-row { grid-template-columns: 1fr 1fr; }
+  .perm-layout { grid-template-columns: 1fr; }
+  .slot-row > .slot-no { margin-top: 0; grid-column: 1 / -1; grid-row: auto; }
+  .form-grid.vitals-grid { grid-template-columns: 1fr 1fr; }
+  .vitals-grid > .field:has(.bp-pair), .vitals-grid > .field-full { grid-column: 1 / -1; }
+  .token-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .modal-backdrop { padding: 8px; align-items: end; }
+  .modal { max-height: calc(100vh - 16px); border-radius: 14px; }
+  .slot-side { margin-top: 0; grid-column: 2; }
+  .result-list li { flex-wrap: wrap; }
+  .result-list li > .btn { width: 100%; }
+
   .qty-input { width: 110px; }
 
   .invoice { padding: 16px; }
   .inv-meta { flex-direction: column; }
   .inv-meta .right { text-align: left; align-items: flex-start; }
+}
+
+@media (max-width: 380px) {
+  .clinic-switcher svg { display: none; }
+  .clinic-switcher select { max-width: 130px; }
+}
+
+@media (max-width: 340px) {
+  .stats { grid-template-columns: 1fr; }
 }
 
 /* ---------- print (bill → PDF) ---------- */

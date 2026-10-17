@@ -44,13 +44,9 @@ export default function ConfirmList() {
   const actions = (r) => {
     if (!isToday) return null;
     const btn = [];
-    if (r.status === 'waiting' && auth.can('visit.examine')) {
-      btn.push(<Button key="ex" size="sm" onClick={() => examine(r)}><Icon name="stethoscope" size={15} /> {t('queue.examine')}</Button>);
-    } else if (r.status === 'waiting' && auth.can('queue.update')) {
+    // Examining happens from Doctor → Examine, not from this list
+    if (r.status === 'waiting' && auth.can('queue.update')) {
       btn.push(<Button key="call" size="sm" onClick={() => move(r, 'with_doctor')}>{t('queue.sendToDoctor')}</Button>);
-    }
-    if (r.status === 'with_doctor' && auth.can('visit.examine')) {
-      btn.push(<Button key="open" size="sm" onClick={() => examine(r)}>{t('queue.open')}</Button>);
     }
     if (r.status === 'with_doctor' && auth.can('queue.update') && !r.visit_id) {
       btn.push(<Button key="back" size="sm" variant="ghost" onClick={() => move(r, 'waiting')}>{t('queue.backToWaiting')}</Button>);
@@ -64,21 +60,13 @@ export default function ConfirmList() {
     return <span className="row-actions">{btn}</span>;
   };
 
-  async function examine(r) {
-    try {
-      const v = r.visit_id ? { id: r.visit_id } : await api('/visits/start', { method: 'POST', body: { queue_id: r.id } });
-      navigate(`/doctor/examine/${v.id}`);
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  }
-
   const columns = [
     { key: 'token_no', label: t('queue.token'), render: (r) => <span className="token-chip">#{r.token_no}</span> },
     { key: 'patient_name', label: t('field.name'), render: (r) => <><b>{r.patient_name}</b><br /><span className="muted small">{r.patient_code}</span></> },
-    { key: 'ga', label: t('field.genderAge'), render: (r) => `${genderLabel(r.gender, t)} / ${ageLabel(r)}` },
-    { key: 'mobile', label: t('field.mobile') },
-    { key: 'visit_type', label: t('queue.visitType'), render: (r) => t(`queue.${r.visit_type}`) },
+    // col-wide-only: hidden on mid-size screens (sidebar + table), shown on wide screens and in phone/tablet cards
+    { key: 'ga', label: t('field.genderAge'), className: 'col-wide-only', render: (r) => `${genderLabel(r.gender, t)} / ${ageLabel(r)}` },
+    { key: 'mobile', label: t('field.mobile'), className: 'col-wide-only' },
+    { key: 'visit_type', label: t('queue.visitType'), className: 'col-wide-only', render: (r) => t(`queue.${r.visit_type}`) },
     { key: 'doctor_name', label: t('menu.doctor'), render: (r) => (r.doctor_name
       ? <>{r.doctor_name}{r.slot_time && <><br /><span className="muted small"><Icon name="clock" size={12} /> {r.slot_time}</span></>}</>
       : '—') },

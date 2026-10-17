@@ -7,20 +7,85 @@ import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel } from '../../lib/format.js';
 import { toMinutes } from '../../../../shared/timeSlots.js';
-import { Badge, Button, Card, Empty, ErrorBox, Loading, Modal, PageHeader, SearchBox, StatusBadge, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
+import { Badge, Button, Card, Empty, ErrorBox, Input, Loading, Modal, PageHeader, SearchBox, Select, StatusBadge, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 import { VitalsModal } from '../../components/VitalSigns.jsx';
 
 const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 
-/** Search a patient and book them into one token (or give a waiting patient this slot). */
+/** Short patient registration inside the booking dialog: register, then the slot is booked right away. */
+function NewPatientForm({ token, initial, onRegistered, onBookExisting, onBack }) {
+  const { t } = useT();
+  const [f, setF] = useState({ name: '', mobile: '', gender: '', age_years: '', city: '', ...initial });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [duplicate, setDuplicate] = useState(null);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+
+  async function submit(e, force = false) {
+    e?.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const body = { ...f, age_years: f.age_years === '' ? null : Number(f.age_years), gender: f.gender || null, force };
+      const patient = await api('/patients', { method: 'POST', body });
+      await onRegistered(patient);
+    } catch (err) {
+      if (err.code === 'POSSIBLE_DUPLICATE') setDuplicate(err.details || []);
+      else setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <div className="form-grid">
+        <Input label={t('field.name')} required autoFocus value={f.name} onChange={set('name')} />
+        <Input label={t('field.mobile')} required type="tel" inputMode="tel" value={f.mobile} onChange={set('mobile')} />
+        <Select label={t('field.gender')} value={f.gender} onChange={set('gender')} placeholder="—"
+          options={['M', 'F', 'O'].map((g) => ({ value: g, label: t(`gender.${g}`) }))} />
+        <Input label={t('field.age')} type="number" min="0" max="130" inputMode="numeric" value={f.age_years} onChange={set('age_years')} />
+        <Input label={t('field.city')} value={f.city} onChange={set('city')} />
+      </div>
+      {duplicate && (
+        <div className="alert alert-warning">
+          {t('patients.possibleDuplicate')}
+          <ul className="result-list">
+            {duplicate.map((d) => (
+              <li key={d.id}>
+                <span>{d.patient_code} – {d.name} ({d.mobile})</span>
+                <Button type="button" size="sm" onClick={() => onBookExisting(d)}>{t('tokens.book')}</Button>
+              </li>
+            ))}
+          </ul>
+          <Button type="button" size="sm" variant="ghost" loading={saving} onClick={() => submit(null, true)}>{t('patients.registerAnyway')}</Button>
+        </div>
+      )}
+      {error && <div className="alert alert-error">{error}</div>}
+      <p className="muted small">{t('tokens.newPatientHint')}</p>
+      <div className="form-actions">
+        <Button type="button" variant="ghost" onClick={onBack}>{t('tokens.backToSearch')}</Button>
+        <Button type="submit" loading={saving}>{t('tokens.registerAndBook', { time: token.start })}</Button>
+      </div>
+    </form>
+  );
+}
+
+/** Search a patient and book them into one token (or give a waiting patient this slot), or register a new patient. */
 function BookDialog({ doctor, token, onClose, onBooked }) {
   const { t } = useT();
+  const auth = useAuth();
   const toast = useToast();
   const [q, setQ] = useState('');
   const dq = useDebounced(q, 250);
   const [busy, setBusy] = useState(null);
+  const [newPatient, setNewPatient] = useState(false);
   const results = useAsync(() => (dq.trim() ? api('/queue/search', { query: { q: dq.trim() } }) : Promise.resolve({ rows: [] })), [dq]);
+  const canRegister = auth.can('patient.create');
+  // what was typed in the search box goes into the new-patient form
+  const typed = q.trim();
+  const initial = /^[+\d\s-]{6,}$/.test(typed) ? { mobile: typed.replace(/\s/g, '') } : { name: typed };
 
   async function book(p) {
     setBusy(p.id);
@@ -39,10 +104,27 @@ function BookDialog({ doctor, token, onClose, onBooked }) {
 
   return (
     <Modal title={t('tokens.bookTitle', { time: `${token.start}–${token.end}`, doctor: doctor.name })} onClose={onClose}>
-      <SearchBox value={q} onChange={setQ} placeholder={t('queue.searchHint')} autoFocus />
+      {newPatient ? (
+        <NewPatientForm token={token} initial={initial} onBack={() => setNewPatient(false)}
+          onBookExisting={(p) => book(p)}
+          onRegistered={async (p) => {
+            toast(t('patients.registered', { code: p.patient_code }));
+            await book({ id: p.id });
+          }} />
+      ) : (
+      <>
+      <div className="toolbar book-toolbar">
+        <SearchBox value={q} onChange={setQ} placeholder={t('queue.searchHint')} autoFocus />
+        {canRegister && (
+          <Button type="button" variant="ghost" onClick={() => setNewPatient(true)}><Icon name="userPlus" size={16} /> {t('tokens.newPatient')}</Button>
+        )}
+      </div>
       <ErrorBox error={results.error} />
       {!dq.trim() ? <Empty>{t('queue.typeToSearch')}</Empty> : results.loading && !results.data ? <Loading /> : !results.data?.rows.length ? (
-        <Empty>{t('queue.noMatch')}</Empty>
+        <Empty>
+          {t('queue.noMatch')}{' '}
+          {canRegister && <Button size="sm" onClick={() => setNewPatient(true)}>{t('tokens.registerAndBook', { time: token.start })}</Button>}
+        </Empty>
       ) : (
         <ul className="result-list">
           {results.data.rows.map((p) => {
@@ -64,6 +146,8 @@ function BookDialog({ doctor, token, onClose, onBooked }) {
             );
           })}
         </ul>
+      )}
+      </>
       )}
     </Modal>
   );

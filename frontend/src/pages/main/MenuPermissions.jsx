@@ -1,6 +1,6 @@
 // Main Clinic → Menu Permission: pick an employee, tick the menus / actions they may use.
 // Starts from the role's defaults; only the differences are saved (see shared/permissions.js).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { useT } from '../../lib/i18n.jsx';
@@ -132,12 +132,20 @@ function PermissionEditor({ employeeId }) {
 export default function MenuPermissions() {
   const { t } = useT();
   const [employeeId, setEmployeeId] = useState(null);
+  const editorRef = useRef(null);
+  const pick = (id) => {
+    setEmployeeId(id);
+    // one-column layout (phones / small tablets): the editor is below the list
+    if (window.matchMedia('(max-width: 640px)').matches) setTimeout(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
   return (
     <>
       <PageHeader title={t('menu.menuPermission')} subtitle={t('perms.subtitle')} />
       <div className="perm-layout">
-        <EmployeePicker selectedId={employeeId} onSelect={setEmployeeId} />
-        {employeeId ? <PermissionEditor employeeId={employeeId} /> : <Card><Empty>{t('perms.pick')}</Empty></Card>}
+        <EmployeePicker selectedId={employeeId} onSelect={pick} />
+        <div ref={editorRef} className="perm-editor">
+          {employeeId ? <PermissionEditor employeeId={employeeId} /> : <Card><Empty>{t('perms.pick')}</Empty></Card>}
+        </div>
       </div>
     </>
   );
