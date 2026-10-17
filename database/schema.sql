@@ -110,6 +110,30 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_employees_clinic_role
   CREATE INDEX ix_employees_clinic_role ON dbo.employees(clinic_id, role);
 GO
 
+/* Doctor time slots: several rows per doctor, each with an optional break inside start–end.
+   Saved together with the employee (the whole list is replaced on every save). */
+IF OBJECT_ID(N'dbo.doctor_time_slots', N'U') IS NULL
+CREATE TABLE dbo.doctor_time_slots (
+  id            INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id     INT NOT NULL CONSTRAINT fk_slots_clinic REFERENCES dbo.clinics(id),
+  employee_id   INT NOT NULL CONSTRAINT fk_slots_employee REFERENCES dbo.employees(id),
+  start_time    TIME(0) NOT NULL,
+  end_time      TIME(0) NOT NULL,
+  slot_minutes  SMALLINT NOT NULL CONSTRAINT chk_slots_minutes CHECK (slot_minutes BETWEEN 5 AND 480),   -- one appointment
+  break_start   TIME(0) NULL,
+  break_end     TIME(0) NULL,
+  created_at    DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT chk_slots_order CHECK (end_time > start_time),
+  CONSTRAINT chk_slots_break CHECK (
+    (break_start IS NULL AND break_end IS NULL)
+    OR (break_start >= start_time AND break_end > break_start AND break_end <= end_time)
+  )
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_slots_employee' AND object_id = OBJECT_ID(N'dbo.doctor_time_slots'))
+  CREATE INDEX ix_slots_employee ON dbo.doctor_time_slots(employee_id, start_time);
+GO
+
 /* ---------- 3. PER-CLINIC NUMBER SEQUENCES ----------
    seq_key: 'patient', 'bill', 'employee', 'token:2026-10-16'; clinic_id 0 = global */
 IF OBJECT_ID(N'dbo.code_sequences', N'U') IS NULL

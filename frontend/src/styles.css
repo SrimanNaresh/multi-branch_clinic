@@ -70,6 +70,12 @@ input[type='checkbox'] { width: 16px; height: 16px; min-height: 0; accent-color:
 .form-grid textarea { min-height: 56px; }
 .form-grid > .field:has(textarea) { grid-column: 1 / -1; }
 .form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.slot-row { display: grid; grid-template-columns: 28px repeat(5, minmax(110px, 1fr)) minmax(120px, auto); gap: 10px 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.slot-row:first-of-type { padding-top: 0; }
+.slot-no { width: 26px; height: 26px; margin-top: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-50); color: var(--brand); font-weight: 700; font-size: 12.5px; }
+.slot-side { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 26px; white-space: nowrap; }
+.field.has-error input { border-color: var(--danger); }
+.slot-hint { margin: 10px 0 0; }
 .stack { display: flex; flex-direction: column; gap: 14px; }
 
 /* ---------- buttons ---------- */
@@ -349,6 +355,9 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .form-grid { grid-template-columns: 1fr; }
   .form-grid.cols-4 { grid-template-columns: 1fr 1fr; }
   .form-actions .btn { flex: 1; }
+  .slot-row { grid-template-columns: 1fr 1fr; }
+  .slot-no { margin-top: 0; }
+  .slot-side { margin-top: 0; grid-column: 2; }
   .result-list li { flex-wrap: wrap; }
   .result-list li > .btn { width: 100%; }
 
