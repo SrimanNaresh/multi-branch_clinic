@@ -11,7 +11,7 @@ router.use(clinicScope());
 async function loadVisit(clinicId, id) {
   const [visit] = await query(
     `SELECT v.*, p.patient_code, p.name AS patient_name, p.gender, p.age_years, p.dob, p.mobile, p.blood_group,
-            d.name AS doctor_name, q.token_no, q.queue_date,
+            d.name AS doctor_name, q.token_no, q.queue_date, q.status AS queue_status,
             (SELECT COUNT(*) FROM pharmacy_issues pi WHERE pi.visit_id = v.id) AS issue_count,
             (SELECT TOP 1 b.id FROM bills b WHERE b.visit_id = v.id AND b.status <> 'cancelled') AS bill_id
        FROM visits v
@@ -67,8 +67,11 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
   if (!patient) throw notFound('Patient');
   const visits = await query(
     `SELECT v.id, v.visit_date, v.complaints, v.examination_notes, v.diagnosis, v.vitals, v.advice, v.follow_up_date,
-            v.consultation_fee, v.status, d.name AS doctor_name, q.token_no
+            v.consultation_fee, v.status, d.name AS doctor_name, q.token_no,
+            pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm, pv.temperature_c,
+            pv.comments AS vitals_comments, pv.id AS vitals_id
        FROM visits v LEFT JOIN employees d ON d.id = v.doctor_id LEFT JOIN queue_entries q ON q.id = v.queue_id
+       LEFT JOIN patient_vitals pv ON pv.queue_id = v.queue_id
       WHERE v.patient_id = ? AND v.clinic_id = ? ORDER BY v.visit_date DESC`,
     [patientId, req.clinicId],
   );

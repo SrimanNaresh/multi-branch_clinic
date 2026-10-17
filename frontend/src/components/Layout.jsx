@@ -64,7 +64,7 @@ function Sidebar({ path, open, onClose }) {
       <div className={`sidebar-backdrop ${open ? 'show' : ''}`} onClick={onClose} />
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="brand">
-          <div className="brand-mark">A</div>
+          <div className="brand-mark"><img src="/logo-128.png" alt="" /></div>
           <div>
             <strong>Ayush Pro</strong>
             <small>SmartClinic</small>

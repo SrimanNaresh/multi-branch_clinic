@@ -5,6 +5,7 @@ import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { nextSequence, tokenKey } from '../../utils/codes.js';
 import { badRequest, conflict, notFound, oneOf, toId, like } from '../../utils/http.js';
 import { isISODate, todayISO } from '../../utils/dates.js';
+import { checkVitals, VITAL_ERRORS, VITAL_FIELDS } from '../../../../shared/vitals.js';
 
 const router = Router();
 router.use(clinicScope());
@@ -12,11 +13,21 @@ router.use(clinicScope());
 const QUEUE_SELECT = `
   SELECT q.id, q.queue_date, q.token_no, q.visit_type, q.status, q.confirmed_at, q.called_at, q.completed_at,
          q.patient_id, p.patient_code, p.name AS patient_name, p.mobile, p.gender, p.age_years,
-         q.doctor_id, d.name AS doctor_name, v.id AS visit_id, v.status AS visit_status
+         q.doctor_id, d.name AS doctor_name, v.id AS visit_id, v.status AS visit_status,
+         pv.id AS vitals_id, pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm,
+         pv.temperature_c, pv.comments AS vitals_comments
     FROM queue_entries q
     JOIN patients p ON p.id = q.patient_id
     LEFT JOIN employees d ON d.id = q.doctor_id
-    LEFT JOIN visits v ON v.queue_id = q.id`;
+    LEFT JOIN visits v ON v.queue_id = q.id
+    LEFT JOIN patient_vitals pv ON pv.queue_id = q.id`;
+
+const VITALS_SELECT = `
+  SELECT pv.id, pv.queue_id, pv.patient_id, ${VITAL_FIELDS.map((f) => `pv.${f}`).join(', ')},
+         pv.recorded_at, pv.updated_at, r.name AS recorded_by_name, u.name AS updated_by_name
+    FROM patient_vitals pv
+    LEFT JOIN employees r ON r.id = pv.recorded_by
+    LEFT JOIN employees u ON u.id = pv.updated_by`;
 
 // Allowed status moves
 const TRANSITIONS = {
@@ -120,6 +131,41 @@ router.patch('/:id/status', requirePermission('queue.update'), async (req, res) 
   await query(`UPDATE queue_entries SET status = ?${extra} WHERE id = ? AND clinic_id = ?`, [status, id, req.clinicId]);
   const [row] = await query(`${QUEUE_SELECT} WHERE q.id = ?`, [id]);
   res.json(row);
+});
+
+// GET /api/queue/:id/vitals – vital signs of one queue entry ({ vitals: null } when none yet)
+router.get('/:id/vitals', requirePermission('queue.view', 'vitals.record'), async (req, res) => {
+  const id = toId(req.params.id);
+  const [entry] = await query('SELECT id FROM queue_entries WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+  if (!entry) throw notFound('Queue entry');
+  const [vitals] = await query(`${VITALS_SELECT} WHERE pv.queue_id = ?`, [id]);
+  res.json({ vitals: vitals || null });
+});
+
+// PUT /api/queue/:id/vitals { height_cm, weight_kg, bp_systolic, bp_diastolic, pulse_bpm, temperature_c, comments }
+// Records the vital signs the first time, edits them afterwards.
+router.put('/:id/vitals', requirePermission('vitals.record'), async (req, res) => {
+  const id = toId(req.params.id);
+  const { data, errors } = checkVitals(req.body || {});
+  const [field, code] = Object.entries(errors)[0] || [];
+  if (field) throw badRequest(field === '_form' ? 'Enter at least one vital sign' : `${field}: ${VITAL_ERRORS[code]}`, 'VALIDATION');
+
+  await tx(async (q) => {
+    const [entry] = await q('SELECT id, patient_id, status FROM queue_entries WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+    if (!entry) throw notFound('Queue entry');
+    if (entry.status === 'cancelled') throw conflict('This queue entry is cancelled', 'CANCELLED');
+    const [existing] = await q('SELECT id FROM patient_vitals WHERE queue_id = ?', [id]);
+    if (existing) {
+      await q(`UPDATE patient_vitals SET ${VITAL_FIELDS.map((f) => `${f} = ?`).join(', ')}, updated_by = ?, updated_at = NOW() WHERE id = ?`,
+        [...VITAL_FIELDS.map((f) => data[f]), req.user.id, existing.id]);
+    } else {
+      await insertRow(q, 'patient_vitals', {
+        ...data, clinic_id: req.clinicId, queue_id: id, patient_id: entry.patient_id, recorded_by: req.user.id,
+      });
+    }
+  });
+  const [vitals] = await query(`${VITALS_SELECT} WHERE pv.queue_id = ?`, [id]);
+  res.json({ vitals });
 });
 
 export default router;

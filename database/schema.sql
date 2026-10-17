@@ -110,6 +110,43 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_employees_clinic_role
   CREATE INDEX ix_employees_clinic_role ON dbo.employees(clinic_id, role);
 GO
 
+/* User-wise access (Main Clinic → Menu Permission): only the differences from the
+   employee's role defaults are stored. granted = 1 adds a permission, 0 removes it. */
+IF OBJECT_ID(N'dbo.employee_permissions', N'U') IS NULL
+CREATE TABLE dbo.employee_permissions (
+  employee_id  INT NOT NULL CONSTRAINT fk_emp_perm_employee REFERENCES dbo.employees(id),
+  permission   NVARCHAR(40) NOT NULL,
+  granted      BIT NOT NULL,
+  updated_by   INT NULL CONSTRAINT fk_emp_perm_by REFERENCES dbo.employees(id),
+  updated_at   DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT pk_employee_permissions PRIMARY KEY (employee_id, permission)
+);
+GO
+
+/* Doctor time slots: several rows per doctor, each with an optional break inside start–end.
+   Saved together with the employee (the whole list is replaced on every save). */
+IF OBJECT_ID(N'dbo.doctor_time_slots', N'U') IS NULL
+CREATE TABLE dbo.doctor_time_slots (
+  id            INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id     INT NOT NULL CONSTRAINT fk_slots_clinic REFERENCES dbo.clinics(id),
+  employee_id   INT NOT NULL CONSTRAINT fk_slots_employee REFERENCES dbo.employees(id),
+  start_time    TIME(0) NOT NULL,
+  end_time      TIME(0) NOT NULL,
+  slot_minutes  SMALLINT NOT NULL CONSTRAINT chk_slots_minutes CHECK (slot_minutes BETWEEN 5 AND 480),   -- one appointment
+  break_start   TIME(0) NULL,
+  break_end     TIME(0) NULL,
+  created_at    DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT chk_slots_order CHECK (end_time > start_time),
+  CONSTRAINT chk_slots_break CHECK (
+    (break_start IS NULL AND break_end IS NULL)
+    OR (break_start >= start_time AND break_end > break_start AND break_end <= end_time)
+  )
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_slots_employee' AND object_id = OBJECT_ID(N'dbo.doctor_time_slots'))
+  CREATE INDEX ix_slots_employee ON dbo.doctor_time_slots(employee_id, start_time);
+GO
+
 /* ---------- 3. PER-CLINIC NUMBER SEQUENCES ----------
    seq_key: 'patient', 'bill', 'employee', 'token:2026-10-16'; clinic_id 0 = global */
 IF OBJECT_ID(N'dbo.code_sequences', N'U') IS NULL
@@ -174,6 +211,33 @@ CREATE TABLE dbo.queue_entries (
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_queue_patient' AND object_id = OBJECT_ID(N'dbo.queue_entries'))
   CREATE INDEX ix_queue_patient ON dbo.queue_entries(clinic_id, patient_id, queue_date);
+GO
+
+/* Vital signs: the next step after a patient is confirmed into the queue (one record per queue entry).
+   Recorded at reception, can be edited later (also by the doctor in Examine). */
+IF OBJECT_ID(N'dbo.patient_vitals', N'U') IS NULL
+CREATE TABLE dbo.patient_vitals (
+  id             INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id      INT NOT NULL CONSTRAINT fk_vitals_clinic REFERENCES dbo.clinics(id),
+  queue_id       INT NOT NULL CONSTRAINT fk_vitals_queue REFERENCES dbo.queue_entries(id)
+                     CONSTRAINT uq_vitals_queue UNIQUE,
+  patient_id     INT NOT NULL CONSTRAINT fk_vitals_patient REFERENCES dbo.patients(id),
+  height_cm      DECIMAL(4,1) NULL CONSTRAINT chk_vitals_height CHECK (height_cm BETWEEN 30 AND 250),
+  weight_kg      DECIMAL(4,1) NULL CONSTRAINT chk_vitals_weight CHECK (weight_kg BETWEEN 0.5 AND 300),
+  bp_systolic    SMALLINT NULL CONSTRAINT chk_vitals_sys CHECK (bp_systolic BETWEEN 50 AND 260),
+  bp_diastolic   SMALLINT NULL CONSTRAINT chk_vitals_dia CHECK (bp_diastolic BETWEEN 30 AND 160),
+  pulse_bpm      SMALLINT NULL CONSTRAINT chk_vitals_pulse CHECK (pulse_bpm BETWEEN 30 AND 220),
+  temperature_c  DECIMAL(3,1) NULL CONSTRAINT chk_vitals_temp CHECK (temperature_c BETWEEN 30 AND 45),
+  comments       NVARCHAR(500) NULL,
+  recorded_by    INT NULL CONSTRAINT fk_vitals_by REFERENCES dbo.employees(id),
+  recorded_at    DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  updated_by     INT NULL CONSTRAINT fk_vitals_updated_by REFERENCES dbo.employees(id),
+  updated_at     DATETIME2(0) NULL,
+  CONSTRAINT chk_vitals_bp CHECK ((bp_systolic IS NULL AND bp_diastolic IS NULL) OR (bp_diastolic < bp_systolic))
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_vitals_patient' AND object_id = OBJECT_ID(N'dbo.patient_vitals'))
+  CREATE INDEX ix_vitals_patient ON dbo.patient_vitals(clinic_id, patient_id);
 GO
 
 /* ---------- 6. DOCTOR: visits ---------- */

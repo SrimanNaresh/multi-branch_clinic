@@ -7,6 +7,7 @@ import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel } from '../../lib/format.js';
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, SearchBox, StatusBadge, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import { VitalsModal } from '../../components/VitalSigns.jsx';
 
 export default function ConfirmSearch() {
   const { t } = useT();
@@ -17,6 +18,7 @@ export default function ConfirmSearch() {
   const [doctorId, setDoctorId] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [last, setLast] = useState(null);
+  const [vitalsFor, setVitalsFor] = useState(null);   // queue entry whose vital signs are open
 
   const doctors = useAsync(() => api('/queue/doctors'), []);
   const results = useAsync(() => (dq.trim() ? api('/queue/search', { query: { q: dq.trim() } }) : Promise.resolve({ rows: [] })), [dq]);
@@ -31,6 +33,7 @@ export default function ConfirmSearch() {
       setLast(entry);
       toast(t('queue.confirmed', { n: entry.token_no, name: p.name }));
       results.reload();
+      if (auth.can('vitals.record')) setVitalsFor(entry);   // next step: vital signs
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -50,7 +53,12 @@ export default function ConfirmSearch() {
             <strong>{last.patient_name}</strong>
             <span className="muted">{last.patient_code} · {t('queue.tokenIssued')}</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setLast(null)}>×</Button>
+          {auth.can('vitals.record') && (
+            <Button variant="ghost" size="sm" onClick={() => setVitalsFor(last)}>
+              <Icon name="stethoscope" size={15} /> {last.vitals_id ? t('vitals.edit') : t('vitals.title')}
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" className="banner-close" onClick={() => setLast(null)}>×</Button>
         </div>
       )}
 
@@ -85,6 +93,11 @@ export default function ConfirmSearch() {
                   <div className="result-side">
                     <span className="token-chip">#{p.token_no}</span>
                     <StatusBadge status={p.queue_status} />
+                    {auth.can('vitals.record') && (
+                      <Button size="sm" variant="ghost" onClick={() => setVitalsFor({ id: p.queue_id, token_no: p.token_no, patient_name: p.name })}>
+                        {t('vitals.title')}
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <Button onClick={() => confirm(p)} loading={busyId === p.id}>{t('queue.confirm')}</Button>
@@ -94,6 +107,11 @@ export default function ConfirmSearch() {
           </ul>
         )}
       </Card>
+
+      {vitalsFor && (
+        <VitalsModal entry={vitalsFor} onClose={() => setVitalsFor(null)}
+          onSaved={(v) => setLast((l) => (l && l.id === vitalsFor.id ? { ...l, vitals_id: v.id } : l))} />
+      )}
     </>
   );
 }

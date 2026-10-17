@@ -31,7 +31,7 @@ export default function Login() {
       <div className="login-panel">
         <LangToggle className="login-lang" />
         <div className="brand brand-lg">
-          <div className="brand-mark">A</div>
+          <div className="brand-mark"><img src="/logo-128.png" alt="" /></div>
           <div>
             <strong>Ayush Pro</strong>
             <small>SmartClinic</small>

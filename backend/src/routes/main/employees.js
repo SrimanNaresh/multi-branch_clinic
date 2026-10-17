@@ -3,6 +3,7 @@ import { hashPassword } from '../../lib/security.js';
 import { query, tx, insertRow, updateRow, pageSql, isDuplicateKey } from '../../config/db.js';
 import { requirePermission } from '../../middleware/access.js';
 import { GLOBAL_ROLES, ROLES, isGlobalRole } from '../../../../shared/permissions.js';
+import { checkTimeSlots, SLOT_ERRORS } from '../../../../shared/timeSlots.js';
 import { nextSequence, formatEmployeeCode, formatAdminCode, GLOBAL_SEQ_CLINIC } from '../../utils/codes.js';
 import { badRequest, conflict, forbidden, notFound, oneOf, paging, pick, requireFields, toId, like } from '../../utils/http.js';
 import { isISODate } from '../../utils/dates.js';
@@ -23,9 +24,35 @@ const FROM = `FROM employees e
   LEFT JOIN pharmacies p ON p.id = e.pharmacy_id
   LEFT JOIN labs l ON l.id = e.lab_id`;
 
+const SLOTS_SQL = `SELECT CONVERT(char(5), start_time, 108) AS start_time, CONVERT(char(5), end_time, 108) AS end_time,
+    slot_minutes, CONVERT(char(5), break_start, 108) AS break_start, CONVERT(char(5), break_end, 108) AS break_end
+  FROM doctor_time_slots WHERE employee_id = ? ORDER BY start_time`;
+
 async function getEmployee(id) {
   const [row] = await query(`SELECT ${PUBLIC_COLUMNS} ${FROM} WHERE e.id = ?`, [id]);
+  if (row) {
+    row.time_slots = row.role === 'doctor' ? await query(SLOTS_SQL, [id]) : [];
+  }
   return row;
+}
+
+/** Validated doctor time slots from the request body, or undefined when the body has none. */
+function readTimeSlots(body) {
+  if (body.time_slots === undefined) return undefined;
+  if (!Array.isArray(body.time_slots)) throw badRequest('time_slots must be a list', 'VALIDATION');
+  const { slots, errors } = checkTimeSlots(body.time_slots);
+  if (errors.length) {
+    const { row, code } = errors[0];
+    throw badRequest(`Time slot ${row + 1}: ${SLOT_ERRORS[code]}`, 'VALIDATION');
+  }
+  return slots;
+}
+
+/** Replaces the doctor's time slots (none for other roles). */
+async function saveTimeSlots(q, employeeId, clinicId, role, slots) {
+  await q('DELETE FROM doctor_time_slots WHERE employee_id = ?', [employeeId]);
+  if (role !== 'doctor') return;
+  for (const s of slots) await insertRow(q, 'doctor_time_slots', { ...s, employee_id: employeeId, clinic_id: clinicId });
 }
 
 /**
@@ -128,6 +155,7 @@ router.post('/', requirePermission('employee.create'), async (req, res) => {
   requireFields(data, ['name', 'role']);
   normaliseLogin(data, body.password, { isNew: true });
   data = await resolveAssignment(data, req.user);
+  const slots = readTimeSlots(body) || [];
   if (body.password) data.password_hash = await hashPassword(body.password);
 
   const id = await tx(async (q) => {
@@ -138,7 +166,9 @@ router.post('/', requirePermission('employee.create'), async (req, res) => {
     } else {
       empCode = formatAdminCode(await nextSequence(q, GLOBAL_SEQ_CLINIC, 'employee'));
     }
-    return insertRow(q, 'employees', { ...data, emp_code: empCode, created_by: req.user.id });
+    const newId = await insertRow(q, 'employees', { ...data, emp_code: empCode, created_by: req.user.id });
+    if (data.role === 'doctor' && slots.length) await saveTimeSlots(q, newId, data.clinic_id, data.role, slots);
+    return newId;
   });
   res.status(201).json(await getEmployee(id));
 });
@@ -169,11 +199,20 @@ router.put('/:id', requirePermission('employee.edit'), async (req, res) => {
   if (data.can_login && !current.username && !data.username) throw badRequest('Username is required for login', 'VALIDATION');
   if (data.can_login && !current.password_hash && !body.password) throw badRequest('Password is required for login', 'VALIDATION');
   if (body.password) data.password_hash = await hashPassword(body.password);
+  const slots = readTimeSlots(body);
+  const role = data.role ?? current.role;
+  const clinicId = data.clinic_id !== undefined ? data.clinic_id : current.clinic_id;
 
-  const keys = Object.keys(data);
-  if (!keys.length) throw badRequest('Nothing to update', 'VALIDATION');
+  if (!Object.keys(data).length && slots === undefined) throw badRequest('Nothing to update', 'VALIDATION');
   try {
-    await updateRow(query, 'employees', data, 'id = ?', [id]);
+    await tx(async (q) => {
+      if (Object.keys(data).length) await updateRow(q, 'employees', data, 'id = ?', [id]);
+      // new list sent, or no longer a doctor, or moved clinic: rewrite the slots
+      if (slots !== undefined || role !== 'doctor' || clinicId !== current.clinic_id) {
+        const keep = slots ?? (await q(SLOTS_SQL, [id]));
+        await saveTimeSlots(q, id, clinicId, role, keep);
+      }
+    });
   } catch (e) {
     if (isDuplicateKey(e)) throw conflict('Username already taken', 'DUPLICATE');
     throw e;

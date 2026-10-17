@@ -7,6 +7,7 @@ import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel, todayLocal } from '../../lib/format.js';
 import { Button, Card, DataTable, ErrorBox, Loading, PageHeader, StatusBadge, useAsync, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import { VitalsModal, vitalsSummary } from '../../components/VitalSigns.jsx';
 
 const TABS = ['all', 'waiting', 'with_doctor', 'done', 'cancelled'];
 
@@ -16,6 +17,7 @@ export default function ConfirmList() {
   const toast = useToast();
   const [date, setDate] = useState(todayLocal());
   const [tab, setTab] = useState('all');
+  const [vitalsFor, setVitalsFor] = useState(null);
   const list = useAsync(() => api('/queue', { query: { date } }), [date]);
   const isToday = date === todayLocal();
 
@@ -78,6 +80,18 @@ export default function ConfirmList() {
     { key: 'mobile', label: t('field.mobile') },
     { key: 'visit_type', label: t('queue.visitType'), render: (r) => t(`queue.${r.visit_type}`) },
     { key: 'doctor_name', label: t('menu.doctor'), render: (r) => r.doctor_name || '—' },
+    { key: 'vitals', label: t('vitals.title'), render: (r) => {
+      const canEdit = auth.can('vitals.record') && r.status !== 'cancelled';
+      if (r.vitals_id) {
+        return (
+          <span className="vitals-cell">
+            <span className="small">{vitalsSummary(r, t) || t('vitals.commentsOnly')}</span>
+            {canEdit && <button type="button" className="icon-btn" title={t('vitals.edit')} aria-label={t('vitals.edit')} onClick={() => setVitalsFor(r)}><Icon name="edit" size={15} /></button>}
+          </span>
+        );
+      }
+      return canEdit ? <Button size="sm" variant="ghost" onClick={() => setVitalsFor(r)}><Icon name="plus" size={14} /> {t('vitals.add')}</Button> : '—';
+    } },
     { key: 'confirmed_at', label: t('queue.time'), render: (r) => fmtDate(r.confirmed_at, true).split(', ')[1] },
     { key: 'status', label: t('field.status'), render: (r) => <StatusBadge status={r.status} /> },
     { key: '_a', label: '', className: 'col-actions', render: actions },
@@ -107,6 +121,7 @@ export default function ConfirmList() {
         {list.loading && !list.data ? <Loading /> : <ErrorBox error={list.error} onRetry={list.reload} />}
         {list.data && <DataTable columns={columns} rows={rows} empty={t('queue.empty')} />}
       </Card>
+      {vitalsFor && <VitalsModal entry={vitalsFor} onClose={() => setVitalsFor(null)} onSaved={list.reload} />}
     </>
   );
 }

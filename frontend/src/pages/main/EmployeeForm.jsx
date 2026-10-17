@@ -6,6 +6,7 @@ import { useAuth } from '../../lib/auth.jsx';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { Button, Card, ErrorBox, Input, Loading, PageHeader, Select, TextArea, useAsync, useForm, useToast } from '../../components/ui.jsx';
+import TimeSlots, { EMPTY_SLOT, slotErrors } from '../../components/TimeSlots.jsx';
 
 const BRANCH_ROLES = ['receptionist', 'doctor', 'pharmacist', 'billing'];
 
@@ -21,8 +22,10 @@ export default function EmployeeForm({ scope, params }) {
     role: 'receptionist', unit_type: 'clinic',
     clinic_id: scope === 'branch' ? auth.activeClinicId : (auth.activeClinicId || ''),
     pharmacy_id: '', lab_id: '', can_login: true, username: '', password: '', status: 'active',
+    time_slots: [],
   });
   const [saving, setSaving] = useState(false);
+  const [showSlotErrors, setShowSlotErrors] = useState(false);
   const [error, setError] = useState('');
 
   const units = useAsync(async () => {
@@ -42,12 +45,14 @@ export default function EmployeeForm({ scope, params }) {
       lab_id: e.lab_id ? String(e.lab_id) : '',
       dob: e.dob || '', join_date: e.join_date || '',
       can_login: !!e.can_login, username: e.username || '', password: '',
+      time_slots: (e.time_slots || []).map((s) => ({ ...s, break_start: s.break_start || '', break_end: s.break_end || '' })),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing.data]);
 
   const v = f.values;
   const globalRole = v.role === 'admin' || v.role === 'super_admin';
+  const isDoctor = v.role === 'doctor';
   const roleOptions = [
     ...(scope === 'main' && auth.user.role === 'super_admin' ? ['super_admin', 'admin'] : []),
     ...(existing.data && ['admin', 'super_admin'].includes(existing.data.role) && auth.user.role !== 'super_admin' ? [existing.data.role] : []),
@@ -63,9 +68,14 @@ export default function EmployeeForm({ scope, params }) {
 
   async function submit(e) {
     e.preventDefault();
+    if (isDoctor && Object.keys(slotErrors(v.time_slots)).length) {
+      setShowSlotErrors(true);
+      setError(t('slots.fixErrors'));
+      return;
+    }
     setSaving(true);
     setError('');
-    const body = { ...v };
+    const body = { ...v, time_slots: isDoctor ? v.time_slots : [] };
     if (globalRole) Object.assign(body, { unit_type: 'main', clinic_id: null, pharmacy_id: null, lab_id: null });
     if (body.unit_type !== 'pharmacy') body.pharmacy_id = null;
     if (body.unit_type !== 'lab') body.lab_id = null;
@@ -119,6 +129,11 @@ export default function EmployeeForm({ scope, params }) {
             {globalRole && <p className="muted field-full">{t('employees.globalNote')}</p>}
           </div>
         </Card>
+
+        {isDoctor && (
+          <TimeSlots value={v.time_slots} showErrors={showSlotErrors}
+            onChange={(slots) => f.set('time_slots', slots)} />
+        )}
 
         <Card title={t('employees.personal')}>
           <div className="form-grid">

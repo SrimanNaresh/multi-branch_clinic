@@ -8,6 +8,7 @@ import { ageLabel, fmtDate, genderLabel } from '../../lib/format.js';
 import { Badge, Button, Card, Empty, ErrorBox, Input, Loading, PageHeader, StatusBadge, TextArea, useAsync, useToast } from '../../components/ui.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
 import Icon from '../../components/Icon.jsx';
+import { VitalsForm } from '../../components/VitalSigns.jsx';
 
 const emptyLine = () => ({ key: Math.random().toString(36).slice(2), medicine_name: '', item_id: null, dosage: '', frequency: '', duration: '', quantity: 1, instructions: '' });
 
@@ -64,6 +65,18 @@ function PastVisits({ patientId, excludeId }) {
   );
 }
 
+// Vital signs recorded at reception (after Confirm); the doctor can correct them here.
+function QueueVitals({ queueId, readOnly }) {
+  const { t } = useT();
+  const v = useAsync(() => api(`/queue/${queueId}/vitals`), [queueId]);
+  return (
+    <Card title={t('vitals.title')}>
+      {v.loading && !v.data ? <Loading /> : <ErrorBox error={v.error} onRetry={v.reload} />}
+      {v.data && <VitalsForm queueId={queueId} initial={v.data.vitals} onSaved={v.reload} readOnly={readOnly} />}
+    </Card>
+  );
+}
+
 function VisitForm({ visitId }) {
   const { t } = useT();
   const toast = useToast();
@@ -77,7 +90,6 @@ function VisitForm({ visitId }) {
     setF({
       complaints: visit.complaints || '', examination_notes: visit.examination_notes || '', diagnosis: visit.diagnosis || '',
       advice: visit.advice || '', follow_up_date: visit.follow_up_date || '', consultation_fee: visit.consultation_fee ?? 0,
-      bp: visit.vitals?.bp || '', pulse: visit.vitals?.pulse || '', temp: visit.vitals?.temp || '', weight: visit.vitals?.weight || '',
     });
     setLines(visit.prescriptions.length ? visit.prescriptions.map((p) => ({ ...p, key: String(p.id) })) : [emptyLine()]);
   }, [visit]);
@@ -93,11 +105,9 @@ function VisitForm({ visitId }) {
   async function save(complete) {
     setSaving(complete ? 'complete' : 'draft');
     try {
-      const vitals = { bp: f.bp, pulse: f.pulse, temp: f.temp, weight: f.weight };
       const body = {
         complaints: f.complaints, examination_notes: f.examination_notes, diagnosis: f.diagnosis, advice: f.advice,
         follow_up_date: f.follow_up_date || null, consultation_fee: f.consultation_fee,
-        vitals: Object.values(vitals).some(Boolean) ? vitals : null,
         complete,
       };
       if (!locked) body.prescriptions = lines.filter((l) => l.medicine_name.trim()).map(({ key, ...l }) => l);
@@ -124,14 +134,13 @@ function VisitForm({ visitId }) {
         {visit.bill_id && <Badge tone="success">{t('status.billed')}</Badge>}
       </div>
 
-      <Card title={t('examine.vitals')}>
-        <div className="form-grid cols-4">
-          <Input label={t('examine.bp')} placeholder="120/80" value={f.bp} onChange={set('bp')} />
-          <Input label={t('examine.pulse')} inputMode="numeric" value={f.pulse} onChange={set('pulse')} />
-          <Input label={t('examine.temp')} inputMode="decimal" value={f.temp} onChange={set('temp')} />
-          <Input label={t('examine.weight')} inputMode="decimal" value={f.weight} onChange={set('weight')} />
-        </div>
-      </Card>
+      {visit.queue_id && <QueueVitals queueId={visit.queue_id} readOnly={visit.queue_status === 'cancelled'} />}
+      {visit.vitals && Object.values(visit.vitals).some(Boolean) && (
+        <p className="muted small">{t('vitals.olderNote')}: {[
+          visit.vitals.bp && `${t('examine.bp')} ${visit.vitals.bp}`, visit.vitals.pulse && `${t('examine.pulse')} ${visit.vitals.pulse}`,
+          visit.vitals.temp && `${t('examine.temp')} ${visit.vitals.temp}`, visit.vitals.weight && `${t('examine.weight')} ${visit.vitals.weight}`,
+        ].filter(Boolean).join(' · ')}</p>
+      )}
 
       <Card title={t('examine.clinical')}>
         <div className="form-grid">

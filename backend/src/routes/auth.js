@@ -1,7 +1,7 @@
 import { Router } from '../lib/mini-express.js';
 import { checkPassword, hashPassword } from '../lib/security.js';
 import { query } from '../config/db.js';
-import { authenticate, signToken } from '../middleware/auth.js';
+import { authenticate, loadPermissions, signToken } from '../middleware/auth.js';
 import { HttpError, badRequest, requireFields } from '../utils/http.js';
 
 const router = Router();
@@ -29,7 +29,9 @@ async function loadProfile(id) {
       WHERE e.id = ?`,
     [id],
   );
-  return rows[0];
+  const user = rows[0];
+  if (user) user.permissions = await loadPermissions(user);
+  return user;
 }
 
 router.post('/login', async (req, res) => {

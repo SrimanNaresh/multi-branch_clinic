@@ -12,6 +12,7 @@ import dashboardRoutes from './routes/main/dashboard.js';
 import clinicRoutes from './routes/main/clinics.js';
 import { pharmacyRoutes, labRoutes } from './routes/main/units.js';
 import employeeRoutes from './routes/main/employees.js';
+import permissionRoutes from './routes/main/permissions.js';
 // Branch clinic modules
 import patientRoutes from './routes/branch/patients.js';
 import queueRoutes from './routes/branch/queue.js';
@@ -48,6 +49,7 @@ export function createApp() {
   app.use('/api/pharmacies', pharmacyRoutes);
   app.use('/api/labs', labRoutes);
   app.use('/api/employees', employeeRoutes);
+  app.use('/api/permissions', permissionRoutes);
 
   app.use('/api/patients', patientRoutes);
   app.use('/api/queue', queueRoutes);
