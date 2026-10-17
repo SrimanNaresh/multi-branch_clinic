@@ -5,6 +5,7 @@ import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel, money } from '../../lib/format.js';
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, SearchBox, StatusBadge, useAsync, useDebounced } from '../../components/ui.jsx';
+import { vitalsSummary } from '../../components/VitalSigns.jsx';
 
 function PatientSearch() {
   const { t } = useT();
@@ -32,8 +33,12 @@ function PatientSearch() {
   );
 }
 
-function Vitals({ v }) {
+function Vitals({ v, visit }) {
   const { t } = useT();
+  if (visit?.vitals_id) {
+    const line = [vitalsSummary(visit, t), visit.vitals_comments].filter(Boolean).join(' · ');
+    return line ? <p className="muted small">{line}</p> : null;
+  }
   if (!v) return null;
   const parts = [
     v.bp && `${t('examine.bp')} ${v.bp}`, v.pulse && `${t('examine.pulse')} ${v.pulse}`,
@@ -75,7 +80,7 @@ export default function PatientHistory({ params }) {
                   <span className="muted small">{money(v.consultation_fee)}</span>
                 </div>
               </div>
-              <Vitals v={v.vitals} />
+              <Vitals v={v.vitals} visit={v} />
               <dl className="details compact">
                 {v.complaints && <div><dt>{t('examine.complaints')}</dt><dd>{v.complaints}</dd></div>}
                 {v.examination_notes && <div><dt>{t('examine.examination')}</dt><dd>{v.examination_notes}</dd></div>}

@@ -76,6 +76,12 @@ input[type='checkbox'] { width: 16px; height: 16px; min-height: 0; accent-color:
 .slot-side { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 26px; white-space: nowrap; }
 .field.has-error input { border-color: var(--danger); }
 .slot-hint { margin: 10px 0 0; }
+.vitals-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.bp-pair { display: flex; align-items: center; gap: 6px; }
+.bp-pair b { color: var(--muted); }
+input.invalid { border-color: var(--danger); }
+.vitals-meta { margin: 10px 0 0; }
+.vitals-cell { display: inline-flex; align-items: center; gap: 4px; }
 .stack { display: flex; flex-direction: column; gap: 14px; }
 
 /* ---------- buttons ---------- */
@@ -259,7 +265,9 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .result-side { display: flex; align-items: center; gap: 8px; }
 .token-banner { display: flex; align-items: center; gap: 16px; background: var(--brand-gradient); color: #fff; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; }
 .token-banner .muted { color: rgba(255, 255, 255, .8); display: block; }
-.token-banner .btn { margin-left: auto; }
+.token-banner > div:nth-child(2) { flex: 1; }
+.token-banner .btn-ghost { background: rgba(255, 255, 255, .12); border-color: rgba(255, 255, 255, .35); color: #fff; }
+.token-banner .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, .22); border-color: rgba(255, 255, 255, .5); }
 .token-big { font-size: 34px; font-weight: 800; background: rgba(255, 255, 255, .15); border-radius: 12px; padding: 4px 16px; font-variant-numeric: tabular-nums; }
 .summary-row { display: flex; gap: 18px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface-2); border-radius: var(--radius-sm); margin-bottom: 10px; }
 

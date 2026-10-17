@@ -14,11 +14,11 @@ export const ROLE_PERMISSIONS = {
   receptionist: [
     'patient.view', 'patient.edit',
     'employee.view',
-    'queue.confirm', 'queue.view', 'queue.update',
+    'queue.confirm', 'queue.view', 'queue.update', 'vitals.record',
   ],
   doctor: [
     'patient.view', 'patient.history',
-    'queue.view', 'queue.update',
+    'queue.view', 'queue.update', 'vitals.record',
     'visit.examine',
     'item.view',
   ],
