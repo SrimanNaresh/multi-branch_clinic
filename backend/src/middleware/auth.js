@@ -2,6 +2,7 @@ import { signJwt, verifyJwt } from '../lib/security.js';
 import { env } from '../config/env.js';
 import { query } from '../config/db.js';
 import { HttpError } from '../utils/http.js';
+import { effectivePermissions } from '../../../shared/permissions.js';
 
 export function signToken(employee) {
   return signJwt({ sub: employee.id, role: employee.role }, env.jwtSecret, env.jwtExpiresIn);
@@ -34,6 +35,13 @@ export async function authenticate(req, _res, next) {
   if (!user || user.status !== 'active' || !user.can_login || (user.clinic_id && user.clinic_status !== 'active')) {
     throw new HttpError(401, 'Account is not active', 'UNAUTHENTICATED');
   }
+  user.permissions = await loadPermissions(user);
   req.user = user;
   next();
+}
+
+/** Role defaults plus this employee's Menu Permission changes. */
+export async function loadPermissions({ id, role }) {
+  const overrides = role === 'super_admin' ? [] : await query('SELECT permission, granted FROM employee_permissions WHERE employee_id = ?', [id]);
+  return effectivePermissions(role, overrides);
 }

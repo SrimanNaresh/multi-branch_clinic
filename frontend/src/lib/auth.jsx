@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api, session } from './api.js';
-import { can as canRole, isGlobalRole } from '../../../shared/permissions.js';
+import { isGlobalRole, userCan } from '../../../shared/permissions.js';
 
 const AuthContext = createContext(null);
 
@@ -69,7 +69,7 @@ export function AuthProvider({ children }) {
     return {
       user, loading, clinics, isGlobal, activeClinic, activeClinicId,
       login, logout, setActiveClinic, reloadClinics: loadClinics,
-      can: (perm) => !!user && canRole(user.role, perm),
+      can: (perm) => userCan(user, perm),   // role defaults + Menu Permission changes (sent by the server)
     };
   }, [user, loading, clinics, activeClinicId, login, logout, setActiveClinic, loadClinics]);
 

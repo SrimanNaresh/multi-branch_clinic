@@ -82,6 +82,22 @@ input[type='checkbox'] { width: 16px; height: 16px; min-height: 0; accent-color:
 input.invalid { border-color: var(--danger); }
 .vitals-meta { margin: 10px 0 0; }
 .vitals-cell { display: inline-flex; align-items: center; gap: 4px; }
+.perm-layout { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
+.perm-picker .toolbar { display: grid; gap: 8px; }
+.perm-picker .search-box { max-width: none; }
+.perm-picker .toolbar select { width: 100%; }
+.perm-people { list-style: none; margin: 8px 0 0; padding: 0; max-height: 60vh; overflow-y: auto; }
+.perm-people button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 8px 10px; cursor: pointer; font: inherit; color: inherit; }
+.perm-people button small { display: block; }
+.perm-people button:hover { background: var(--brand-50); }
+.perm-people button.on { background: var(--brand-50); border-color: var(--brand-100); }
+.perm-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.perm-group { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.perm-group header { border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 2px; }
+.perm-item { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.perm-item > small, .perm-item > .badge { margin-left: auto; white-space: nowrap; }
+.perm-item.changed span { font-weight: 600; }
+.perm-item.disabled { opacity: .6; cursor: not-allowed; }
 .stack { display: flex; flex-direction: column; gap: 14px; }
 
 /* ---------- buttons ---------- */
@@ -364,6 +380,7 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .form-grid.cols-4 { grid-template-columns: 1fr 1fr; }
   .form-actions .btn { flex: 1; }
   .slot-row { grid-template-columns: 1fr 1fr; }
+  .perm-layout { grid-template-columns: 1fr; }
   .slot-no { margin-top: 0; }
   .slot-side { margin-top: 0; grid-column: 2; }
   .result-list li { flex-wrap: wrap; }

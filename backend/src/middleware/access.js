@@ -1,11 +1,11 @@
 import { query } from '../config/db.js';
-import { can, isGlobalRole } from '../../../shared/permissions.js';
+import { isGlobalRole, userCan } from '../../../shared/permissions.js';
 import { HttpError, forbidden } from '../utils/http.js';
 
-/** Allow the request if the user's role has ANY of the given permissions. */
+/** Allow the request if the user has ANY of the given permissions (role defaults + Menu Permission changes). */
 export function requirePermission(...permissions) {
   return (req, _res, next) => {
-    if (permissions.some((p) => can(req.user.role, p))) return next();
+    if (permissions.some((p) => userCan(req.user, p))) return next();
     throw forbidden();
   };
 }

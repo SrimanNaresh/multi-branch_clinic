@@ -110,6 +110,19 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_employees_clinic_role
   CREATE INDEX ix_employees_clinic_role ON dbo.employees(clinic_id, role);
 GO
 
+/* User-wise access (Main Clinic → Menu Permission): only the differences from the
+   employee's role defaults are stored. granted = 1 adds a permission, 0 removes it. */
+IF OBJECT_ID(N'dbo.employee_permissions', N'U') IS NULL
+CREATE TABLE dbo.employee_permissions (
+  employee_id  INT NOT NULL CONSTRAINT fk_emp_perm_employee REFERENCES dbo.employees(id),
+  permission   NVARCHAR(40) NOT NULL,
+  granted      BIT NOT NULL,
+  updated_by   INT NULL CONSTRAINT fk_emp_perm_by REFERENCES dbo.employees(id),
+  updated_at   DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT pk_employee_permissions PRIMARY KEY (employee_id, permission)
+);
+GO
+
 /* Doctor time slots: several rows per doctor, each with an optional break inside start–end.
    Saved together with the employee (the whole list is replaced on every save). */
 IF OBJECT_ID(N'dbo.doctor_time_slots', N'U') IS NULL

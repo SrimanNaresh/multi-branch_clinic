@@ -13,6 +13,7 @@ import Dashboard from './pages/main/Dashboard.jsx';
 import { ClinicsPage, PharmaciesPage, LabsPage } from './pages/main/Units.jsx';
 import EmployeeForm from './pages/main/EmployeeForm.jsx';
 import EmployeeList from './pages/main/EmployeeList.jsx';
+import MenuPermissions from './pages/main/MenuPermissions.jsx';
 // Branch clinic
 import PatientForm from './pages/branch/PatientForm.jsx';
 import PatientList from './pages/branch/PatientList.jsx';
@@ -38,6 +39,7 @@ const ROUTES = [
   { path: '/employees', perm: 'employee.create', el: EmployeeList, props: { scope: 'main' } },
   { path: '/employees/new', perm: 'employee.create', el: EmployeeForm, props: { scope: 'main' } },
   { path: '/employees/:id/edit', perm: 'employee.edit', el: EmployeeForm, props: { scope: 'main' } },
+  { path: '/permissions', perm: 'permission.manage', el: MenuPermissions },
 
   { path: '/patients/new', perm: 'patient.create', el: PatientForm, branch: true },
   { path: '/patients', perm: 'patient.view', el: PatientList, branch: true },

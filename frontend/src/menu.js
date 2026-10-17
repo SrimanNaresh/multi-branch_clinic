@@ -11,6 +11,7 @@ export const MENU = [
       { path: '/clinics', label: 'menu.clinicGeneration', perm: 'clinic.manage', icon: 'building' },
       { path: '/pharmacies', label: 'menu.pharmacyGeneration', perm: 'pharmacy.manage', icon: 'pill' },
       { path: '/labs', label: 'menu.labGeneration', perm: 'lab.manage', icon: 'flask' },
+      { path: '/permissions', label: 'menu.menuPermission', perm: 'permission.manage', icon: 'key' },
     ],
   },
   {
