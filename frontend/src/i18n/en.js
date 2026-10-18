@@ -253,6 +253,8 @@ export default {
   'vitals.bp': 'Blood pressure',
   'vitals.systolic': 'Systolic',
   'vitals.diastolic': 'Diastolic',
+  'vitals.sysShort': 'Sys',
+  'vitals.diaShort': 'Dia',
   'vitals.pulse': 'Pulse rate',
   'vitals.temperature': 'Temperature',
   'vitals.comments': 'Comments',

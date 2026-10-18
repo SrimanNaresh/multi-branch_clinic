@@ -254,6 +254,8 @@ export default {
   'vitals.bp': 'இரத்த அழுத்தம்',
   'vitals.systolic': 'சிஸ்டாலிக்',
   'vitals.diastolic': 'டயஸ்டாலிக்',
+  'vitals.sysShort': 'Sys',
+  'vitals.diaShort': 'Dia',
   'vitals.pulse': 'நாடித் துடிப்பு',
   'vitals.temperature': 'உடல் வெப்பநிலை',
   'vitals.comments': 'குறிப்புகள்',

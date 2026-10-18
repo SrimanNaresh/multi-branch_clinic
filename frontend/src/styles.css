@@ -76,7 +76,11 @@ input[type='checkbox'] { width: 16px; height: 16px; min-height: 0; accent-color:
 .slot-side { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 26px; white-space: nowrap; }
 .field.has-error input { border-color: var(--danger); }
 .slot-hint { margin: 10px 0 0; }
-.vitals-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.vitals-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 14px; }
+/* compact vital-sign boxes */
+.vitals-grid input { min-height: 32px; padding: 5px 9px; }
+.vitals-grid textarea { min-height: 38px; padding: 6px 9px; }
+.vitals-grid .field { gap: 3px; }
 .bp-pair { display: flex; align-items: center; gap: 6px; }
 .bp-pair b { color: var(--muted); }
 input.invalid { border-color: var(--danger); }

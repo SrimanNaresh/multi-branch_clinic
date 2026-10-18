@@ -75,11 +75,11 @@ export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly }) {
         <label className="field">
           <span className="field-label">{t('vitals.bp')} <span className="muted">(mmHg)</span></span>
           <span className="bp-pair">
-            <input type="number" inputMode="numeric" placeholder={t('vitals.systolic')} aria-label={t('vitals.systolic')}
+            <input type="number" inputMode="numeric" placeholder={t('vitals.sysShort')} aria-label={t('vitals.systolic')}
               value={f.bp_systolic} onChange={set('bp_systolic')} onBlur={blur('bp_systolic')} disabled={readOnly}
               className={err('bp_systolic') ? 'invalid' : ''} />
             <b>/</b>
-            <input type="number" inputMode="numeric" placeholder={t('vitals.diastolic')} aria-label={t('vitals.diastolic')}
+            <input type="number" inputMode="numeric" placeholder={t('vitals.diaShort')} aria-label={t('vitals.diastolic')}
               value={f.bp_diastolic} onChange={set('bp_diastolic')} onBlur={blur('bp_diastolic')} disabled={readOnly}
               className={err('bp_diastolic') ? 'invalid' : ''} />
           </span>
@@ -89,7 +89,7 @@ export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly }) {
         {num('temperature_c', t('vitals.temperature'), '°C', '0.1')}
         <label className="field field-full">
           <span className="field-label">{t('vitals.comments')}</span>
-          <textarea rows={2} maxLength={500} value={f.comments} onChange={set('comments')} disabled={readOnly} />
+          <textarea rows={1} maxLength={500} value={f.comments} onChange={set('comments')} disabled={readOnly} />
           {err('comments') && <small className="field-error">{err('comments')}</small>}
         </label>
       </div>
