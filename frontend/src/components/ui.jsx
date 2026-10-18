@@ -164,7 +164,7 @@ export function Select({ label, required, hint, full, options, placeholder, ...p
   );
 }
 
-export function TextArea({ label, required, full = true, rows = 3, ...props }) {
+export function TextArea({ label, required, full = true, rows = 2, ...props }) {
   return <Field label={label} required={required} full={full}><textarea rows={rows} required={required} {...props} /></Field>;
 }
 
