@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
-import { Button, Card, ErrorBox, Input, Loading, PageHeader, Select, useAsync, useForm, useToast } from '../../components/ui.jsx';
+import { Button, Card, ErrorBox, Input, Loading, Select, useAsync, useForm, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 
 export const UNITS = ['nos', 'bottle', 'strip', 'tablet', 'ml', 'gm', 'dram', 'box', 'tube', 'sachet'];
@@ -82,13 +82,17 @@ export default function ItemForm({ params }) {
 
   return (
     <>
-      <PageHeader
-        title={id ? `${t('common.edit')} – ${existing.data?.name}` : t('items.addItem')}
-        subtitle={id ? existing.data?.category || t('items.subtitle') : t('items.registerHint')}
-        actions={<Button variant="ghost" onClick={() => navigate('/items')}><Icon name="list" size={16} /> {t('items.viewList')}</Button>}
-      />
       <form onSubmit={submit}>
-        <Card>
+        <Card className="item-card">
+          {/* compact header inside the card (no tall page header) */}
+          <div className="compact-head">
+            <span className="compact-head-icon"><Icon name="box" size={16} /></span>
+            <div>
+              <h1>{id ? `${t('common.edit')} – ${existing.data?.name}` : t('items.addItem')}</h1>
+              <p className="muted">{id ? existing.data?.category || t('items.subtitle') : t('items.registerHint')}</p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/items')}><Icon name="list" size={15} /> {t('items.viewList')}</Button>
+          </div>
           <div className="form-grid item-grid">
             <Input label={t('items.name')} required placeholder={t('items.namePh')} autoFocus {...f.bind('name')} />
             <ComboField id="item-types" label={t('items.type')} placeholder={t('items.typePh')}
