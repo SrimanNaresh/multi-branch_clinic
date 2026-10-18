@@ -8,6 +8,7 @@ import { ageLabel, fmtDate, genderLabel } from '../../lib/format.js';
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, SearchBox, StatusBadge, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 import { VitalsModal } from '../../components/VitalSigns.jsx';
+import DoctorSelect from '../../components/DoctorSelect.jsx';
 
 export default function ConfirmSearch() {
   const { t } = useT();
@@ -20,15 +21,15 @@ export default function ConfirmSearch() {
   const [last, setLast] = useState(null);
   const [vitalsFor, setVitalsFor] = useState(null);   // queue entry whose vital signs are open
 
-  const doctors = useAsync(() => api('/queue/doctors'), []);
   const results = useAsync(() => (dq.trim() ? api('/queue/search', { query: { q: dq.trim() } }) : Promise.resolve({ rows: [] })), [dq]);
 
   async function confirm(p) {
+    if (!doctorId) { toast(t('queue.doctorRequired'), 'error'); return; }
     setBusyId(p.id);
     try {
       const entry = await api('/queue', {
         method: 'POST',
-        body: { patient_id: p.id, visit_type: p.last_visit ? 'follow_up' : 'new', doctor_id: doctorId || undefined },
+        body: { patient_id: p.id, visit_type: p.last_visit ? 'follow_up' : 'new', doctor_id: doctorId },
       });
       setLast(entry);
       toast(t('queue.confirmed', { n: entry.token_no, name: p.name }));
@@ -65,12 +66,7 @@ export default function ConfirmSearch() {
       <Card>
         <div className="toolbar">
           <SearchBox value={q} onChange={setQ} placeholder={t('queue.searchHint')} autoFocus />
-          {doctors.data?.rows?.length > 0 && (
-            <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} aria-label={t('queue.assignDoctor')}>
-              <option value="">{t('queue.anyDoctor')}</option>
-              {doctors.data.rows.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          )}
+          <DoctorSelect value={doctorId} onChange={setDoctorId} />
         </div>
         <ErrorBox error={results.error} />
         {!dq.trim() ? (
@@ -100,7 +96,8 @@ export default function ConfirmSearch() {
                     )}
                   </div>
                 ) : (
-                  <Button onClick={() => confirm(p)} loading={busyId === p.id}>{t('queue.confirm')}</Button>
+                  <Button onClick={() => confirm(p)} loading={busyId === p.id} disabled={!doctorId}
+                    title={!doctorId ? t('queue.doctorRequired') : undefined}>{t('queue.confirm')}</Button>
                 )}
               </li>
             ))}

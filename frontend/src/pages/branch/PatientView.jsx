@@ -6,18 +6,21 @@ import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel } from '../../lib/format.js';
 import { Button, Card, ErrorBox, Loading, PageHeader, StatusBadge, useAsync, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import DoctorSelect from '../../components/DoctorSelect.jsx';
 
 export default function PatientView({ params }) {
   const { t } = useT();
   const auth = useAuth();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [doctorId, setDoctorId] = useState('');
   const { data: p, error, loading } = useAsync(() => api(`/patients/${params.id}`), [params.id]);
 
   async function addToQueue() {
+    if (!doctorId) { toast(t('queue.doctorRequired'), 'error'); return; }
     setBusy(true);
     try {
-      const q = await api('/queue', { method: 'POST', body: { patient_id: p.id, visit_type: p.visit_count ? 'follow_up' : 'new' } });
+      const q = await api('/queue', { method: 'POST', body: { patient_id: p.id, doctor_id: doctorId, visit_type: p.visit_count ? 'follow_up' : 'new' } });
       toast(t('queue.confirmed', { n: q.token_no, name: p.name }));
     } catch (err) {
       toast(err.message, 'error');
@@ -51,7 +54,14 @@ export default function PatientView({ params }) {
         subtitle={<>{p.patient_code} · <StatusBadge status={p.status} /></>}
         actions={(
           <>
-            {auth.can('queue.confirm') && <Button onClick={addToQueue} loading={busy}><Icon name="ticket" size={16} /> {t('queue.addToQueue')}</Button>}
+            {auth.can('queue.confirm') && (
+              <>
+                <DoctorSelect value={doctorId} onChange={setDoctorId} />
+                <Button onClick={addToQueue} loading={busy} disabled={!doctorId} title={!doctorId ? t('queue.doctorRequired') : undefined}>
+                  <Icon name="ticket" size={16} /> {t('queue.addToQueue')}
+                </Button>
+              </>
+            )}
             {auth.can('patient.history') && <Button variant="ghost" onClick={() => navigate(`/doctor/history/${p.id}`)}><Icon name="history" size={16} /> {t('menu.patientHistory')}</Button>}
             {auth.can('patient.edit') && <Button variant="ghost" onClick={() => navigate(`/patients/${p.id}/edit`)}><Icon name="edit" size={16} /> {t('common.edit')}</Button>}
           </>

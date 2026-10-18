@@ -142,7 +142,8 @@ router.post('/', requirePermission('queue.confirm'), async (req, res) => {
   const patientId = toId(req.body?.patient_id, 'patient');
   const visitType = req.body?.visit_type || 'new';
   oneOf(visitType, ['new', 'follow_up'], 'visit_type');
-  const doctorId = req.body?.doctor_id ? toId(req.body.doctor_id, 'doctor') : null;
+  if (!req.body?.doctor_id) throw badRequest('Select the doctor before confirming', 'DOCTOR_REQUIRED');
+  const doctorId = toId(req.body.doctor_id, 'doctor');
   const slotTime = req.body?.slot_time || null;
   if (slotTime && !SLOT_TIME.test(slotTime)) throw badRequest('Invalid slot time', 'VALIDATION');
   if (slotTime && !doctorId) throw badRequest('Choose the doctor for this time slot', 'VALIDATION');

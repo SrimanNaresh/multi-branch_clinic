@@ -84,6 +84,8 @@ input.invalid { border-color: var(--danger); }
 .vitals-cell { display: inline-flex; align-items: center; gap: 4px; }
 .perm-layout { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
 .book-toolbar .search-box { max-width: none; }
+.doctor-select { width: auto; min-width: 200px; }
+.doctor-select.needs-value { border-color: var(--warning); background: var(--warning-50); }
 .token-session + .token-session { margin-top: 14px; }
 .token-session-head { margin-bottom: 8px; }
 .token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
