@@ -7,12 +7,27 @@ import { badRequest, notFound, oneOf, paging, pick, requireFields, setClause, to
 const router = Router();
 router.use(clinicScope());
 
-const FIELDS = ['name', 'category', 'unit', 'price', 'gst_percent', 'reorder_level', 'pharmacy_id', 'status'];
+const FIELDS = ['name', 'category', 'unit', 'price', 'gst_percent', 'reorder_level', 'pharmacy_id', 'status',
+  'item_type', 'hsn_code', 'manufacturer', 'generic_name', 'brand_name', 'purchase_rate', 'mrp', 'discount_percent',
+  'schedule_h', 'schedule_h1'];
+const TEXT = { item_type: 50, hsn_code: 20, manufacturer: 150, generic_name: 150, brand_name: 150, category: 100, unit: 30 };
 
-async function clean(body, clinicId) {
+async function clean(body, clinicId, userId) {
   const data = pick(body, FIELDS);
-  for (const f of ['price', 'gst_percent', 'reorder_level']) if (f in data) data[f] = toAmount(data[f], f);
+  for (const f of ['price', 'gst_percent', 'reorder_level', 'purchase_rate', 'mrp', 'discount_percent']) if (f in data) data[f] = toAmount(data[f], f);
+  for (const [f, max] of Object.entries(TEXT)) {
+    if (f in data) data[f] = data[f] == null || String(data[f]).trim() === '' ? null : String(data[f]).trim().slice(0, max);
+  }
+  if (data.unit === null) delete data.unit;
+  for (const f of ['schedule_h', 'schedule_h1']) if (f in data) data[f] = data[f] ? 1 : 0;
   if (data.gst_percent > 28) throw badRequest('GST % looks wrong', 'VALIDATION');
+  if (data.discount_percent > 100) throw badRequest('Discount % must be 0–100', 'VALIDATION');
+  if (data.mrp > 0 && data.price > data.mrp) throw badRequest('Sell price cannot be more than MRP', 'VALIDATION');
+  if (data.hsn_code && !/^[0-9A-Za-z]{2,20}$/.test(data.hsn_code)) throw badRequest('HSN code: letters and digits only', 'VALIDATION');
+  // Supplier: pick an existing one by id, or type a new name and it is added to Suppliers
+  if ('supplier_id' in body || 'supplier_name' in body) {
+    data.supplier_id = await resolveSupplier(body, clinicId, userId);
+  }
   oneOf(data.status, ['active', 'inactive'], 'status');
   if (data.pharmacy_id) {
     const [ph] = await query('SELECT id FROM pharmacies WHERE id = ? AND clinic_id = ?', [toId(data.pharmacy_id, 'pharmacy'), clinicId]);
@@ -21,9 +36,23 @@ async function clean(body, clinicId) {
   return data;
 }
 
+async function resolveSupplier(body, clinicId, userId) {
+  if (body.supplier_id) {
+    const [s] = await query('SELECT id FROM suppliers WHERE id = ? AND clinic_id = ?', [toId(body.supplier_id, 'supplier'), clinicId]);
+    if (!s) throw badRequest('Supplier does not belong to this clinic', 'VALIDATION');
+    return s.id;
+  }
+  const name = String(body.supplier_name || '').trim().slice(0, 150);
+  if (!name) return null;
+  const [found] = await query('SELECT TOP 1 id FROM suppliers WHERE clinic_id = ? AND name = ?', [clinicId, name]);
+  if (found) return found.id;
+  return insertRow(query, 'suppliers', { clinic_id: clinicId, name, created_by: userId });
+}
+
 const getItem = async (clinicId, id) =>
   (await query(
-    `SELECT i.*, ph.name AS pharmacy_name FROM items i LEFT JOIN pharmacies ph ON ph.id = i.pharmacy_id
+    `SELECT i.*, ph.name AS pharmacy_name, s.name AS supplier_name
+       FROM items i LEFT JOIN pharmacies ph ON ph.id = i.pharmacy_id LEFT JOIN suppliers s ON s.id = i.supplier_id
       WHERE i.id = ? AND i.clinic_id = ?`, [id, clinicId],
   ))[0];
 
@@ -55,6 +84,18 @@ router.get('/', requirePermission('item.view'), async (req, res) => {
   res.json({ rows, total, page, limit });
 });
 
+// GET /api/items/options – values already used in this clinic, for the "select or add" fields
+router.get('/options', requirePermission('item.view'), async (req, res) => {
+  const distinct = async (col) => (await query(
+    `SELECT DISTINCT ${col} AS v FROM items WHERE clinic_id = ? AND ${col} IS NOT NULL AND ${col} <> '' ORDER BY ${col}`, [req.clinicId],
+  )).map((r) => r.v);
+  const [types, categories, manufacturers, generics, units] = await Promise.all(
+    ['item_type', 'category', 'manufacturer', 'generic_name', 'unit'].map(distinct),
+  );
+  const suppliers = await query("SELECT id, name FROM suppliers WHERE clinic_id = ? AND status = 'active' ORDER BY name", [req.clinicId]);
+  res.json({ types, categories, manufacturers, generics, units, suppliers });
+});
+
 router.get('/categories', requirePermission('item.view'), async (req, res) => {
   const rows = await query(
     'SELECT DISTINCT category FROM items WHERE clinic_id = ? AND category IS NOT NULL ORDER BY category',
@@ -71,7 +112,7 @@ router.get('/:id', requirePermission('item.view'), async (req, res) => {
 
 // POST /api/items  { name, category, unit, price, gst_percent, reorder_level, opening_stock, pharmacy_id }
 router.post('/', requirePermission('item.manage'), async (req, res) => {
-  const data = await clean(req.body, req.clinicId);
+  const data = await clean(req.body, req.clinicId, req.user.id);
   requireFields(data, ['name']);
   const opening = toAmount(req.body?.opening_stock, 'opening_stock');
   const id = await tx(async (q) => {
@@ -90,7 +131,7 @@ router.post('/', requirePermission('item.manage'), async (req, res) => {
 // PUT /api/items/:id – details only; stock changes go through /stock
 router.put('/:id', requirePermission('item.manage'), async (req, res) => {
   const id = toId(req.params.id);
-  const { sql, params } = setClause(await clean(req.body, req.clinicId));
+  const { sql, params } = setClause(await clean(req.body, req.clinicId, req.user.id));
   const r = await query(`UPDATE items SET ${sql}, updated_at = NOW() WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
   if (!r.affectedRows) throw notFound('Item');
   res.json(await getItem(req.clinicId, id));

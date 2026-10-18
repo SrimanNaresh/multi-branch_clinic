@@ -86,6 +86,17 @@ input.invalid { border-color: var(--danger); }
 .vitals-cell { display: inline-flex; align-items: center; gap: 4px; }
 .perm-layout { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
 .book-toolbar .search-box { max-width: none; }
+/* Pharmacy → Item: five across on wide screens, like the paper form */
+.item-grid .grid-break { display: none; }
+@media (min-width: 1200px) {
+  .item-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .item-grid .grid-break { display: block; }
+}
+.item-checks { display: flex; gap: 24px; flex-wrap: wrap; }
+.item-actions { justify-content: flex-start; }
+/* 'select or add' fields look like dropdowns but accept typing */
+.combo-input { padding-right: 28px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364707d' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; }
+.combo-input::-webkit-calendar-picker-indicator { opacity: 0; }
 .doctor-select { width: auto; min-width: 200px; }
 .doctor-select.needs-value { border-color: var(--warning); background: var(--warning-50); }
 .token-session + .token-session { margin-top: 14px; }

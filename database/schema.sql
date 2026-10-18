@@ -297,6 +297,41 @@ CREATE TABLE dbo.items (
   CONSTRAINT uq_items_clinic_name_unit UNIQUE (clinic_id, name, unit)
 );
 GO
+/* Item details (Pharmacy → Item): type, HSN, manufacturer, supplier, generic / brand name,
+   purchase rate, MRP, discount, Schedule H / H1. Price = sell price. */
+IF COL_LENGTH(N'dbo.items', N'item_type') IS NULL
+  ALTER TABLE dbo.items ADD item_type NVARCHAR(50) NULL;
+GO
+IF COL_LENGTH(N'dbo.items', N'hsn_code') IS NULL
+  ALTER TABLE dbo.items ADD hsn_code NVARCHAR(20) NULL;
+GO
+IF COL_LENGTH(N'dbo.items', N'manufacturer') IS NULL
+  ALTER TABLE dbo.items ADD manufacturer NVARCHAR(150) NULL;
+GO
+IF COL_LENGTH(N'dbo.items', N'supplier_id') IS NULL
+  ALTER TABLE dbo.items ADD supplier_id INT NULL CONSTRAINT fk_items_supplier REFERENCES dbo.suppliers(id);
+GO
+IF COL_LENGTH(N'dbo.items', N'generic_name') IS NULL
+  ALTER TABLE dbo.items ADD generic_name NVARCHAR(150) NULL;
+GO
+IF COL_LENGTH(N'dbo.items', N'brand_name') IS NULL
+  ALTER TABLE dbo.items ADD brand_name NVARCHAR(150) NULL;
+GO
+IF COL_LENGTH(N'dbo.items', N'purchase_rate') IS NULL
+  ALTER TABLE dbo.items ADD purchase_rate DECIMAL(10,2) NOT NULL CONSTRAINT df_items_purchase_rate DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.items', N'mrp') IS NULL
+  ALTER TABLE dbo.items ADD mrp DECIMAL(10,2) NOT NULL CONSTRAINT df_items_mrp DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.items', N'discount_percent') IS NULL
+  ALTER TABLE dbo.items ADD discount_percent DECIMAL(5,2) NOT NULL CONSTRAINT df_items_discount DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.items', N'schedule_h') IS NULL
+  ALTER TABLE dbo.items ADD schedule_h BIT NOT NULL CONSTRAINT df_items_schedule_h DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.items', N'schedule_h1') IS NULL
+  ALTER TABLE dbo.items ADD schedule_h1 BIT NOT NULL CONSTRAINT df_items_schedule_h1 DEFAULT 0;
+GO
 
 /* ---------- 6b. DOCTOR: prescription lines ---------- */
 IF OBJECT_ID(N'dbo.prescriptions', N'U') IS NULL

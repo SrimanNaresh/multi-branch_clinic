@@ -1,30 +1,51 @@
 // Pharmacy → Item: add / edit a medicine or item
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
-import { useAuth } from '../../lib/auth.jsx';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { Button, Card, ErrorBox, Input, Loading, PageHeader, Select, useAsync, useForm, useToast } from '../../components/ui.jsx';
+import Icon from '../../components/Icon.jsx';
 
 export const UNITS = ['nos', 'bottle', 'strip', 'tablet', 'ml', 'gm', 'dram', 'box', 'tube', 'sachet'];
 export const CATEGORIES = ['Dilution', 'Mother Tincture', 'Biochemic', 'Tablet', 'Syrup', 'Ointment', 'Drops', 'Globules', 'Combination', 'Other'];
+const ITEM_TYPES = ['Medicine', 'Consumable', 'Equipment', 'Other'];
+
+const EMPTY = {
+  name: '', item_type: '', category: '', hsn_code: '',
+  manufacturer: '', supplier_name: '', generic_name: '', brand_name: '', unit: '',
+  purchase_rate: '', gst_percent: '', mrp: '', price: '', discount_percent: '',
+  schedule_h: false, schedule_h1: false, status: 'active',
+};
+const uniq = (...lists) => [...new Set(lists.flat().filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+/** "Select or add": pick a value already used, or type a new one. */
+function ComboField({ id, label, placeholder, options, ...input }) {
+  return (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      <input className="combo-input" list={id} placeholder={placeholder} autoComplete="off" {...input} />
+      <datalist id={id}>{options.map((o) => <option key={o} value={o} />)}</datalist>
+    </label>
+  );
+}
 
 export default function ItemForm({ params }) {
   const { t } = useT();
-  const auth = useAuth();
   const toast = useToast();
   const id = params.id;
-  const f = useForm({ name: '', category: '', unit: 'nos', price: '', gst_percent: '0', reorder_level: '0', opening_stock: '', pharmacy_id: '', status: 'active' });
+  const f = useForm(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const existing = useAsync(() => (id ? api(`/items/${id}`) : Promise.resolve(null)), [id]);
-  const pharmacies = useAsync(() => api('/pharmacies', { query: { clinic_id: auth.activeClinicId, status: 'active' } }), []);
-  const cats = useAsync(() => api('/items/categories'), []);
+  const opts = useAsync(() => api('/items/options'), []);
 
   useEffect(() => {
     const e = existing.data;
     if (!e) return;
-    f.setValues((v) => ({ ...v, ...Object.fromEntries(Object.keys(v).map((k) => [k, e[k] ?? v[k]])), pharmacy_id: e.pharmacy_id ? String(e.pharmacy_id) : '' }));
+    f.setValues({
+      ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, e[k] ?? EMPTY[k]])),
+      supplier_name: e.supplier_name || '', schedule_h: !!e.schedule_h, schedule_h1: !!e.schedule_h1,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing.data]);
 
@@ -32,13 +53,21 @@ export default function ItemForm({ params }) {
     e.preventDefault();
     setSaving(true);
     setError('');
-    const body = { ...f.values };
-    if (id) delete body.opening_stock;
+    const v = f.values;
+    const num = (x) => (x === '' || x == null ? 0 : x);
+    const body = {
+      ...v,
+      unit: v.unit || 'nos',
+      purchase_rate: num(v.purchase_rate), gst_percent: num(v.gst_percent), mrp: num(v.mrp),
+      price: num(v.price), discount_percent: num(v.discount_percent),
+    };
+    if (!id) delete body.status;
     try {
       const item = id ? await api(`/items/${id}`, { method: 'PUT', body }) : await api('/items', { method: 'POST', body });
       toast(t('items.saved', { name: item.name }));
+      opts.reload();
       if (id) navigate('/items');
-      else f.setValues((v) => ({ ...v, name: '', price: '', opening_stock: '' }));   // ready for the next item
+      else f.setValues(EMPTY);   // ready for the next item
     } catch (err) {
       setError(err.message);
     } finally {
@@ -48,46 +77,62 @@ export default function ItemForm({ params }) {
 
   if (id && existing.loading) return <Loading />;
   if (existing.error) return <ErrorBox error={existing.error} />;
-  const allCats = [...new Set([...CATEGORIES, ...(cats.data?.rows || [])])];
+  const o = opts.data || {};
+  const money = { type: 'number', min: '0', step: '0.01', placeholder: '0.00', inputMode: 'decimal' };
 
   return (
     <>
-      <PageHeader title={id ? `${t('common.edit')} – ${existing.data?.name}` : t('menu.item')} subtitle={t('items.subtitle')}
-        actions={<Button variant="ghost" onClick={() => navigate('/items')}>{t('menu.itemList')}</Button>} />
+      <PageHeader
+        title={id ? `${t('common.edit')} – ${existing.data?.name}` : t('items.addItem')}
+        subtitle={id ? existing.data?.category || t('items.subtitle') : t('items.registerHint')}
+        actions={<Button variant="ghost" onClick={() => navigate('/items')}><Icon name="list" size={16} /> {t('items.viewList')}</Button>}
+      />
       <form onSubmit={submit}>
         <Card>
-          <div className="form-grid">
-            <Input label={t('items.name')} required {...f.bind('name')} autoFocus />
-            <Field2 label={t('items.category')}>
-              <input list="item-cats" {...f.bind('category')} />
-              <datalist id="item-cats">{allCats.map((c) => <option key={c} value={c} />)}</datalist>
-            </Field2>
-            <Select label={t('items.unit')} {...f.bind('unit')} options={UNITS.map((u) => ({ value: u, label: u }))} />
-            <Input label={t('items.price')} type="number" min="0" step="0.01" required {...f.bind('price')} hint={t('items.priceHint')} />
-            <Input label={t('items.gst')} type="number" min="0" max="28" step="0.01" {...f.bind('gst_percent')} />
-            <Input label={t('items.reorder')} type="number" min="0" step="0.01" {...f.bind('reorder_level')} />
-            {!id && <Input label={t('items.openingStock')} type="number" min="0" step="0.01" {...f.bind('opening_stock')} />}
-            {id && <Input label={t('items.stock')} value={`${existing.data.stock_qty} ${existing.data.unit}`} disabled hint={t('items.stockHint')} />}
-            {pharmacies.data?.rows?.length > 0 && (
-              <Select label={t('unit.pharmacy')} {...f.bind('pharmacy_id')} placeholder="—"
-                options={pharmacies.data.rows.map((p) => ({ value: String(p.id), label: p.name }))} />
-            )}
+          <div className="form-grid item-grid">
+            <Input label={t('items.name')} required placeholder={t('items.namePh')} autoFocus {...f.bind('name')} />
+            <ComboField id="item-types" label={t('items.type')} placeholder={t('items.typePh')}
+              options={uniq(ITEM_TYPES, o.types || [])} {...f.bind('item_type')} />
+            <ComboField id="item-cats" label={t('items.category')} placeholder={t('items.categoryPh')}
+              options={uniq(CATEGORIES, o.categories || [])} {...f.bind('category')} />
+            <Input label={t('items.hsn')} placeholder={t('items.hsnPh')} maxLength={20} {...f.bind('hsn_code')} />
+            <span className="grid-break" aria-hidden />
+
+            <ComboField id="item-mfrs" label={t('items.manufacturer')} placeholder={t('items.manufacturerPh')}
+              options={o.manufacturers || []} {...f.bind('manufacturer')} />
+            <ComboField id="item-suppliers" label={t('items.supplier')} placeholder={t('items.supplierPh')}
+              options={(o.suppliers || []).map((s) => s.name)} {...f.bind('supplier_name')} />
+            <ComboField id="item-generics" label={t('items.generic')} placeholder={t('items.genericPh')}
+              options={o.generics || []} {...f.bind('generic_name')} />
+            <Input label={t('items.brand')} placeholder={t('items.brandPh')} {...f.bind('brand_name')} />
+            <ComboField id="item-units" label={t('items.unit')} placeholder={t('items.unitPh')}
+              options={uniq(UNITS, o.units || [])} {...f.bind('unit')} />
+
+            <Input label={t('items.purchaseRate')} {...money} {...f.bind('purchase_rate')} />
+            <Input label={t('items.gst')} {...money} max="28" {...f.bind('gst_percent')} />
+            <Input label={t('items.mrp')} {...money} {...f.bind('mrp')} />
+            <Input label={t('items.sellPrice')} {...money} {...f.bind('price')} />
+            <Input label={t('items.discount')} {...money} max="100" {...f.bind('discount_percent')} />
+
+            <div className="field-full item-checks">
+              <label className="check"><input type="checkbox" checked={f.values.schedule_h} onChange={(e) => f.set('schedule_h', e.target.checked)} /> {t('items.scheduleH')}</label>
+              <label className="check"><input type="checkbox" checked={f.values.schedule_h1} onChange={(e) => f.set('schedule_h1', e.target.checked)} /> {t('items.scheduleH1')}</label>
+            </div>
+
             {id && (
               <Select label={t('field.status')} {...f.bind('status')}
                 options={[{ value: 'active', label: t('status.active') }, { value: 'inactive', label: t('status.inactive') }]} />
             )}
           </div>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="form-actions item-actions">
+            {id && <Button type="button" variant="ghost" onClick={() => navigate('/items')}>{t('common.cancel')}</Button>}
+            <Button type="submit" loading={saving}>
+              {id ? t('common.save') : <><Icon name="plus" size={16} /> {t('items.addItem')}</>}
+            </Button>
+          </div>
         </Card>
-        {error && <div className="alert alert-error">{error}</div>}
-        <div className="form-actions">
-          <Button type="button" variant="ghost" onClick={() => navigate('/items')}>{t('common.cancel')}</Button>
-          <Button type="submit" loading={saving}>{t('common.save')}</Button>
-        </div>
       </form>
     </>
   );
-}
-
-function Field2({ label, children }) {
-  return <label className="field"><span className="field-label">{label}</span>{children}</label>;
 }
