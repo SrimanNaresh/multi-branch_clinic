@@ -107,7 +107,7 @@ export function Badge({ tone = 'neutral', children }) {
 
 export const STATUS_TONE = {
   active: 'success', inactive: 'neutral',
-  waiting: 'warning', with_doctor: 'info', done: 'success', cancelled: 'neutral',
+  booked: 'brand', waiting: 'warning', with_doctor: 'info', done: 'success', cancelled: 'neutral',
   paid: 'success', partial: 'warning', unpaid: 'danger',
   open: 'info', completed: 'success', issued: 'info', billed: 'success',
 };
@@ -183,7 +183,7 @@ export function SearchBox({ value, onChange, placeholder, autoFocus }) {
  * columns: [{ key, label, render?(row), className? }]
  * On phones each row becomes a card (labels come from data-label).
  */
-export function DataTable({ columns, rows, rowKey = 'id', onRowClick, empty }) {
+export function DataTable({ columns, rows, rowKey = 'id', onRowClick, rowClassName, empty }) {
   const { t } = useT();
   if (!rows?.length) return <Empty>{empty || t('common.noRecords')}</Empty>;
   return (
@@ -194,7 +194,7 @@ export function DataTable({ columns, rows, rowKey = 'id', onRowClick, empty }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r[rowKey]} onClick={onRowClick ? () => onRowClick(r) : undefined} className={onRowClick ? 'clickable' : ''}>
+            <tr key={r[rowKey]} onClick={onRowClick ? () => onRowClick(r) : undefined} className={[onRowClick && 'clickable', rowClassName?.(r)].filter(Boolean).join(' ')}>
               {columns.map((c) => (
                 <td key={c.key} data-label={c.label} className={c.className}><div className="cell">{c.render ? c.render(r) : r[c.key] ?? '—'}</div></td>
               ))}

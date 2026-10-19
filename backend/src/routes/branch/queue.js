@@ -4,16 +4,20 @@ import { query, tx, insertRow, isDuplicateKey } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { nextSequence, tokenKey } from '../../utils/codes.js';
 import { badRequest, conflict, notFound, oneOf, toId, like } from '../../utils/http.js';
-import { isISODate, todayISO } from '../../utils/dates.js';
+import { isISODate, nowMinutes, todayISO } from '../../utils/dates.js';
 import { checkVitals, VITAL_ERRORS, VITAL_FIELDS } from '../../../../shared/vitals.js';
-import { expandTokens } from '../../../../shared/timeSlots.js';
+import { expandTokens, toMinutes } from '../../../../shared/timeSlots.js';
+
+const SLOT_PASSED = 'This token’s time has passed – it is read-only and cannot be booked or changed';
+// A token is read-only once its end time has passed (today, clinic time zone).
+const tokenPassed = (token) => toMinutes(token.end) <= nowMinutes();
 
 const router = Router();
 router.use(clinicScope());
 
 const QUEUE_SELECT = `
   SELECT q.id, q.queue_date, q.token_no, q.visit_type, q.status, q.confirmed_at, q.called_at, q.completed_at,
-         CONVERT(char(5), q.slot_time, 108) AS slot_time,
+         CONVERT(char(5), q.slot_time, 108) AS slot_time, q.arrived_at,
          q.patient_id, p.patient_code, p.name AS patient_name, p.mobile, p.gender, p.age_years,
          q.doctor_id, d.name AS doctor_name, v.id AS visit_id, v.status AS visit_status,
          pv.id AS vitals_id, pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm,
@@ -56,6 +60,7 @@ async function doctorSlotRows(q, doctorId) {
 async function claimSlot(q, clinicId, doctorId, slotTime, today, exceptQueueId = 0) {
   const token = expandTokens(await doctorSlotRows(q, doctorId)).find((t) => t.start === slotTime);
   if (!token) throw badRequest('This time is not one of the doctor’s time slots', 'VALIDATION');
+  if (tokenPassed(token)) throw badRequest(SLOT_PASSED, 'SLOT_PASSED');
   const [taken] = await q(
     `SELECT TOP 1 q.token_no, p.name FROM queue_entries q WITH (UPDLOCK, HOLDLOCK) JOIN patients p ON p.id = q.patient_id
       WHERE q.clinic_id = ? AND q.queue_date = ? AND q.doctor_id = ? AND q.slot_time = ? AND q.status <> 'cancelled' AND q.id <> ?`,
@@ -165,10 +170,13 @@ router.post('/', requirePermission('queue.confirm'), async (req, res) => {
     if (slotTime) await claimSlot(q, req.clinicId, doctorId, slotTime, today);
 
     const token = await nextSequence(q, req.clinicId, tokenKey(today));
-    return insertRow(q, 'queue_entries', {
+    const newId = await insertRow(q, 'queue_entries', {
       clinic_id: req.clinicId, patient_id: patientId, queue_date: today, token_no: token,
       visit_type: visitType, doctor_id: doctorId, slot_time: slotTime, confirmed_by: req.user.id,
     });
+    // a walk-in is at the clinic now; a Tokens booking arrives later (Token confirm in Confirm List)
+    if (!slotTime) await q('UPDATE queue_entries SET arrived_at = NOW(), arrived_by = ? WHERE id = ?', [req.user.id, newId]);
+    return newId;
   }).catch((e) => { throw isDuplicateKey(e) ? conflict('This time slot was just booked by someone else', 'SLOT_TAKEN') : e; });
   const [row] = await query(`${QUEUE_SELECT} WHERE q.id = ?`, [id]);
   res.status(201).json(row);
@@ -195,16 +203,37 @@ router.patch('/:id/status', requirePermission('queue.update'), async (req, res) 
   res.json(row);
 });
 
+// PATCH /api/queue/:id/arrive – Token confirm: a patient booked from Tokens has arrived at the clinic
+router.patch('/:id/arrive', requirePermission('queue.confirm'), async (req, res) => {
+  const id = toId(req.params.id);
+  const [entry] = await query('SELECT id, status, queue_date, arrived_at FROM queue_entries WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+  if (!entry) throw notFound('Queue entry');
+  if (entry.queue_date !== todayISO()) throw badRequest('Only today’s tokens can be confirmed', 'VALIDATION');
+  if (entry.status === 'cancelled') throw conflict('This queue entry is cancelled', 'CANCELLED');
+  if (!entry.arrived_at) {
+    await query('UPDATE queue_entries SET arrived_at = NOW(), arrived_by = ? WHERE id = ? AND arrived_at IS NULL', [req.user.id, id]);
+  }
+  const [row] = await query(`${QUEUE_SELECT} WHERE q.id = ?`, [id]);
+  res.json(row);
+});
+
 // PATCH /api/queue/:id/slot { doctor_id, slot_time }  – give a waiting patient a time slot, move it, or free it (slot_time null)
 router.patch('/:id/slot', requirePermission('queue.confirm'), async (req, res) => {
   const id = toId(req.params.id);
   const slotTime = req.body?.slot_time || null;
   if (slotTime && !SLOT_TIME.test(slotTime)) throw badRequest('Invalid slot time', 'VALIDATION');
   await tx(async (q) => {
-    const [entry] = await q('SELECT id, status, queue_date, doctor_id FROM queue_entries WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+    const [entry] = await q(
+      'SELECT id, status, queue_date, doctor_id, CONVERT(char(5), slot_time, 108) AS slot_time FROM queue_entries WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?',
+      [id, req.clinicId],
+    );
     if (!entry) throw notFound('Queue entry');
     if (entry.queue_date !== todayISO()) throw badRequest('Only today’s tokens can be changed', 'VALIDATION');
     if (entry.status !== 'waiting') throw conflict('Only a waiting patient can change time slot', 'BAD_STATUS');
+    if (entry.slot_time && entry.doctor_id) {
+      const current = expandTokens(await doctorSlotRows(q, entry.doctor_id)).find((t) => t.start === entry.slot_time);
+      if (current && tokenPassed(current)) throw badRequest(SLOT_PASSED, 'SLOT_PASSED');
+    }
     if (!slotTime) {
       await q('UPDATE queue_entries SET slot_time = NULL WHERE id = ?', [id]);
       return;
@@ -238,9 +267,10 @@ router.put('/:id/vitals', requirePermission('vitals.record'), async (req, res) =
   if (field) throw badRequest(field === '_form' ? 'Enter at least one vital sign' : `${field}: ${VITAL_ERRORS[code]}`, 'VALIDATION');
 
   await tx(async (q) => {
-    const [entry] = await q('SELECT id, patient_id, status FROM queue_entries WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+    const [entry] = await q('SELECT id, patient_id, status, arrived_at FROM queue_entries WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
     if (!entry) throw notFound('Queue entry');
     if (entry.status === 'cancelled') throw conflict('This queue entry is cancelled', 'CANCELLED');
+    if (!entry.arrived_at) throw conflict('Confirm the patient first (Confirm button in Confirm List), then add vital signs', 'TOKEN_NOT_CONFIRMED');
     const [existing] = await q('SELECT id FROM patient_vitals WHERE queue_id = ?', [id]);
     if (existing) {
       await q(`UPDATE patient_vitals SET ${VITAL_FIELDS.map((f) => `${f} = ?`).join(', ')}, updated_by = ?, updated_at = NOW() WHERE id = ?`,

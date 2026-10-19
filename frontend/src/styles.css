@@ -122,6 +122,8 @@ input.invalid { border-color: var(--danger); }
 .token-tile.free:hover:not(:disabled) { border-color: var(--brand); background: var(--brand-50); }
 .token-tile.free:disabled { cursor: default; }
 .token-tile.past { opacity: .55; }
+.token-tile.free.past, .token-tile.free.past:hover:not(:disabled) { cursor: not-allowed; border-color: var(--line); background: var(--surface-2); }
+.token-tile .tt-body .icon { vertical-align: -2px; }
 .token-tile.booked { border-left: 4px solid var(--brand); }
 .token-tile.booked.st-with_doctor { border-left-color: var(--info); }
 .token-tile.booked.st-done { border-left-color: var(--success); background: var(--surface-2); }
@@ -167,6 +169,7 @@ input.invalid { border-color: var(--danger); }
 .badge-success { background: var(--success-50); color: var(--success); }
 .badge-warning { background: var(--warning-50); color: var(--warning); }
 .badge-info { background: var(--info-50); color: var(--info); }
+.badge-brand { background: var(--brand-50); color: var(--brand); border: 1px solid var(--brand-100); }
 .badge-danger { background: var(--danger-50); color: var(--danger); }
 .alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: var(--radius-sm); margin: 10px 0; }
 .alert ul { margin: 6px 0 0; padding-left: 18px; }
@@ -246,6 +249,15 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .table td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .table tr:last-child td { border-bottom: 0; }
 .table tr.clickable { cursor: pointer; }
+/* Confirm List: patients booked into a time slot from the Tokens page */
+.table tr.row-slot td { background: var(--warning-50); }
+.table tr.row-slot td:first-child { box-shadow: inset 4px 0 0 var(--warning); }
+.slot-tag { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 1px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--warning); color: var(--warning); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.slot-tag.arrived { border-color: var(--success); color: var(--success); }
+.icon-btn:disabled { opacity: .4; cursor: not-allowed; background: transparent; }
+.update-banner { position: fixed; z-index: 200; left: 50%; bottom: max(16px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px); padding: 10px 12px 10px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--warning); box-shadow: var(--shadow-lg); font-weight: 500; }
+.slot-legend { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; }
+.slot-swatch { width: 14px; height: 14px; border-radius: 3px; background: var(--warning-50); box-shadow: inset 3px 0 0 var(--warning); border: 1px solid var(--line); }
 .table tr.clickable:hover td { background: var(--surface-2); }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .table .col-actions { text-align: right; white-space: nowrap; }
@@ -273,6 +285,8 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .modal-head h2 { font-size: 16px; }
 .modal-body { padding: 16px; overflow-y: auto; }
 .modal-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }   /* pop-up buttons: right side */
+.modal-foot .foot-center { flex: 1; display: flex; justify-content: center; }   /* single centered button (e.g. OK) */
+.modal-foot .foot-center .btn { min-width: 110px; justify-content: center; }
 .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 60; max-width: calc(100vw - 32px); }
 .toast { background: var(--navy); color: #fff; padding: 10px 14px; border-radius: 10px; box-shadow: var(--shadow-lg); font-weight: 500; }
 .toast-error { background: var(--danger); }
