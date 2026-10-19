@@ -7,10 +7,20 @@ import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel } from '../../lib/format.js';
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Input, Loading, PageHeader, StatusBadge, TextArea, useAsync, useToast } from '../../components/ui.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
+import { RX_LIST_DEFAULTS } from '../../../../shared/dosage.js';
+import RxListPicker from '../../components/RxListPicker.jsx';
 import Icon from '../../components/Icon.jsx';
 import { VitalsForm, vitalsSummary } from '../../components/VitalSigns.jsx';
 
-const emptyLine = () => ({ key: Math.random().toString(36).slice(2), medicine_name: '', item_id: null, dosage: '', frequency: '', duration: '', quantity: 1, instructions: '' });
+const emptyLine = () => ({ key: Math.random().toString(36).slice(2), medicine_name: '', item_id: null, potency: '', dosage: '', frequency: '', duration: '', quantity: 1, instructions: '' });
+const rxLine = (r) => [r.medicine_name, r.potency].filter(Boolean).join(' ');
+
+/** A clinic's Potency / Dosage / Repetition list (by Order), replaced locally after an add / edit / delete. */
+function useRxList(kind) {
+  const loaded = useAsync(() => api(`/visits/${kind}-options`), [kind]);
+  const [changed, setChanged] = useState(null);
+  return [changed || loaded.data || { rows: RX_LIST_DEFAULTS[kind], added: [] }, setChanged];
+}
 
 // Page 1 – Doctor → Examine: today's patients still to be seen (Pre-Examine / With doctor)
 function QueuePage() {
@@ -69,7 +79,7 @@ function PastVisits({ patientId, excludeId }) {
         <div key={v.id} className="past-visit">
           <div className="pv-head"><b>{fmtDate(v.visit_date)}</b><span className="muted">{v.doctor_name}</span></div>
           {v.diagnosis && <p><span className="muted">{t('examine.diagnosis')}:</span> {v.diagnosis}</p>}
-          {v.prescriptions?.length > 0 && <p className="muted small">{v.prescriptions.map((r) => r.medicine_name).join(', ')}</p>}
+          {v.prescriptions?.length > 0 && <p className="muted small">{v.prescriptions.map(rxLine).join(', ')}</p>}
         </div>
       ))}
     </Card>
@@ -92,6 +102,9 @@ function VisitForm({ visitId }) {
   const { t } = useT();
   const toast = useToast();
   const { data: visit, error, loading, reload } = useAsync(() => api(`/visits/${visitId}`), [visitId]);
+  const [potencyList, setPotencyList] = useRxList('potency');
+  const [dosageList, setDosageList] = useRxList('dosage');
+  const [repetitionList, setRepetitionList] = useRxList('repetition');
   const [f, setF] = useState(null);
   const [lines, setLines] = useState([emptyLine()]);
   const [saving, setSaving] = useState(null);
@@ -113,8 +126,8 @@ function VisitForm({ visitId }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
-  async function save(complete) {
-    setSaving(complete ? 'complete' : 'draft');
+  async function save(complete, { print = false } = {}) {
+    setSaving(print ? 'print' : complete ? 'complete' : 'draft');
     try {
       const body = {
         complaints: f.complaints, examination_notes: f.examination_notes, diagnosis: f.diagnosis, advice: f.advice,
@@ -123,6 +136,7 @@ function VisitForm({ visitId }) {
       };
       if (!locked) body.prescriptions = lines.filter((l) => l.medicine_name.trim()).map(({ key, ...l }) => l);
       await api(`/visits/${visitId}`, { method: 'PUT', body });
+      if (print) { navigate(`/doctor/prescription/${visitId}`); return; }   // printout shows what was just saved
       toast(complete ? t('examine.completed') : t('common.saved'));
       if (complete) navigate('/doctor/examine');
       else reload();
@@ -163,11 +177,18 @@ function VisitForm({ visitId }) {
         </div>
       </Card>
 
-      <Card title={t('examine.prescription')} actions={locked ? <Badge tone="info">{t('examine.rxLocked')}</Badge> : null}>
+      <Card title={t('examine.prescription')} actions={(
+        <span className="row-actions">
+          {locked && <Badge tone="info">{t('examine.rxLocked')}</Badge>}
+          <Button variant="ghost" size="sm" onClick={() => save(false, { print: true })} loading={saving === 'print'}>
+            <Icon name="print" size={15} /> {t('rxPrint.print')}
+          </Button>
+        </span>
+      )}>
         <div className="rx-table">
           <div className="rx-row rx-head">
-            <span>{t('examine.medicine')}</span><span>{t('examine.dosage')}</span><span>{t('examine.frequency')}</span>
-            <span>{t('examine.duration')}</span><span>{t('examine.qty')}</span><span>{t('examine.instructions')}</span><span />
+            <span>{t('examine.medicine')}</span><span>{t('examine.potency')}</span><span>{t('examine.dosage')}</span><span>{t('examine.repetition')}</span>
+            <span>{t('examine.duration')}</span><span>{t('examine.instructions')}</span><span />
           </div>
           {lines.map((l) => (
             <div key={l.key} className="rx-row">
@@ -175,10 +196,13 @@ function VisitForm({ visitId }) {
                 <ItemPicker value={l.medicine_name} ariaLabel={t('examine.medicine')} placeholder={t('examine.medicineHint')}
                   onPick={(p) => setLine(l.key, { medicine_name: p.medicine_name, item_id: p.item_id })} />
               )}
-              <input aria-label={t('examine.dosage')} placeholder="4 pills" value={l.dosage || ''} disabled={locked} onChange={(e) => setLine(l.key, { dosage: e.target.value })} />
-              <input aria-label={t('examine.frequency')} placeholder="1-0-1" value={l.frequency || ''} disabled={locked} onChange={(e) => setLine(l.key, { frequency: e.target.value })} />
+              <RxListPicker kind="potency" value={l.potency || ''} disabled={locked} list={potencyList}
+                onChange={(v) => setLine(l.key, { potency: v })} onListChange={setPotencyList} />
+              <RxListPicker kind="dosage" value={l.dosage || ''} disabled={locked} list={dosageList}
+                onChange={(v) => setLine(l.key, { dosage: v })} onListChange={setDosageList} />
+              <RxListPicker kind="repetition" value={l.frequency || ''} disabled={locked} list={repetitionList}
+                onChange={(v) => setLine(l.key, { frequency: v })} onListChange={setRepetitionList} />
               <input aria-label={t('examine.duration')} placeholder="7 days" value={l.duration || ''} disabled={locked} onChange={(e) => setLine(l.key, { duration: e.target.value })} />
-              <input aria-label={t('examine.qty')} type="number" min="0" step="0.5" value={l.quantity} disabled={locked} onChange={(e) => setLine(l.key, { quantity: e.target.value })} />
               <input aria-label={t('examine.instructions')} placeholder={t('examine.instructionsHint')} value={l.instructions || ''} disabled={locked} onChange={(e) => setLine(l.key, { instructions: e.target.value })} />
               {!locked && (
                 <button type="button" className="icon-btn" aria-label={t('common.remove')}

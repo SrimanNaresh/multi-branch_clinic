@@ -102,7 +102,7 @@ function IssueForm({ visitId }) {
                       <input type="checkbox" aria-label={t('dispense.select')} checked={l.pick} disabled={!l.item_id}
                         onChange={(e) => setLine(i, { pick: e.target.checked })} />
                     </td>
-                    <td data-label={t('examine.medicine')}><b>{l.medicine_name}</b><br /><span className="muted small">{[l.frequency, l.duration].filter(Boolean).join(' · ')}</span></td>
+                    <td data-label={t('examine.medicine')}><b>{l.medicine_name}{l.potency ? ` ${l.potency}` : ''}</b><br /><span className="muted small">{[l.dosage, l.frequency, l.duration].filter(Boolean).join(' · ')}</span></td>
                     <td data-label={t('dispense.stockItem')}>
                       {l.item_id ? l.item_name : (
                         <ItemPicker placeholder={t('dispense.linkItem')} ariaLabel={t('dispense.linkItem')}

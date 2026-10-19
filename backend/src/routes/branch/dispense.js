@@ -41,7 +41,7 @@ router.get('/visit/:visitId', async (req, res) => {
   );
   if (!visit) throw notFound('Visit');
   visit.lines = await query(
-    `SELECT rx.id AS prescription_id, rx.medicine_name, rx.dosage, rx.frequency, rx.duration, rx.quantity, rx.issued_qty,
+    `SELECT rx.id AS prescription_id, rx.medicine_name, rx.potency, rx.dosage, rx.frequency, rx.duration, rx.quantity, rx.issued_qty,
             rx.item_id, i.name AS item_name, i.unit, i.price, i.gst_percent, i.stock_qty
        FROM prescriptions rx LEFT JOIN items i ON i.id = rx.item_id
       WHERE rx.visit_id = ? AND rx.clinic_id = ? ORDER BY rx.sort_order, rx.id`,

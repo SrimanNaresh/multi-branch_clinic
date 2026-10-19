@@ -1,8 +1,9 @@
 // Pharmacy: Item + Item List + stock in / adjustment
 import { Router } from '../../lib/mini-express.js';
-import { query, tx, insertRow, pageSql } from '../../config/db.js';
+import { query, tx, insertRow, updateRow, pageSql } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, notFound, oneOf, paging, pick, requireFields, setClause, toAmount, toId, like } from '../../utils/http.js';
+import { checkItemRows, IMPORT_ERRORS, MAX_IMPORT_ROWS } from '../../../../shared/itemImport.js';
 
 const router = Router();
 router.use(clinicScope());
@@ -62,8 +63,8 @@ router.get('/', requirePermission('item.view'), async (req, res) => {
   const where = ['i.clinic_id = ?'];
   const params = [req.clinicId];
   if (req.query.q) {
-    where.push('(i.name LIKE ? OR i.category LIKE ?)');
-    params.push(like(req.query.q), like(req.query.q));
+    where.push('(i.name LIKE ? OR i.category LIKE ? OR i.brand_name LIKE ? OR i.generic_name LIKE ?)');
+    params.push(...Array(4).fill(like(req.query.q)));
   }
   if (req.query.category) {
     where.push('i.category = ?');
@@ -126,6 +127,60 @@ router.post('/', requirePermission('item.manage'), async (req, res) => {
     return itemId;
   });
   res.status(201).json(await getItem(req.clinicId, id));
+});
+
+// POST /api/items/import { rows: [{ line, data }] } – from the CSV template (Pharmacy → Item → Import).
+// Every row is checked first; if any row is wrong nothing is saved and the problems come back per line.
+// A row whose Item Name + Unit already exists updates that item (blank cells keep the current value);
+// other rows add new items. Stock is never changed here.
+router.post('/import', requirePermission('item.manage'), async (req, res) => {
+  const input = req.body?.rows;
+  if (!Array.isArray(input) || !input.length) throw badRequest('The file has no item rows', 'VALIDATION');
+  if (input.length > MAX_IMPORT_ROWS) throw badRequest(`At most ${MAX_IMPORT_ROWS} rows per file`, 'VALIDATION');
+  const rows = input.map((r, i) => ({ line: Number(r?.line) || i + 2, data: r?.data && typeof r.data === 'object' ? r.data : {} }));
+  const checked = checkItemRows(rows);
+  const bad = checked.filter((r) => r.errors.length);
+  if (bad.length) {
+    const err = badRequest(`${bad.length} row(s) need fixing – nothing was imported`, 'IMPORT_INVALID');
+    err.details = bad.map((r) => ({ line: r.line, errors: r.errors.map((e) => ({ ...e, message: IMPORT_ERRORS[e.code] })) }));
+    throw err;
+  }
+
+  const result = await tx(async (q) => {
+    let created = 0;
+    let updated = 0;
+    const suppliers = new Map();   // name (lower case) → id, so a new supplier is added once
+    const supplierId = async (name) => {
+      const key = name.toLowerCase();
+      if (!suppliers.has(key)) {
+        const [found] = await q('SELECT TOP 1 id FROM suppliers WHERE clinic_id = ? AND name = ?', [req.clinicId, name]);
+        suppliers.set(key, found ? found.id : await insertRow(q, 'suppliers', { clinic_id: req.clinicId, name, created_by: req.user.id }));
+      }
+      return suppliers.get(key);
+    };
+
+    for (const [i, { data }] of checked.entries()) {
+      const { supplier_name: supplierName, ...item } = data;
+      if (supplierName) item.supplier_id = await supplierId(supplierName);
+      const [existing] = await q('SELECT id FROM items WITH (UPDLOCK, HOLDLOCK) WHERE clinic_id = ? AND name = ? AND unit = ?',
+        [req.clinicId, item.name, item.unit]);
+      if (existing) {
+        // only the cells filled in the file change the item
+        const filled = rows[i].data;
+        const changes = Object.fromEntries(Object.entries(item).filter(([k]) =>
+          k === 'supplier_id' ? !!supplierName : filled[k] !== undefined && String(filled[k]).trim() !== ''));
+        delete changes.name;
+        delete changes.unit;
+        if (Object.keys(changes).length) await updateRow(q, 'items', changes, 'id = ?', [existing.id]);
+        updated += 1;
+      } else {
+        await insertRow(q, 'items', { ...item, clinic_id: req.clinicId, created_by: req.user.id });
+        created += 1;
+      }
+    }
+    return { created, updated };
+  });
+  res.json(result);
 });
 
 // PUT /api/items/:id – details only; stock changes go through /stock

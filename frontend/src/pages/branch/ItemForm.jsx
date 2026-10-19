@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
-import { Button, Card, ErrorBox, Input, Loading, Select, useAsync, useForm, useToast } from '../../components/ui.jsx';
+import { Button, Card, ErrorBox, Input, Loading, useAsync, useForm, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import ItemImportButtons from '../../components/ItemImport.jsx';
 
 export const UNITS = ['nos', 'bottle', 'strip', 'tablet', 'ml', 'gm', 'dram', 'box', 'tube', 'sachet'];
 export const CATEGORIES = ['Dilution', 'Mother Tincture', 'Biochemic', 'Tablet', 'Syrup', 'Ointment', 'Drops', 'Globules', 'Combination', 'Other'];
@@ -91,7 +92,10 @@ export default function ItemForm({ params }) {
               <h1>{id ? `${t('common.edit')} – ${existing.data?.name}` : t('items.addItem')}</h1>
               <p className="muted">{id ? existing.data?.category || t('items.subtitle') : t('items.registerHint')}</p>
             </div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/items')}><Icon name="list" size={15} /> {t('items.viewList')}</Button>
+            <div className="compact-head-actions">
+              {!id && <ItemImportButtons onImported={opts.reload} />}
+              <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/items')}><Icon name="list" size={15} /> {t('items.viewList')}</Button>
+            </div>
           </div>
           <div className="form-grid item-grid">
             <Input label={t('items.name')} required placeholder={t('items.namePh')} autoFocus {...f.bind('name')} />
@@ -121,12 +125,16 @@ export default function ItemForm({ params }) {
             <div className="field-full item-checks">
               <label className="check"><input type="checkbox" checked={f.values.schedule_h} onChange={(e) => f.set('schedule_h', e.target.checked)} /> {t('items.scheduleH')}</label>
               <label className="check"><input type="checkbox" checked={f.values.schedule_h1} onChange={(e) => f.set('schedule_h1', e.target.checked)} /> {t('items.scheduleH1')}</label>
+              {id && (
+                <label className="inline-field item-status">
+                  {t('field.status')}
+                  <select {...f.bind('status')}>
+                    <option value="active">{t('status.active')}</option>
+                    <option value="inactive">{t('status.inactive')}</option>
+                  </select>
+                </label>
+              )}
             </div>
-
-            {id && (
-              <Select label={t('field.status')} {...f.bind('status')}
-                options={[{ value: 'active', label: t('status.active') }, { value: 'inactive', label: t('status.inactive') }]} />
-            )}
           </div>
           {error && <div className="alert alert-error">{error}</div>}
           <div className="form-actions item-actions">

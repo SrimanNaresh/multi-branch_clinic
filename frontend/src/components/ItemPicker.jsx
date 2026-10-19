@@ -1,4 +1,6 @@
-// Medicine name box with stock suggestions. Free text is allowed (item_id stays empty).
+// Medicine name box with stock suggestions (searches item, Tablet Name and Generic Name).
+// Each suggestion shows only the Tablet Name, with the Generic Name below in small text.
+// Free text is allowed (item_id stays empty).
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useDebounced } from './ui.jsx';
@@ -38,16 +40,19 @@ export default function ItemPicker({ value, onPick, placeholder, ariaLabel }) {
       />
       {open && items.length > 0 && (
         <ul className="picker-menu">
-          {items.map((i) => (
-            <li key={i.id}>
-              <button type="button" onClick={() => { setText(i.name); setOpen(false); onPick({ medicine_name: i.name, item_id: i.id, item: i }); }}>
-                <span>{i.name}</span>
-                <small className={Number(i.stock_qty) <= Number(i.reorder_level) ? 'low' : 'muted'}>
-                  {i.category ? `${i.category} · ` : ''}{i.stock_qty} {i.unit}
-                </small>
-              </button>
-            </li>
-          ))}
+          {items.map((i) => {
+            const title = i.brand_name || i.name;           // Tablet Name, else the item name
+            return (
+              <li key={i.id}>
+                <button type="button" onClick={() => { setText(title); setOpen(false); onPick({ medicine_name: title, item_id: i.id, item: i }); }}>
+                  <span className="pick-names">
+                    <span className="pick-title">{title}</span>
+                    {i.generic_name && <span className="pick-generic">{i.generic_name}</span>}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

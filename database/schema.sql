@@ -350,6 +350,69 @@ CREATE TABLE dbo.prescriptions (
   sort_order     SMALLINT NOT NULL DEFAULT 0
 );
 GO
+
+/* Dosage master (Examine → Prescription → Dosage → "+ Add"): extra dosages a clinic adds to the
+   built-in list (1 Tablet, 2 Tablet, 4 Tablet). */
+IF OBJECT_ID(N'dbo.dosage_master', N'U') IS NULL
+CREATE TABLE dbo.dosage_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_dosage_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  created_by  INT NULL CONSTRAINT fk_dosage_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_dosage_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+-- Order in the dropdown (built-ins are 1, 2, 3); dosages added before this column existed go after them
+IF COL_LENGTH(N'dbo.dosage_master', N'sort_order') IS NULL
+  ALTER TABLE dbo.dosage_master ADD sort_order INT NOT NULL CONSTRAINT df_dosage_order DEFAULT 100;
+GO
+-- 1 = one of the defaults (1 Tablet, 2 Tablet, 4 Tablet) the clinic started with; editable like any other row
+IF COL_LENGTH(N'dbo.dosage_master', N'is_default') IS NULL
+  ALTER TABLE dbo.dosage_master ADD is_default BIT NOT NULL CONSTRAINT df_dosage_default DEFAULT 0;
+GO
+
+/* Potency list (Examine → Prescription → Potency): same behaviour as the dosage list. */
+IF OBJECT_ID(N'dbo.potency_master', N'U') IS NULL
+CREATE TABLE dbo.potency_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_potency_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_potency_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_potency_default DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_potency_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_potency_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+-- potency written on each prescription line (shown before the dosage)
+IF COL_LENGTH(N'dbo.prescriptions', N'potency') IS NULL
+  ALTER TABLE dbo.prescriptions ADD potency NVARCHAR(100) NULL;
+GO
+-- Delete in the Potency / Dosage lists hides the row (is_deleted = 1) so deleted defaults don't come back;
+-- adding the same value again un-hides it.
+IF COL_LENGTH(N'dbo.dosage_master', N'is_deleted') IS NULL
+  ALTER TABLE dbo.dosage_master ADD is_deleted BIT NOT NULL CONSTRAINT df_dosage_deleted DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.potency_master', N'is_deleted') IS NULL
+  ALTER TABLE dbo.potency_master ADD is_deleted BIT NOT NULL CONSTRAINT df_potency_deleted DEFAULT 0;
+GO
+
+/* Repetition list (Examine → Prescription → Repetition, e.g. TDS, QDS, OD, HS): same behaviour as the
+   dosage list. The chosen value is saved in prescriptions.frequency. */
+IF OBJECT_ID(N'dbo.repetition_master', N'U') IS NULL
+CREATE TABLE dbo.repetition_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_repetition_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_repetition_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_repetition_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_repetition_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_repetition_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_repetition_clinic_value UNIQUE (clinic_id, value)
+);
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_rx_visit' AND object_id = OBJECT_ID(N'dbo.prescriptions'))
   CREATE INDEX ix_rx_visit ON dbo.prescriptions(visit_id);
 GO

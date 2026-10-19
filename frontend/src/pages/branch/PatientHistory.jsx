@@ -6,6 +6,7 @@ import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel, money } from '../../lib/format.js';
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, SearchBox, StatusBadge, useAsync, useDebounced } from '../../components/ui.jsx';
 import { vitalsSummary } from '../../components/VitalSigns.jsx';
+import Icon from '../../components/Icon.jsx';
 
 function PatientSearch() {
   const { t } = useT();
@@ -76,6 +77,9 @@ export default function PatientHistory({ params }) {
                   <span className="muted"> · {v.doctor_name || '—'}{v.token_no ? ` · #${v.token_no}` : ''}</span>
                 </div>
                 <div className="row-actions">
+                  <Button size="sm" variant="ghost" onClick={() => navigate(`/doctor/prescription/${v.id}`)}>
+                    <Icon name="print" size={14} /> {t('rxPrint.print')}
+                  </Button>
                   <StatusBadge status={v.status} />
                   <span className="muted small">{money(v.consultation_fee)}</span>
                 </div>
@@ -92,16 +96,16 @@ export default function PatientHistory({ params }) {
                 <div className="table-wrap">
                   <table className="table table-compact">
                     <thead>
-                      <tr><th>{t('examine.medicine')}</th><th>{t('examine.dosage')}</th><th>{t('examine.frequency')}</th><th>{t('examine.duration')}</th><th>{t('examine.qty')}</th></tr>
+                      <tr><th>{t('examine.medicine')}</th><th>{t('examine.potency')}</th><th>{t('examine.dosage')}</th><th>{t('examine.repetition')}</th><th>{t('examine.duration')}</th></tr>
                     </thead>
                     <tbody>
                       {v.prescriptions.map((r) => (
                         <tr key={r.id}>
                           <td data-label={t('examine.medicine')}>{r.medicine_name}{r.instructions ? <small className="muted"> – {r.instructions}</small> : null}</td>
+                          <td data-label={t('examine.potency')}>{r.potency || '—'}</td>
                           <td data-label={t('examine.dosage')}>{r.dosage || '—'}</td>
-                          <td data-label={t('examine.frequency')}>{r.frequency || '—'}</td>
+                          <td data-label={t('examine.repetition')}>{r.frequency || '—'}</td>
                           <td data-label={t('examine.duration')}>{r.duration || '—'}</td>
-                          <td data-label={t('examine.qty')}>{r.quantity}</td>
                         </tr>
                       ))}
                     </tbody>

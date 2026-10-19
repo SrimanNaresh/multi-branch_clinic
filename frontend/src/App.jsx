@@ -22,6 +22,7 @@ import ConfirmSearch from './pages/branch/ConfirmSearch.jsx';
 import ConfirmList from './pages/branch/ConfirmList.jsx';
 import Tokens from './pages/branch/Tokens.jsx';
 import Examine from './pages/branch/Examine.jsx';
+import PrescriptionPrint from './pages/branch/PrescriptionPrint.jsx';
 import PatientHistory from './pages/branch/PatientHistory.jsx';
 import ItemForm from './pages/branch/ItemForm.jsx';
 import ItemList from './pages/branch/ItemList.jsx';
@@ -56,6 +57,7 @@ const ROUTES = [
 
   { path: '/doctor/examine', perm: 'visit.examine', el: Examine, branch: true },
   { path: '/doctor/examine/:visitId', perm: 'visit.examine', el: Examine, branch: true },
+  { path: '/doctor/prescription/:visitId', perm: 'patient.history', el: PrescriptionPrint, branch: true },
   { path: '/doctor/history', perm: 'patient.history', el: PatientHistory, branch: true },
   { path: '/doctor/history/:patientId', perm: 'patient.history', el: PatientHistory, branch: true },
 
