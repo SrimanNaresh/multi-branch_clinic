@@ -3,10 +3,11 @@ import { Router } from '../../lib/mini-express.js';
 import { query, tx, insertRow, isDuplicateKey } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { nextSequence, tokenKey } from '../../utils/codes.js';
-import { badRequest, conflict, notFound, oneOf, toId, like } from '../../utils/http.js';
+import { HttpError, badRequest, conflict, notFound, oneOf, toId, like } from '../../utils/http.js';
 import { isISODate, nowMinutes, todayISO } from '../../utils/dates.js';
 import { checkVitals, VITAL_ERRORS, VITAL_FIELDS } from '../../../../shared/vitals.js';
 import { expandTokens, toMinutes } from '../../../../shared/timeSlots.js';
+import { ATTACHMENT_ERRORS, MAX_ATTACHMENT_BYTES, checkAttachment, fileSize, sniffMime } from '../../../../shared/attachments.js';
 
 const SLOT_PASSED = 'This token’s time has passed – it is read-only and cannot be booked or changed';
 // A token is read-only once its end time has passed (today, clinic time zone).
@@ -283,6 +284,84 @@ router.put('/:id/vitals', requirePermission('vitals.record'), async (req, res) =
   });
   const [vitals] = await query(`${VITALS_SELECT} WHERE pv.queue_id = ?`, [id]);
   res.json({ vitals });
+});
+
+/* ---------- Lab reports & scans (uploaded with the vital signs) ---------- */
+
+const ATTACH_SELECT = `
+  SELECT a.id, a.queue_id, a.patient_id, a.file_type, a.category, a.file_name, a.mime_type, a.size_bytes,
+         a.uploaded_at, u.name AS uploaded_by_name
+    FROM patient_attachments a
+    LEFT JOIN employees u ON u.id = a.uploaded_by`;
+
+/** Reads a raw (non-JSON) request body, refusing anything over `max` bytes. */
+function readRaw(req, max) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > max) { req.destroy(); reject(new HttpError(413, `File is larger than ${fileSize(max)}`, 'FILE_TOO_LARGE')); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+// GET /api/queue/:id/attachments – files uploaded for this queue entry (without the file contents)
+router.get('/:id/attachments', requirePermission('queue.view', 'vitals.record'), async (req, res) => {
+  const id = toId(req.params.id);
+  const rows = await query(`${ATTACH_SELECT} WHERE a.queue_id = ? AND a.clinic_id = ? ORDER BY a.uploaded_at DESC, a.id DESC`, [id, req.clinicId]);
+  res.json({ rows });
+});
+
+// POST /api/queue/:id/attachments?type=photo|pdf&category=&name=  (body: the file itself, Content-Type: its mime type)
+router.post('/:id/attachments', requirePermission('vitals.record'), async (req, res) => {
+  const id = toId(req.params.id);
+  const type = String(req.query.type || '');
+  const category = String(req.query.category || '').trim() || null;
+  const name = String(req.query.name || '').trim().slice(0, 200) || 'file';
+  const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+
+  const [entry] = await query('SELECT id, patient_id, status, arrived_at FROM queue_entries WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+  if (!entry) throw notFound('Queue entry');
+  if (entry.status === 'cancelled') throw conflict('This queue entry is cancelled', 'CANCELLED');
+  if (!entry.arrived_at) throw conflict('Confirm the patient first (Confirm button in Confirm List), then add reports', 'TOKEN_NOT_CONFIRMED');
+  const early = checkAttachment({ type, mime, size: Number(req.headers['content-length']) || 1, category });
+  if (early) throw badRequest(ATTACHMENT_ERRORS[early], 'VALIDATION');
+
+  const data = await readRaw(req, MAX_ATTACHMENT_BYTES);
+  const err = checkAttachment({ type, mime, size: data.length, category }) || (sniffMime(data) !== mime ? 'mismatch' : null);
+  if (err) throw badRequest(ATTACHMENT_ERRORS[err], 'VALIDATION');
+
+  const newId = await insertRow(query, 'patient_attachments', {
+    clinic_id: req.clinicId, patient_id: entry.patient_id, queue_id: id, file_type: type, category,
+    file_name: name, mime_type: mime, size_bytes: data.length, data, uploaded_by: req.user.id,
+  });
+  const [row] = await query(`${ATTACH_SELECT} WHERE a.id = ?`, [newId]);
+  res.status(201).json(row);
+});
+
+// GET /api/queue/attachments/:attId/file – the file itself (opened in the browser)
+router.get('/attachments/:attId/file', requirePermission('queue.view', 'vitals.record', 'visit.examine'), async (req, res) => {
+  const attId = toId(req.params.attId);
+  const [a] = await query('SELECT file_name, mime_type, data FROM patient_attachments WHERE id = ? AND clinic_id = ?', [attId, req.clinicId]);
+  if (!a) throw notFound('File');
+  res.setHeader('Content-Type', a.mime_type);
+  res.setHeader('Content-Length', a.data.length);
+  res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(a.file_name)}`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.end(a.data);
+});
+
+// DELETE /api/queue/attachments/:attId
+router.delete('/attachments/:attId', requirePermission('vitals.record'), async (req, res) => {
+  const attId = toId(req.params.attId);
+  const result = await query('DELETE FROM patient_attachments WHERE id = ? AND clinic_id = ?', [attId, req.clinicId]);
+  if (!result.affectedRows) throw notFound('File');
+  res.json({ ok: true });
 });
 
 export default router;

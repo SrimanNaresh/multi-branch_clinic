@@ -259,6 +259,30 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_vitals_patient' AND object_id = OBJECT_ID(N'dbo.patient_vitals'))
   CREATE INDEX ix_vitals_patient ON dbo.patient_vitals(clinic_id, patient_id);
 GO
+/* Lab reports & scans uploaded with the vital signs (Photo or PDF, max 5 MB – rules in shared/attachments.js).
+   Kept per patient and queue entry (that day's visit); the file itself is stored in `data`. */
+IF OBJECT_ID(N'dbo.patient_attachments', N'U') IS NULL
+CREATE TABLE dbo.patient_attachments (
+  id           INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id    INT NOT NULL CONSTRAINT fk_attach_clinic REFERENCES dbo.clinics(id),
+  patient_id   INT NOT NULL CONSTRAINT fk_attach_patient REFERENCES dbo.patients(id),
+  queue_id     INT NULL CONSTRAINT fk_attach_queue REFERENCES dbo.queue_entries(id),
+  file_type    NVARCHAR(10) NOT NULL CONSTRAINT chk_attach_type CHECK (file_type IN (N'photo', N'pdf')),
+  category     NVARCHAR(60) NULL,
+  file_name    NVARCHAR(200) NOT NULL,
+  mime_type    NVARCHAR(100) NOT NULL,
+  size_bytes   INT NOT NULL CONSTRAINT chk_attach_size CHECK (size_bytes BETWEEN 1 AND 5242880),
+  data         VARBINARY(MAX) NOT NULL,
+  uploaded_by  INT NULL CONSTRAINT fk_attach_by REFERENCES dbo.employees(id),
+  uploaded_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME())
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_attach_patient' AND object_id = OBJECT_ID(N'dbo.patient_attachments'))
+  CREATE INDEX ix_attach_patient ON dbo.patient_attachments(clinic_id, patient_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_attach_queue' AND object_id = OBJECT_ID(N'dbo.patient_attachments'))
+  CREATE INDEX ix_attach_queue ON dbo.patient_attachments(queue_id);
+GO
 
 /* ---------- 6. DOCTOR: visits ---------- */
 IF OBJECT_ID(N'dbo.visits', N'U') IS NULL

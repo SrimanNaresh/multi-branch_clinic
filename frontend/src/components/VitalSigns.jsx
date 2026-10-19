@@ -6,6 +6,7 @@ import { useT } from '../lib/i18n.jsx';
 import { fmtDate } from '../lib/format.js';
 import { bmi, checkVitals, VITAL_LIMITS } from '../../../shared/vitals.js';
 import { Button, ErrorBox, Loading, Modal, useAsync, useToast } from './ui.jsx';
+import Attachments from './Attachments.jsx';
 
 const EMPTY = { height_cm: '', weight_kg: '', bp_systolic: '', bp_diastolic: '', pulse_bpm: '', temperature_c: '', comments: '' };
 
@@ -23,7 +24,11 @@ export function vitalsSummary(v, t) {
   ].filter(Boolean).join(' · ');
 }
 
-export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly }) {
+/**
+ * `beforeActions`: shown under the fields and above Later / Save (outside the <form>, so pressing Enter
+ * there does not save the vitals; the buttons still submit this form through form={formId}).
+ */
+export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly, beforeActions }) {
   const { t } = useT();
   const toast = useToast();
   const [f, setF] = useState(() => toForm(initial));
@@ -67,8 +72,10 @@ export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly }) {
     </label>
   );
 
+  const formId = `vitals-form-${queueId}`;
   return (
-    <form onSubmit={save} noValidate>
+    <>
+    <form id={formId} onSubmit={save} noValidate>
       <div className="form-grid vitals-grid">
         {num('height_cm', t('vitals.height'), 'cm', '0.1')}
         {num('weight_kg', t('vitals.weight'), 'kg', '0.1')}
@@ -100,13 +107,15 @@ export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly }) {
           {initial.updated_at && ` · ${t('vitals.updatedBy', { name: initial.updated_by_name || '—', at: fmtDate(initial.updated_at, true) })}`}
         </p>
       )}
-      {!readOnly && (
-        <div className="form-actions">
-          {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>{t('vitals.later')}</Button>}
-          <Button type="submit" loading={saving}>{initial ? t('vitals.update') : t('vitals.save')}</Button>
-        </div>
-      )}
     </form>
+    {beforeActions}
+    {!readOnly && (
+      <div className="form-actions">
+        {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>{t('vitals.later')}</Button>}
+        <Button type="submit" form={formId} loading={saving}>{initial ? t('vitals.update') : t('vitals.save')}</Button>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -115,11 +124,13 @@ export function VitalsModal({ entry, onClose, onSaved }) {
   const { t } = useT();
   const current = useAsync(() => api(`/queue/${entry.id}/vitals`), [entry.id]);
   return (
-    <Modal title={`${t('vitals.title')} – #${entry.token_no} ${entry.patient_name}`} onClose={onClose}>
+    <Modal title={`${t('vitals.title')} – #${entry.token_no} ${entry.patient_name}`} onClose={onClose} wide>
       {current.loading && !current.data ? <Loading /> : <ErrorBox error={current.error} onRetry={current.reload} />}
       {current.data && (
         <VitalsForm queueId={entry.id} initial={current.data.vitals} onCancel={onClose}
-          onSaved={(v) => { onSaved?.(v); onClose(); }} />
+          onSaved={(v) => { onSaved?.(v); onClose(); }}
+          // lab reports & scans are saved on their own, right away – independent of Save below
+          beforeActions={<Attachments entry={entry} />} />
       )}
     </Modal>
   );

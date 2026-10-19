@@ -548,3 +548,26 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .invoice { border: 0; padding: 0; max-width: none; }
   .inv-table th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- Lab Reports & Scans (vital signs pop-up) ---------- */
+.attach { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+.attach-head { display: flex; align-items: flex-start; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.attach-head h3 { margin: 0; font-size: 15px; }
+.attach-head p { margin: 2px 0 0; }
+.attach-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--brand-50); color: var(--brand); flex-shrink: 0; }
+.attach-form { display: grid; grid-template-columns: minmax(150px, 220px) minmax(160px, 280px) auto; gap: 12px 16px; align-items: end; }
+.attach-form .btn { align-self: end; justify-self: start; }
+.attach + .form-actions { padding-top: 14px; border-top: 1px solid var(--line); }
+.attach-hint { margin: -4px 0 0; }
+.attach-list { border-top: 1px solid var(--line); padding-top: 4px; }
+.attach-list ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.attach-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.attach-list li:last-child { border-bottom: 0; }
+.attach-kind { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; background: var(--info-50); color: var(--info); }
+.attach-kind.kind-pdf { background: var(--danger-50); color: var(--danger); }
+.attach-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.attach-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+@media (max-width: 640px) {
+  .attach-form { grid-template-columns: 1fr; }
+}

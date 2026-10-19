@@ -73,6 +73,7 @@ function paramType(v) {
     return [TYPES.Decimal, v, { precision: 18, scale: 4 }];
   }
   if (v instanceof Date) return [TYPES.DateTime2, v, { scale: 0 }];
+  if (Buffer.isBuffer(v)) return [TYPES.VarBinary, v, { length: Infinity }];   // file contents → VARBINARY(MAX)
   if (typeof v === 'object') return [TYPES.NVarChar, JSON.stringify(v)];
   return [TYPES.NVarChar, String(v)];
 }
