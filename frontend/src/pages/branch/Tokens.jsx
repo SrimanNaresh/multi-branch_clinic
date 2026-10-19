@@ -1,17 +1,41 @@
 // Patient & Queue → Tokens: today's tokens per doctor, made from their time slots (Employee → Time slots).
 // Click an available token to book a patient into the queue for that doctor and time.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
-import { ageLabel, fmtDate, genderLabel } from '../../lib/format.js';
+import { ageLabel, fmtDate, fmtTime12, fmtTimeRange12, genderLabel, queueStatus } from '../../lib/format.js';
 import { toMinutes } from '../../../../shared/timeSlots.js';
 import { Badge, Button, Card, Empty, ErrorBox, Input, Loading, Modal, PageHeader, SearchBox, Select, StatusBadge, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 import { VitalsModal } from '../../components/VitalSigns.jsx';
 
 const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+
+/** Current time in minutes, updated every minute so tokens turn read-only as their time passes. */
+function useNowMinutes() {
+  const [now, setNow] = useState(nowMinutes);
+  useEffect(() => {
+    const id = setInterval(() => setNow(nowMinutes()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+/** Shown when a token whose time has already passed is clicked. */
+function PassedDialog({ doctor, token, onClose }) {
+  const { t } = useT();
+  return (
+    <Modal title={t('tokens.passedTitle', { n: token.no, time: fmtTimeRange12(token.start, token.end) })} onClose={onClose}
+      footer={<Button onClick={onClose}>{t('common.ok')}</Button>}>
+      <div className="alert alert-warning">
+        {t('tokens.passedMessage', { time: fmtTimeRange12(token.start, token.end), doctor: doctor.name })}
+      </div>
+      <p className="muted small">{t('tokens.passedHint')}</p>
+    </Modal>
+  );
+}
 
 /** Short patient registration inside the booking dialog: register, then the slot is booked right away. */
 function NewPatientForm({ token, initial, onRegistered, onBookExisting, onBack }) {
@@ -66,7 +90,7 @@ function NewPatientForm({ token, initial, onRegistered, onBookExisting, onBack }
       <p className="muted small">{t('tokens.newPatientHint')}</p>
       <div className="form-actions">
         <Button type="button" variant="ghost" onClick={onBack}>{t('tokens.backToSearch')}</Button>
-        <Button type="submit" loading={saving}>{t('tokens.registerAndBook', { time: token.start })}</Button>
+        <Button type="submit" loading={saving}>{t('tokens.registerAndBook', { time: fmtTime12(token.start) })}</Button>
       </div>
     </form>
   );
@@ -93,7 +117,7 @@ function BookDialog({ doctor, token, onClose, onBooked }) {
       const entry = p.queue_id
         ? await api(`/queue/${p.queue_id}/slot`, { method: 'PATCH', body: { doctor_id: doctor.id, slot_time: token.start } })
         : await api('/queue', { method: 'POST', body: { patient_id: p.id, doctor_id: doctor.id, slot_time: token.start, visit_type: p.last_visit ? 'follow_up' : 'new' } });
-      toast(t('tokens.booked', { time: token.start, name: entry.patient_name, n: entry.token_no }));
+      toast(t('tokens.booked', { time: fmtTime12(token.start), name: entry.patient_name, n: entry.token_no }));
       onBooked(entry, !p.queue_id);
     } catch (err) {
       toast(err.message, 'error');
@@ -103,7 +127,7 @@ function BookDialog({ doctor, token, onClose, onBooked }) {
   }
 
   return (
-    <Modal title={t('tokens.bookTitle', { time: `${token.start}–${token.end}`, doctor: doctor.name })} onClose={onClose}>
+    <Modal title={t('tokens.bookTitle', { time: fmtTimeRange12(token.start, token.end), doctor: doctor.name })} onClose={onClose}>
       {newPatient ? (
         <NewPatientForm token={token} initial={initial} onBack={() => setNewPatient(false)}
           onBookExisting={(p) => book(p)}
@@ -123,7 +147,7 @@ function BookDialog({ doctor, token, onClose, onBooked }) {
       {!dq.trim() ? <Empty>{t('queue.typeToSearch')}</Empty> : results.loading && !results.data ? <Loading /> : !results.data?.rows.length ? (
         <Empty>
           {t('queue.noMatch')}{' '}
-          {canRegister && <Button size="sm" onClick={() => setNewPatient(true)}>{t('tokens.registerAndBook', { time: token.start })}</Button>}
+          {canRegister && <Button size="sm" onClick={() => setNewPatient(true)}>{t('tokens.registerAndBook', { time: fmtTime12(token.start) })}</Button>}
         </Empty>
       ) : (
         <ul className="result-list">
@@ -153,26 +177,29 @@ function BookDialog({ doctor, token, onClose, onBooked }) {
   );
 }
 
-function TokenTile({ token, past, canBook, onBook, onFree, onVitals }) {
+function TokenTile({ token, past, canBook, onBook, onPassed, onFree, onVitals }) {
   const { t } = useT();
   const e = token.entry;
   if (!e) {
+    // a passed token is read-only: clicking it only explains why it cannot be booked
     return (
-      <button type="button" className={`token-tile free ${past ? 'past' : ''}`} disabled={!canBook} onClick={onBook}
-        title={canBook ? t('tokens.clickToBook') : undefined}>
-        <span className="tt-head"><b>#{token.no}</b><span>{token.start}</span></span>
-        <span className="tt-body muted">{past ? t('tokens.passed') : t('tokens.available')}</span>
+      <button type="button" className={`token-tile free ${past ? 'past' : ''}`} disabled={!canBook} onClick={past ? onPassed : onBook}
+        title={past ? t('tokens.readOnly') : canBook ? t('tokens.clickToBook') : undefined} aria-disabled={past || undefined}>
+        <span className="tt-head"><b>#{token.no}</b><span>{fmtTime12(token.start)}</span></span>
+        <span className="tt-body muted">
+          {past ? <span><Icon name="lock" size={13} /> {t('tokens.passed')}</span> : t('tokens.available')}
+        </span>
       </button>
     );
   }
   return (
-    <div className={`token-tile booked st-${e.status}`}>
-      <span className="tt-head"><b>#{token.no}</b><span>{token.start}</span></span>
+    <div className={`token-tile booked st-${queueStatus(e)} ${past ? 'past' : ''}`} title={past ? t('tokens.readOnly') : undefined}>
+      <span className="tt-head"><b>#{token.no}</b><span>{fmtTime12(token.start)}</span></span>
       <span className="tt-body"><strong>{e.patient_name}</strong><small className="muted">{e.patient_code} · {t('queue.token')} {e.token_no}</small></span>
       <span className="tt-foot">
-        <StatusBadge status={e.status} />
+        <StatusBadge status={queueStatus(e)} />
         {onVitals && <button type="button" className="icon-btn" title={t('vitals.title')} aria-label={t('vitals.title')} onClick={onVitals}><Icon name="stethoscope" size={15} /></button>}
-        {onFree && e.status === 'waiting' && <button type="button" className="icon-btn" title={t('tokens.free')} aria-label={t('tokens.free')} onClick={onFree}><Icon name="trash" size={15} /></button>}
+        {onFree && !past && e.status === 'waiting' && <button type="button" className="icon-btn" title={t('tokens.free')} aria-label={t('tokens.free')} onClick={onFree}><Icon name="trash" size={15} /></button>}
       </span>
     </div>
   );
@@ -184,14 +211,15 @@ export default function Tokens() {
   const toast = useToast();
   const [doctorId, setDoctorId] = useState('');
   const [booking, setBooking] = useState(null);       // { doctor, token }
+  const [passed, setPassed] = useState(null);         // { doctor, token } – read-only popup
   const [vitalsFor, setVitalsFor] = useState(null);
   const data = useAsync(() => api('/queue/tokens', { query: { doctor_id: doctorId } }), [doctorId]);
   const allDoctors = useAsync(() => api('/queue/doctors'), []);
   const canBook = auth.can('queue.confirm');
-  const now = nowMinutes();
+  const now = useNowMinutes();
 
   async function free(entry) {
-    if (!window.confirm(t('tokens.freeConfirm', { time: entry.slot_time, name: entry.patient_name }))) return;
+    if (!window.confirm(t('tokens.freeConfirm', { time: fmtTime12(entry.slot_time), name: entry.patient_name }))) return;
     try {
       await api(`/queue/${entry.id}/slot`, { method: 'PATCH', body: { slot_time: null } });
       data.reload();
@@ -233,15 +261,16 @@ export default function Tokens() {
             ) : d.sessions.map((s, i) => (
               <div key={i} className="token-session">
                 <div className="muted small token-session-head">
-                  {s.start_time}–{s.end_time} · {t('tokens.minutesEach', { n: s.slot_minutes })}
-                  {s.break_start && ` · ${t('tokens.break')} ${s.break_start}–${s.break_end}`}
+                  {fmtTimeRange12(s.start_time, s.end_time)} · {t('tokens.minutesEach', { n: s.slot_minutes })}
+                  {s.break_start && ` · ${t('tokens.break')} ${fmtTimeRange12(s.break_start, s.break_end)}`}
                 </div>
                 <div className="token-grid">
                   {d.tokens.filter((x) => x.session === i).map((x) => (
                     <TokenTile key={x.no} token={x} past={toMinutes(x.end) <= now} canBook={canBook}
                       onBook={() => setBooking({ doctor: d, token: x })}
+                      onPassed={() => setPassed({ doctor: d, token: x })}
                       onFree={canBook ? () => free(x.entry) : null}
-                      onVitals={auth.can('vitals.record') && x.entry ? () => setVitalsFor(x.entry) : null} />
+                      onVitals={auth.can('vitals.record') && x.entry?.arrived_at ? () => setVitalsFor(x.entry) : null} />
                   ))}
                 </div>
               </div>
@@ -255,12 +284,13 @@ export default function Tokens() {
 
       {booking && (
         <BookDialog doctor={booking.doctor} token={booking.token} onClose={() => setBooking(null)}
-          onBooked={(entry, isNew) => {
+          onBooked={() => {
+            // booking only saves the patient into the slot; vital signs come after Token confirm in Confirm List
             setBooking(null);
             data.reload();
-            if (isNew && auth.can('vitals.record')) setVitalsFor(entry);   // next step, same as Confirm
           }} />
       )}
+      {passed && <PassedDialog doctor={passed.doctor} token={passed.token} onClose={() => setPassed(null)} />}
       {vitalsFor && <VitalsModal entry={vitalsFor} onClose={() => setVitalsFor(null)} onSaved={data.reload} />}
     </>
   );

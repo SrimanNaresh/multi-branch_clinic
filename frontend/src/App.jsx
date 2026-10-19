@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './lib/auth.jsx';
 import { LangProvider, useT } from './lib/i18n.jsx';
 import { matchRoute, navigate, useLocation } from './lib/router.jsx';
@@ -108,9 +108,40 @@ function Router() {
   return <Layout path={path}>{page}</Layout>;
 }
 
+// The built page loads one hashed bundle (assets/index-<hash>.js). A tab left open keeps running the old
+// bundle after an update, so check index.html every minute and offer a reload when the bundle changed.
+const bundleOf = (html) => html.match(/assets\/index-[\w-]+\.js/)?.[0] || null;
+
+function UpdateBanner() {
+  const { t } = useT();
+  const [stale, setStale] = useState(false);
+  useEffect(() => {
+    const current = bundleOf(document.documentElement.innerHTML);
+    if (!current) return undefined;   // Vite dev server: no bundle to compare
+    const check = async () => {
+      try {
+        const res = await fetch(window.location.pathname, { cache: 'no-store' });
+        const latest = bundleOf(await res.text());
+        if (latest && latest !== current) setStale(true);
+      } catch { /* offline – try again next time */ }
+    };
+    const h = setInterval(check, 60000);
+    window.addEventListener('focus', check);
+    return () => { clearInterval(h); window.removeEventListener('focus', check); };
+  }, []);
+  if (!stale) return null;
+  return (
+    <div className="update-banner" role="status">
+      <span>{t('app.updateAvailable')}</span>
+      <button type="button" className="btn btn-primary btn-sm" onClick={() => window.location.reload()}>{t('app.reload')}</button>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <LangProvider>
+      <UpdateBanner />
       <ToastProvider>
         <AuthProvider>
           <Router />

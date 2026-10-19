@@ -12,6 +12,22 @@ export function fmtDate(s, withTime = false) {
   return withTime ? `${date}, ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : date;
 }
 
+/** "16:20" → "04:20 pm" (12-hour clock, same style as the times from fmtDate) */
+export function fmtTime12(hhmm) {
+  if (!hhmm) return '—';
+  const [h, m] = String(hhmm).split(':').map(Number);
+  return `${String(h % 12 || 12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
+
+/** "16:00", "16:20" → "04:00 pm – 04:20 pm" */
+export const fmtTimeRange12 = (from, to) => `${fmtTime12(from)} – ${fmtTime12(to)}`;
+
+/**
+ * Status shown for a queue entry. A patient booked from Tokens stays "Token booked" until their
+ * vital signs are saved; only then do they move to Pre-Examine (the stored status is 'waiting' for both).
+ */
+export const queueStatus = (r) => (r.status === 'waiting' && r.slot_time && !r.vitals_id ? 'booked' : r.status);
+
 export function todayLocal() {
   const d = new Date();
   const off = d.getTimezoneOffset();

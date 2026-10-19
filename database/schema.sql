@@ -221,6 +221,17 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'uq_queue_doctor_slot' AN
   CREATE UNIQUE INDEX uq_queue_doctor_slot ON dbo.queue_entries(clinic_id, queue_date, doctor_id, slot_time)
     WHERE slot_time IS NOT NULL AND status <> N'cancelled';
 GO
+/* Token confirm: a patient booked from Tokens is confirmed at reception when they arrive (arrived_at);
+   only then can vital signs be recorded. Walk-ins from Confirm & Search are present already, so they
+   arrive when confirmed (existing walk-in rows are filled in once, when the column is added). */
+IF COL_LENGTH(N'dbo.queue_entries', N'arrived_at') IS NULL
+BEGIN
+  ALTER TABLE dbo.queue_entries ADD
+    arrived_at DATETIME2(0) NULL,
+    arrived_by INT NULL CONSTRAINT fk_queue_arrived_by REFERENCES dbo.employees(id);
+  EXEC(N'UPDATE dbo.queue_entries SET arrived_at = confirmed_at, arrived_by = confirmed_by WHERE slot_time IS NULL');
+END
+GO
 
 /* Vital signs: the next step after a patient is confirmed into the queue (one record per queue entry).
    Recorded at reception, can be edited later (also by the doctor in Examine). */
