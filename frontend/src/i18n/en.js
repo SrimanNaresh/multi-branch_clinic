@@ -75,6 +75,7 @@ export default {
   'status.active': 'Active',
   'status.inactive': 'Inactive',
   'status.booked': 'Token booked',
+  'status.confirmed': 'Token confirmed',
   'status.waiting': 'Pre-Examine',
   'status.with_doctor': 'Examine',
   'status.done': 'Done',
@@ -252,6 +253,8 @@ export default {
   // vital signs (after Confirm)
   'vitals.title': 'Vital signs',
   'vitals.add': 'Add',
+  'vitals.addTitle': 'Add vital signs',
+  'vitals.viewTitle': 'View vital signs',
   'vitals.edit': 'Edit vital signs',
   'vitals.save': 'Save vital signs',
   'vitals.update': 'Save changes',
@@ -374,6 +377,10 @@ export default {
   'queue.sendToDoctor': 'Send to doctor',
   'queue.backToWaiting': 'Back to Pre-Examine',
   'queue.requeue': 'Re-queue',
+  'queue.cancelToken': 'Cancel token',
+  'queue.colDoctor': 'Doctor',
+  'queue.colCancel': 'Cancel',
+  'queue.confirmTokenTitle': 'Confirm token',
 
   // examine / history
   'examine.todayQueue': "Today's queue",

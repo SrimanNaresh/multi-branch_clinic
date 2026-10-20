@@ -76,6 +76,7 @@ export default {
   'status.active': 'செயலில்',
   'status.inactive': 'செயலற்றது',
   'status.booked': 'டோக்கன் முன்பதிவு',
+  'status.confirmed': 'டோக்கன் உறுதிசெய்யப்பட்டது',
   'status.waiting': 'பரிசோதனைக்கு முன்',
   'status.with_doctor': 'பரிசோதனை',
   'status.done': 'முடிந்தது',
@@ -253,6 +254,8 @@ export default {
   // vital signs (after Confirm)
   'vitals.title': 'உயிர் அறிகுறிகள்',
   'vitals.add': 'சேர்',
+  'vitals.addTitle': 'உயிர் அறிகுறிகளைச் சேர்',
+  'vitals.viewTitle': 'உயிர் அறிகுறிகளைப் பார்',
   'vitals.edit': 'உயிர் அறிகுறிகளைத் திருத்து',
   'vitals.save': 'உயிர் அறிகுறிகளைச் சேமி',
   'vitals.update': 'மாற்றங்களைச் சேமி',
@@ -375,6 +378,10 @@ export default {
   'queue.sendToDoctor': 'மருத்துவரிடம் அனுப்பு',
   'queue.backToWaiting': 'மீண்டும் பரிசோதனைக்கு முன்',
   'queue.requeue': 'மீண்டும் வரிசையில்',
+  'queue.cancelToken': 'டோக்கனை ரத்து செய்',
+  'queue.colDoctor': 'மருத்துவர்',
+  'queue.colCancel': 'ரத்து',
+  'queue.confirmTokenTitle': 'டோக்கனை உறுதிசெய்',
 
   // examine / history
   'examine.todayQueue': 'இன்றைய வரிசை',
