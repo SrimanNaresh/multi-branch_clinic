@@ -1,3 +1,8 @@
+import vitalsIconUrl from '../assets/vitals-icon.png';
+import cancelIconUrl from '../assets/cancel-icon.png';
+import doctorIconUrl from '../assets/doctor-icon.png';
+import confirmIconUrl from '../assets/confirm-icon.png';
+
 // Small stroke icons (24×24, currentColor)
 const PATHS = {
   download: 'M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',
@@ -34,6 +39,26 @@ const PATHS = {
   trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14',
   key: 'M15 7a4 4 0 1 1-3.9 5H8v3H5v-3H3V9h8.1A4 4 0 0 1 15 7',
 };
+
+// Heart-in-hand picture (used for "Add vital signs")
+export function VitalsIcon({ size = 28 }) {
+  return <img className="vitals-icon" src={vitalsIconUrl} width={size} height={size} alt="" aria-hidden />;
+}
+
+// Red "no entry" picture (used for "Cancel token")
+export function CancelIcon({ size = 28 }) {
+  return <img className="cancel-icon" src={cancelIconUrl} width={size} height={size} alt="" aria-hidden />;
+}
+
+// Doctor with stethoscope picture (used for "Send to doctor")
+export function DoctorIcon({ size = 28 }) {
+  return <img className="doctor-icon" src={doctorIconUrl} width={size} height={size} alt="" aria-hidden />;
+}
+
+// Green round tick picture (used for "Confirm token")
+export function ConfirmIcon({ size = 28 }) {
+  return <img className="confirm-icon" src={confirmIconUrl} width={size} height={size} alt="" aria-hidden />;
+}
 
 export default function Icon({ name, size = 18, className = '' }) {
   return (

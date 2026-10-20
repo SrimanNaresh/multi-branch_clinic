@@ -120,17 +120,17 @@ export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly, befo
 }
 
 /** Loads the vitals of a queue entry and lets you record / edit them in a dialog. */
-export function VitalsModal({ entry, onClose, onSaved }) {
+export function VitalsModal({ entry, onClose, onSaved, readOnly }) {
   const { t } = useT();
   const current = useAsync(() => api(`/queue/${entry.id}/vitals`), [entry.id]);
   return (
     <Modal title={`${t('vitals.title')} – #${entry.token_no} ${entry.patient_name}`} onClose={onClose} wide>
       {current.loading && !current.data ? <Loading /> : <ErrorBox error={current.error} onRetry={current.reload} />}
       {current.data && (
-        <VitalsForm queueId={entry.id} initial={current.data.vitals} onCancel={onClose}
+        <VitalsForm queueId={entry.id} initial={current.data.vitals} onCancel={onClose} readOnly={readOnly}
           onSaved={(v) => { onSaved?.(v); onClose(); }}
           // lab reports & scans are saved on their own, right away – independent of Save below
-          beforeActions={<Attachments entry={entry} />} />
+          beforeActions={<Attachments entry={entry} canEdit={!readOnly} />} />
       )}
     </Modal>
   );
