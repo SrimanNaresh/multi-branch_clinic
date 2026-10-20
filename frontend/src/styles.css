@@ -596,6 +596,9 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .attach-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--brand-50); color: var(--brand); flex-shrink: 0; }
 .attach-form { display: grid; grid-template-columns: minmax(150px, 220px) minmax(160px, 280px) auto; gap: 12px 16px; align-items: end; }
 .attach-form .btn { align-self: end; justify-self: start; }
+.attach-btns { display: flex; flex-wrap: wrap; gap: 8px; align-self: end; }
+.attach-camera { display: grid; gap: 10px; justify-items: start; }
+.attach-camera video { width: 100%; max-width: 480px; border-radius: 10px; background: #000; }
 .attach + .form-actions { padding-top: 14px; border-top: 1px solid var(--line); }
 .attach-hint { margin: -4px 0 0; }
 .attach-list { border-top: 1px solid var(--line); padding-top: 4px; }
