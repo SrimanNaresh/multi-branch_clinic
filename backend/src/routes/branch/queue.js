@@ -193,6 +193,11 @@ router.patch('/:id/status', requirePermission('queue.update'), async (req, res) 
   if (!TRANSITIONS[current.status].includes(status)) {
     throw badRequest(`Cannot move from ${current.status} to ${status}`, 'BAD_TRANSITION');
   }
+  // vital signs saved = Token confirmed: the token can no longer be cancelled
+  if (status === 'cancelled') {
+    const [vitals] = await query('SELECT TOP 1 id FROM patient_vitals WHERE queue_id = ?', [id]);
+    if (vitals) throw conflict('This token is confirmed (vital signs are saved) and cannot be cancelled', 'TOKEN_CONFIRMED');
+  }
   const extra = status === 'with_doctor' ? ', called_at = NOW()' : status === 'done' ? ', completed_at = NOW()' : '';
   try {
     await query(`UPDATE queue_entries SET status = ?${extra} WHERE id = ? AND clinic_id = ?`, [status, id, req.clinicId]);
@@ -260,7 +265,8 @@ router.get('/:id/vitals', requirePermission('queue.view', 'vitals.record'), asyn
 });
 
 // PUT /api/queue/:id/vitals { height_cm, weight_kg, bp_systolic, bp_diastolic, pulse_bpm, temperature_c, comments }
-// Records the vital signs the first time, edits them afterwards.
+// Records the vital signs the first time, edits them afterwards. The status is not changed here –
+// the patient moves to Examine only through Send to doctor.
 router.put('/:id/vitals', requirePermission('vitals.record'), async (req, res) => {
   const id = toId(req.params.id);
   const { data, errors } = checkVitals(req.body || {});

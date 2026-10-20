@@ -107,7 +107,7 @@ export function Badge({ tone = 'neutral', children }) {
 
 export const STATUS_TONE = {
   active: 'success', inactive: 'neutral',
-  booked: 'brand', waiting: 'warning', with_doctor: 'info', done: 'success', cancelled: 'neutral',
+  booked: 'brand', confirmed: 'success', waiting: 'warning', with_doctor: 'info', done: 'success', cancelled: 'neutral',
   paid: 'success', partial: 'warning', unpaid: 'danger',
   open: 'info', completed: 'success', issued: 'info', billed: 'success',
 };
