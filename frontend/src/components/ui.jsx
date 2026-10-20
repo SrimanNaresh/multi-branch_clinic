@@ -66,9 +66,9 @@ export const useToast = () => useContext(ToastContext);
 
 /* ---------------- layout pieces ---------------- */
 
-export function PageHeader({ title, subtitle, actions }) {
+export function PageHeader({ title, subtitle, actions, compact = false }) {
   return (
-    <div className="page-header">
+    <div className={compact ? 'page-header page-header-compact' : 'page-header'}>
       <div>
         <h1>{title}</h1>
         {subtitle && <p className="muted">{subtitle}</p>}

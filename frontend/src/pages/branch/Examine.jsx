@@ -13,7 +13,6 @@ import Icon from '../../components/Icon.jsx';
 import { VitalsForm, vitalsSummary } from '../../components/VitalSigns.jsx';
 
 const emptyLine = () => ({ key: Math.random().toString(36).slice(2), medicine_name: '', item_id: null, potency: '', dosage: '', frequency: '', duration: '', quantity: 1, instructions: '' });
-const rxLine = (r) => [r.medicine_name, r.potency].filter(Boolean).join(' ');
 
 /** A clinic's Potency / Dosage / Repetition list (by Order), replaced locally after an add / edit / delete. */
 function useRxList(kind) {
@@ -67,36 +66,55 @@ function QueuePage() {
   );
 }
 
-function PastVisits({ patientId, excludeId }) {
+// Short summary of the last 5 visits; the full details are on the Full history page.
+const PAST_VISITS_SHOWN = 5;
+
+function PastVisits({ patientId, excludeId, footer }) {
   const { t } = useT();
   const h = useAsync(() => api(`/visits/patient/${patientId}`), [patientId]);
-  const visits = (h.data?.visits || []).filter((v) => v.id !== excludeId).slice(0, 3);
+  const visits = (h.data?.visits || []).filter((v) => v.id !== excludeId).slice(0, PAST_VISITS_SHOWN);
   return (
-    <Card title={t('examine.previousVisits')} actions={<a href={`#/doctor/history/${patientId}`}>{t('examine.fullHistory')}</a>}>
+    <Card title={t('examine.lastVisits', { n: PAST_VISITS_SHOWN })} actions={<a href={`#/doctor/history/${patientId}`}>{t('examine.fullHistory')}</a>}>
       {h.loading && !h.data && <Loading />}
       {h.data && !visits.length && <Empty>{t('examine.firstVisit')}</Empty>}
-      {visits.map((v) => (
-        <div key={v.id} className="past-visit">
-          <div className="pv-head"><b>{fmtDate(v.visit_date)}</b><span className="muted">{v.doctor_name}</span></div>
-          {v.diagnosis && <p><span className="muted">{t('examine.diagnosis')}:</span> {v.diagnosis}</p>}
-          {v.prescriptions?.length > 0 && <p className="muted small">{v.prescriptions.map(rxLine).join(', ')}</p>}
-        </div>
-      ))}
+      {visits.length > 0 && (
+        <ul className="pv-list">
+          {visits.map((v) => (
+            <li key={v.id}>
+              <b>{fmtDate(v.visit_date)}</b>
+              <span className="muted">{v.doctor_name || '—'}</span>
+              <span className="pv-dx" title={v.diagnosis || ''}>{v.diagnosis || <span className="muted">—</span>}</span>
+              <span className="muted small">{t('examine.rxCount', { n: v.prescriptions?.length || 0 })}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {footer}
     </Card>
   );
 }
 
 // Vital signs recorded at reception (after Confirm); the doctor can correct them here.
-function QueueVitals({ queueId, readOnly }) {
+function QueueVitals({ queueId, readOnly, footer }) {
   const { t } = useT();
   const v = useAsync(() => api(`/queue/${queueId}/vitals`), [queueId]);
   return (
-    <Card title={t('vitals.title')}>
+    <Card>
       {v.loading && !v.data ? <Loading /> : <ErrorBox error={v.error} onRetry={v.reload} />}
       {v.data && <VitalsForm queueId={queueId} initial={v.data.vitals} onSaved={v.reload} readOnly={readOnly} />}
+      {footer}
     </Card>
   );
 }
+
+// Patient details tabs, in this order: [key, label]
+const EXAMINE_TABS = [
+  ['history', 'examine.previousVisits'],
+  ['vitals', 'vitals.title'],
+  ['clinical', 'examine.clinical'],
+  ['rx', 'examine.prescription'],
+  ['advice', 'examine.advice'],
+];
 
 function VisitForm({ visitId }) {
   const { t } = useT();
@@ -108,6 +126,32 @@ function VisitForm({ visitId }) {
   const [f, setF] = useState(null);
   const [lines, setLines] = useState([emptyLine()]);
   const [saving, setSaving] = useState(null);
+  const [tab, setTab] = useState('history');
+  const tabIndex = EXAMINE_TABS.findIndex(([key]) => key === tab);
+  const prevTab = EXAMINE_TABS[tabIndex - 1];
+  const nextTab = EXAMINE_TABS[tabIndex + 1];
+  // Previous / Next: switch tab and bring the tab bar back into view
+  const goTab = (key) => {
+    setTab(key);
+    document.getElementById(`tab-${key}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+  const tabNav = (
+    <div className="tab-nav">
+      {prevTab ? (
+        <button type="button" className="tab-nav-btn prev" onClick={() => goTab(prevTab[0])}>
+          <Icon name="chevronLeft" size={18} />
+          <span><small>{t('common.previous')}</small>{t(prevTab[1])}</span>
+        </button>
+      ) : <span />}
+      <span className="tab-nav-step">{t('examine.step', { n: tabIndex + 1, total: EXAMINE_TABS.length })}</span>
+      {nextTab ? (
+        <button type="button" className="tab-nav-btn next" onClick={() => goTab(nextTab[0])}>
+          <span><small>{t('common.next')}</small>{t(nextTab[1])}</span>
+          <Icon name="chevronRight" size={18} />
+        </button>
+      ) : <span />}
+    </div>
+  );
 
   useEffect(() => {
     if (!visit) return;
@@ -123,6 +167,7 @@ function VisitForm({ visitId }) {
   if (!f) return null;
 
   const locked = visit.issue_count > 0;
+  const rxCount = lines.filter((l) => l.medicine_name.trim()).length;
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
@@ -159,25 +204,44 @@ function VisitForm({ visitId }) {
         {visit.bill_id && <Badge tone="success">{t('status.billed')}</Badge>}
       </div>
 
-      <PastVisits patientId={visit.patient_id} excludeId={visit.id} />
+      {/* Tabs: every panel stays mounted (only hidden), so nothing typed is lost when switching */}
+      <div className="tabs examine-tabs" role="tablist">
+        {EXAMINE_TABS.map(([key, label]) => (
+          <button key={key} type="button" role="tab" id={`tab-${key}`} aria-selected={tab === key} aria-controls={`panel-${key}`}
+            className={tab === key ? 'on' : ''} onClick={() => setTab(key)}>
+            {t(label)}
+            {key === 'rx' && rxCount > 0 && <span className="tab-count">{rxCount}</span>}
+          </button>
+        ))}
+      </div>
 
-      {visit.queue_id && <QueueVitals queueId={visit.queue_id} readOnly={visit.queue_status === 'cancelled'} />}
+      <section role="tabpanel" id="panel-history" aria-labelledby="tab-history" hidden={tab !== 'history'}>
+        <PastVisits patientId={visit.patient_id} excludeId={visit.id} footer={tabNav} />
+      </section>
+
+      <section role="tabpanel" id="panel-vitals" aria-labelledby="tab-vitals" hidden={tab !== 'vitals'}>
+      {visit.queue_id ? <QueueVitals queueId={visit.queue_id} readOnly={visit.queue_status === 'cancelled'} footer={tabNav} /> : <Card><Empty>{t('examine.noVitals')}</Empty>{tabNav}</Card>}
       {visit.vitals && Object.values(visit.vitals).some(Boolean) && (
         <p className="muted small">{t('vitals.olderNote')}: {[
           visit.vitals.bp && `${t('examine.bp')} ${visit.vitals.bp}`, visit.vitals.pulse && `${t('examine.pulse')} ${visit.vitals.pulse}`,
           visit.vitals.temp && `${t('examine.temp')} ${visit.vitals.temp}`, visit.vitals.weight && `${t('examine.weight')} ${visit.vitals.weight}`,
         ].filter(Boolean).join(' · ')}</p>
       )}
+      </section>
 
-      <Card title={t('examine.clinical')}>
+      <section role="tabpanel" id="panel-clinical" aria-labelledby="tab-clinical" hidden={tab !== 'clinical'}>
+      <Card>
         <div className="form-grid">
           <TextArea label={t('examine.complaints')} value={f.complaints} onChange={set('complaints')} />
           <TextArea label={t('examine.examination')} value={f.examination_notes} onChange={set('examination_notes')} />
           <TextArea label={t('examine.diagnosis')} rows={2} value={f.diagnosis} onChange={set('diagnosis')} />
         </div>
+        {tabNav}
       </Card>
+      </section>
 
-      <Card title={t('examine.prescription')} actions={(
+      <section role="tabpanel" id="panel-rx" aria-labelledby="tab-rx" hidden={tab !== 'rx'}>
+      <Card actions={(
         <span className="row-actions">
           {locked && <Badge tone="info">{t('examine.rxLocked')}</Badge>}
           <Button variant="ghost" size="sm" onClick={() => save(false, { print: true })} loading={saving === 'print'}>
@@ -215,15 +279,20 @@ function VisitForm({ visitId }) {
           ))}
         </div>
         {!locked && <Button variant="ghost" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine()])}><Icon name="plus" size={15} /> {t('examine.addMedicine')}</Button>}
+        {tabNav}
       </Card>
+      </section>
 
-      <Card title={t('examine.advice')}>
+      <section role="tabpanel" id="panel-advice" aria-labelledby="tab-advice" hidden={tab !== 'advice'}>
+      <Card>
         <div className="form-grid">
           <TextArea label={t('examine.advice')} rows={2} value={f.advice} onChange={set('advice')} />
           <Input label={t('examine.followUp')} type="date" value={f.follow_up_date} onChange={set('follow_up_date')} />
           <Input label={t('field.consultationFee')} type="number" min="0" step="0.01" value={f.consultation_fee} onChange={set('consultation_fee')} disabled={!!visit.bill_id} />
         </div>
+        {tabNav}
       </Card>
+      </section>
 
       <div className="form-actions sticky-actions">
         <Button variant="ghost" onClick={() => save(false)} loading={saving === 'draft'}>{t('examine.saveDraft')}</Button>
@@ -242,7 +311,7 @@ export default function Examine({ params }) {
   // Page 2 – one patient's details (previous visits, vitals, examination)
   return (
     <>
-      <PageHeader title={t('examine.patientDetails')} subtitle={auth.activeClinic?.name}
+      <PageHeader title={t('examine.patientDetails')} subtitle={auth.activeClinic?.name} compact
         actions={<Button variant="ghost" onClick={() => navigate('/doctor/examine')}>← {t('examine.backToQueue')}</Button>} />
       <VisitForm visitId={visitId} />
     </>

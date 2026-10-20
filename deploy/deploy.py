@@ -342,15 +342,17 @@ if web == "nginx":
     site = f"/etc/nginx/sites-available/{args.domain}" if debian else f"/etc/nginx/conf.d/{args.domain}.conf"
     existed = site not in own_foreign and run(f"test -f {site}", check=False)[0] == 0
     if existed:
-        # keep whatever certbot added earlier; only the upstream port can change
+        # keep the https block; only the upstream port and the upload limit can change
         run(f"cp -a {site} {site}.bak && sed -i -E 's#proxy_pass http://127\\.0\\.0\\.1:[0-9]+#proxy_pass http://127.0.0.1:{port}#' {site}")
+        # lab reports / scans are uploaded up to 5 MB: this site's own limit must allow them
+        run(f"sed -i -E 's#client_max_body_size [0-9]+[kKmM]?;#client_max_body_size 8m;#g' {site}")
     else:
         put_text(site, f"""{MARK}
 server {{
     listen 80;
     listen [::]:80;
     server_name {args.domain};
-    client_max_body_size 2m;
+    client_max_body_size 8m;   # lab reports / scans up to 5 MB
 
     location / {{
         proxy_pass http://127.0.0.1:{port};
@@ -432,7 +434,7 @@ server {{
     server_name {args.domain};
     ssl_certificate {live}/fullchain.pem;
     ssl_certificate_key {live}/privkey.pem;{opts}{dh}
-    client_max_body_size 2m;
+    client_max_body_size 8m;   # lab reports / scans up to 5 MB
 
     location / {{
         proxy_pass http://127.0.0.1:{port};

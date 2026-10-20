@@ -2,7 +2,8 @@
 // The bottom bar has "+ New" (pop-up to add one, typed text pre-filled), "Edit" (a pencil on each row:
 // rename / change Order in the same pop-up) and "Delete" (a bin on each row, with a confirm pop-up).
 // Edit / Delete stay on until "Done" or the list closes.
-import { useEffect, useRef, useState } from 'react';
+// Keyboard: ↑ / ↓ move through the list, Enter picks (or "+ New" for unlisted text), Esc closes.
+import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useT } from '../lib/i18n.jsx';
 import { cleanDosage, cleanOrder, MAX_ORDER, nextOrder } from '../../../shared/dosage.js';
@@ -22,7 +23,10 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
   const [editing, setEditing] = useState(null);     // pop-up: { id (null = new), old, text, order, oldOrder }
   const [mode, setMode] = useState(null);           // null | 'edit' | 'delete' – row icons only in a mode
   const [removing, setRemoving] = useState(null);   // row waiting for delete confirmation
+  const [active, setActive] = useState(-1);         // highlighted row, -1 = none
   const box = useRef(null);
+  const menu = useRef(null);
+  const menuId = useId();
   const name = t(`examine.${kind}`);                 // "Potency" / "Dosage"
   const url = `/visits/${kind}-options`;
 
@@ -38,6 +42,32 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
   const q = typed.toLowerCase();
   const shown = options.filter((o) => !q || o.toLowerCase().includes(q));
   const exact = options.some((o) => o.toLowerCase() === q);
+  const showMenu = open && !disabled;
+
+  // list changed or reopened: nothing highlighted until an arrow key is pressed
+  const shownKey = shown.join('\n');
+  useEffect(() => setActive(-1), [shownKey, open]);
+  // keep the highlighted row visible inside the scrolling menu
+  useEffect(() => {
+    if (active >= 0) menu.current?.children[active]?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!showMenu) { setOpen(true); return; }
+      if (!shown.length) return;
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      setActive((a) => (a < 0 && step < 0 ? shown.length - 1 : (a + step + shown.length) % shown.length));
+    } else if (e.key === 'Escape') {
+      setOpen(false); setMode(null);
+    } else if (e.key === 'Enter' && open) {
+      e.preventDefault();
+      if (active >= 0 && shown[active]) pick(shown[active]);
+      else if (typed && !exact) startNew();
+      else if (shown[0]) pick(shown[0]);
+    }
+  };
 
   const pick = (v) => { onChange(v); setOpen(false); setMode(null); };
   const toggleMode = (m) => setMode((cur) => (cur === m ? null : m));
@@ -95,19 +125,19 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
     <div className="picker rx-list-picker" ref={box}>
       <input className="combo-input" aria-label={name} placeholder={t('rxList.placeholder')} autoComplete="off"
         value={value || ''} disabled={disabled}
+        role="combobox" aria-expanded={showMenu} aria-controls={menuId} aria-autocomplete="list"
+        aria-activedescendant={showMenu && active >= 0 ? `${menuId}-${active}` : undefined}
         onFocus={() => setOpen(true)} onClick={() => setOpen(true)}
         onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpen(false);
-          if (e.key === 'Enter' && open) { e.preventDefault(); if (typed && !exact) startNew(); else if (shown[0]) pick(shown[0]); }
-        }} />
-      {open && !disabled && (
-        <ul className="picker-menu dosage-menu">
-          {shown.map((o) => {
+        onKeyDown={onKeyDown} />
+      {showMenu && (
+        <ul className="picker-menu dosage-menu" id={menuId} ref={menu}>
+          {shown.map((o, idx) => {
             const row = rowBy.get(o.toLowerCase());
             return (
-              <li key={o} className="dosage-row">
-                <button type="button" onClick={() => pick(o)}><span className="pick-title">{o}</span></button>
+              <li key={o} className="dosage-row" id={`${menuId}-${idx}`}>
+                <button type="button" tabIndex={-1} className={idx === active ? 'active' : ''}
+                  onMouseEnter={() => setActive(idx)} onClick={() => pick(o)}><span className="pick-title">{o}</span></button>
                 {mode === 'edit' && row && (
                   <button type="button" className="icon-btn dosage-pencil" title={t('rxList.edit', { name })} aria-label={`${t('rxList.edit', { name })}: ${o}`}
                     onClick={() => { setOpen(false); setEditing({ id: row.id, old: o, text: o, order: String(row.sort_order), oldOrder: row.sort_order }); }}>

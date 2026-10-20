@@ -31,6 +31,8 @@ const PATHS = {
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12m10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6',
   trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14',
   key: 'M15 7a4 4 0 1 1-3.9 5H8v3H5v-3H3V9h8.1A4 4 0 0 1 15 7',
+  chevronLeft: 'M15 18l-6-6 6-6',
+  chevronRight: 'M9 18l6-6-6-6',
 };
 
 export default function Icon({ name, size = 18, className = '' }) {
