@@ -9,7 +9,7 @@ import { Badge, Button, Card, DataTable, Empty, ErrorBox, Input, Loading, PageHe
 import ItemPicker from '../../components/ItemPicker.jsx';
 import { RX_LIST_DEFAULTS } from '../../../../shared/dosage.js';
 import DosDontList, { DosDontSummary } from '../../components/DosDontList.jsx';
-import PastHistoryList from '../../components/PastHistoryList.jsx';
+import PastHistoryList, { PastHistorySummary } from '../../components/PastHistoryList.jsx';
 import RxListPicker from '../../components/RxListPicker.jsx';
 import Icon from '../../components/Icon.jsx';
 import { VitalsForm, vitalsSummary } from '../../components/VitalSigns.jsx';
@@ -113,6 +113,12 @@ function PastVisitDetails({ v }) {
       <section key="clinical" className="pv-sec">
         <h4>{t('examine.clinical')}</h4>
         <Fields rows={[[t('examine.complaints'), v.complaints], [t('examine.examination'), v.examination_notes], [t('examine.diagnosis'), v.diagnosis]]} />
+      </section>
+    ),
+    v.past_history?.length > 0 && (
+      <section key="past" className="pv-sec">
+        <h4>{t('examine.pastHistory')}</h4>
+        <PastHistorySummary value={v.past_history} />
       </section>
     ),
     (filled(v.advice) || filled(v.follow_up_date) || dosDonts.length > 0) && (
@@ -322,7 +328,7 @@ function VisitForm({ visitId, backPath }) {
             <TextArea label={t('examine.examination')} rows={3} value={f.examination_notes} onChange={set('examination_notes')} />
             <TextArea label={t('examine.diagnosis')} rows={2} value={f.diagnosis} onChange={set('diagnosis')} />
           </div>
-          <PastHistoryList list={pastList} onListChange={setPastList}
+          <PastHistoryList list={pastList} onListChange={setPastList} copiedFrom={visit.past_history_from}
             value={f.past_history} onChange={(past_history) => setF((cur) => ({ ...cur, past_history }))} />
         </div>
         {tabNav}

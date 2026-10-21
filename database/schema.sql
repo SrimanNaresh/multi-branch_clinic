@@ -508,10 +508,24 @@ CREATE TABLE dbo.pasthistory_question (
   CONSTRAINT uq_phq_item_value UNIQUE (item_id, value)
 );
 GO
-/* A patient's past history, as JSON:
-   [{"item":"ENT","note":"Tonsillectomy 2019","answers":[{"q":"Duration","a":"2 years"}]}, …] */
+/* patients.past_history: where Past History was first kept (one record per patient). No longer used –
+   it is now saved per visit (visits.past_history); the step below moves what was saved here. */
 IF COL_LENGTH(N'dbo.patients', N'past_history') IS NULL
   ALTER TABLE dbo.patients ADD past_history NVARCHAR(4000) NULL;
+GO
+/* Past History of a visit, as JSON:
+   [{"item":"ENT","note":"Tonsillectomy 2019","answers":[{"q":"Duration","a":"2 years"}]}, …]
+   NULL = never saved for this visit (the screen then starts from the patient's previous visit);
+   '[]' = saved with nothing ticked. */
+IF COL_LENGTH(N'dbo.visits', N'past_history') IS NULL
+  ALTER TABLE dbo.visits ADD past_history NVARCHAR(4000) NULL;
+GO
+/* one-time move: a patient's Past History goes onto the patient's latest visit */
+UPDATE v SET past_history = p.past_history
+  FROM dbo.visits v JOIN dbo.patients p ON p.id = v.patient_id
+ WHERE p.past_history IS NOT NULL AND v.past_history IS NULL
+   AND v.id = (SELECT TOP 1 v2.id FROM dbo.visits v2 WHERE v2.patient_id = p.id ORDER BY v2.visit_date DESC, v2.id DESC);
+UPDATE dbo.patients SET past_history = NULL WHERE past_history IS NOT NULL;
 GO
 /* Do's and Don'ts marked for a visit, as JSON: [{"item":"Smoking","rule":"dont"}, …] */
 IF COL_LENGTH(N'dbo.visits', N'dos_donts') IS NULL

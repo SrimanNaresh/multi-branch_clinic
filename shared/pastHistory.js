@@ -1,5 +1,6 @@
 // Examine → Complaints & diagnosis → Past History: what applies to the patient, with a short note each.
-// Saved on the patient (patients.past_history) as JSON, so the next visit opens with it:
+// Saved with each visit (visits.past_history) as JSON; a visit never saved starts from the patient's
+// previous visit, so the doctor does not type it again:
 // [{ item: 'ENT', note: 'Tonsillectomy 2019', answers: [{ q: 'Duration', a: '2 years' }] }, …]
 // Ticking an item shows its questions (editable per item); each answer is a short text.
 import { cleanDosage } from './dosage.js';
@@ -47,7 +48,7 @@ export function cleanPastHistory(list) {
   return [...byItem.values()].slice(0, MAX_PAST_HISTORY);
 }
 
-/** patients.past_history column → list ([] when empty or unreadable). */
+/** visits.past_history column → list ([] when empty or unreadable). */
 export function parsePastHistory(text) {
   if (!text) return [];
   try { return cleanPastHistory(JSON.parse(text)); } catch { return []; }

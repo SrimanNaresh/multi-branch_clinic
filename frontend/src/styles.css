@@ -414,7 +414,14 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .phq-row { display: grid; grid-template-columns: minmax(110px, 38%) minmax(0, 1fr) auto; align-items: center; gap: 6px; margin-bottom: 3px; }
 .phq-row label { margin: 0; font-size: 12.5px; font-weight: 500; color: var(--text); }
 .phq-row input { height: 24px; min-height: 24px; padding: 0 8px; font-size: 12.5px; }
-.past-history-line { margin: 0; }
+/* a patient's Past History to read (Patient History, Previous visits) */
+.ph-summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px 20px; }
+.ph-summary-head { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; }
+.ph-summary-head .icon { color: var(--brand); }
+.ph-summary-item .pv-fields { padding-left: 18px; }
+.tl-past { margin-top: 8px; }
+.tl-past h4 { margin: 0 0 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--brand); }
+.ph-copied { margin: 0 0 6px; padding: 4px 8px; border-radius: 6px; background: var(--info-50); color: var(--info); }
 @media (max-width: 760px) { .tab-split { grid-template-columns: 1fr; } }
 .tab-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 /* every Examine tab body is the same height; the Previous / Next bar sits at its bottom */

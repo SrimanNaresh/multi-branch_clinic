@@ -13,7 +13,7 @@ router.use(clinicScope());
 
 async function loadVisit(clinicId, id) {
   const [visit] = await query(
-    `SELECT v.*, p.patient_code, p.name AS patient_name, p.gender, p.age_years, p.dob, p.mobile, p.blood_group, p.past_history,
+    `SELECT v.*, p.patient_code, p.name AS patient_name, p.gender, p.age_years, p.dob, p.mobile, p.blood_group,
             d.name AS doctor_name, d.qualification AS doctor_qualification, d.designation AS doctor_designation,
             q.token_no, q.queue_date, q.status AS queue_status,
             c.name AS clinic_name, c.address AS clinic_address, c.city AS clinic_city, c.phone AS clinic_phone,
@@ -33,7 +33,21 @@ async function loadVisit(clinicId, id) {
   if (!visit) return null;
   if (typeof visit.vitals === 'string') { try { visit.vitals = JSON.parse(visit.vitals); } catch { visit.vitals = null; } }
   visit.dos_donts = parseDosDonts(visit.dos_donts);
-  visit.past_history = parsePastHistory(visit.past_history);
+  // Past History: this visit's own; never saved yet → the patient's latest earlier visit that has one
+  visit.past_history_from = null;
+  if (visit.past_history == null) {
+    const [prev] = await query(
+      `SELECT TOP 1 visit_date, past_history FROM visits
+        WHERE patient_id = ? AND clinic_id = ? AND past_history IS NOT NULL AND id <> ?
+          AND (visit_date < ? OR (visit_date = ? AND id < ?))
+        ORDER BY visit_date DESC, id DESC`,
+      [visit.patient_id, clinicId, visit.id, visit.visit_date, visit.visit_date, visit.id],
+    );
+    visit.past_history = prev ? parsePastHistory(prev.past_history) : [];
+    if (visit.past_history.length) visit.past_history_from = prev.visit_date;
+  } else {
+    visit.past_history = parsePastHistory(visit.past_history);
+  }
   visit.prescriptions = await query(
     `SELECT rx.*, i.stock_qty, i.price, i.unit, i.generic_name
        FROM prescriptions rx LEFT JOIN items i ON i.id = rx.item_id
@@ -277,14 +291,13 @@ router.delete('/pasthistory-questions/:itemId/:id', requirePermission('visit.exa
 router.get('/patient/:patientId', requirePermission('patient.history'), async (req, res) => {
   const patientId = toId(req.params.patientId, 'patient');
   const [patient] = await query(
-    'SELECT id, patient_code, name, gender, age_years, dob, mobile, blood_group, address, past_history FROM patients WHERE id = ? AND clinic_id = ?',
+    'SELECT id, patient_code, name, gender, age_years, dob, mobile, blood_group, address FROM patients WHERE id = ? AND clinic_id = ?',
     [patientId, req.clinicId],
   );
   if (!patient) throw notFound('Patient');
-  patient.past_history = parsePastHistory(patient.past_history);
   const visits = await query(
     `SELECT v.id, v.visit_date, v.complaints, v.examination_notes, v.diagnosis, v.vitals, v.advice, v.follow_up_date,
-            v.dos_donts, v.consultation_fee, v.status, d.name AS doctor_name, q.token_no,
+            v.dos_donts, v.past_history, v.consultation_fee, v.status, d.name AS doctor_name, q.token_no,
             pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm, pv.temperature_f,
             pv.comments AS vitals_comments, pv.id AS vitals_id
        FROM visits v LEFT JOIN employees d ON d.id = v.doctor_id LEFT JOIN queue_entries q ON q.id = v.queue_id
@@ -300,6 +313,7 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
     for (const v of visits) {
       if (typeof v.vitals === 'string') { try { v.vitals = JSON.parse(v.vitals); } catch { v.vitals = null; } }
       v.dos_donts = parseDosDonts(v.dos_donts);
+      v.past_history = parsePastHistory(v.past_history);
       v.prescriptions = rx.filter((r) => r.visit_id === v.id);
     }
   }
@@ -324,6 +338,8 @@ router.put('/:id', requirePermission('visit.examine'), async (req, res) => {
     const marks = cleanDosDonts(body.dos_donts);
     data.dos_donts = marks.length ? JSON.stringify(marks) : null;
   }
+  // Past History of this visit; '[]' (not NULL) when nothing is ticked, so it does not refill from the last visit
+  if (body.past_history !== undefined) data.past_history = JSON.stringify(cleanPastHistory(body.past_history));
 
   await tx(async (q) => {
     const [visit] = await q('SELECT * FROM visits WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
@@ -356,13 +372,6 @@ router.put('/:id', requirePermission('visit.examine'), async (req, res) => {
           quantity: qty || 1, instructions: line.instructions || null, sort_order: order++,
         });
       }
-    }
-
-    // Past History belongs to the patient, not the visit
-    if (body.past_history !== undefined) {
-      const past = cleanPastHistory(body.past_history);
-      await q('UPDATE patients SET past_history = ? WHERE id = ? AND clinic_id = ?',
-        [past.length ? JSON.stringify(past) : null, visit.patient_id, req.clinicId]);
     }
 
     if (body.complete) data.status = 'completed';

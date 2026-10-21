@@ -1,12 +1,14 @@
 // Examine → Complaints & diagnosis → Past History: the clinic's list (ENT, Ortho, Dental, …).
-// Tick what applies to the patient and add a short note; it is saved on the patient, so the next
-// visit opens with it. "+ New", "Edit" and "Delete" change the clinic's list (same pop-ups as Potency).
+// Tick what applies to the patient and add a short note; it is saved with this visit. A visit never
+// saved starts from the patient's previous visit (copiedFrom = that visit's date).
+// "+ New", "Edit" and "Delete" change the clinic's list (same pop-ups as Potency).
 // A ticked item that was later deleted from the list still shows, so the patient keeps it.
 // Ticking an item also shows its questions (ENT → Symptom Character, Triggers, …) with a short answer
 // each; every item has its own question list with + New / Edit / Delete.
 import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { useT } from '../lib/i18n.jsx';
+import { fmtDate } from '../lib/format.js';
 import { MAX_PAST_ANSWER, MAX_PAST_NOTE } from '../../../shared/pastHistory.js';
 import Icon from './Icon.jsx';
 import { useAsync } from './ui.jsx';
@@ -16,7 +18,7 @@ import { editListRow, ListTools, newListRow, RxListModals } from './RxListPicker
  * list: { rows: [text], added: [{ id, value, sort_order }] } from /api/visits/pasthistory-options
  * value: [{ item, note, answers?: [{ q, a }] }]; onChange(value)
  */
-export default function PastHistoryList({ list, onListChange, value, onChange }) {
+export default function PastHistoryList({ list, onListChange, value, onChange, copiedFrom }) {
   const { t } = useT();
   const [mode, setMode] = useState(null);           // null | 'edit' | 'delete' – row icons only in a mode
   const [editing, setEditing] = useState(null);
@@ -51,6 +53,7 @@ export default function PastHistoryList({ list, onListChange, value, onChange })
         <h3>{t('examine.pastHistory')}</h3>
         <ListTools mode={mode} setMode={setMode} onNew={() => setEditing(newListRow(list))} />
       </div>
+      {copiedFrom && <p className="ph-copied small">{t('examine.pastCopied', { date: fmtDate(copiedFrom) })}</p>}
 
       {shown.length > 0 && (
         <div className="dosdont-filter">
@@ -179,8 +182,20 @@ function PastQuestions({ item, itemId, qlist, loading, onQListChange, answers, o
   );
 }
 
-/** A patient's past history as one line: ENT – Tonsillectomy 2019 (Duration: 2 years; Tinnitus: Left) · Dental */
-export const pastHistoryLine = (value = []) => value.map((h) => {
-  const answers = (h.answers || []).map((x) => `${x.q}: ${x.a}`).join('; ');
-  return [h.note ? `${h.item} – ${h.note}` : h.item, answers && `(${answers})`].filter(Boolean).join(' ');
-}).join(' · ');
+/** A patient's past history to read: each ticked item with its note, then its answered questions. */
+export function PastHistorySummary({ value = [] }) {
+  return (
+    <div className="ph-summary">
+      {value.map((h) => (
+        <div key={h.item} className="ph-summary-item">
+          <div className="ph-summary-head"><Icon name="check" size={14} /> <b>{h.item}</b>{h.note && <span className="muted"> – {h.note}</span>}</div>
+          {h.answers?.length > 0 && (
+            <dl className="pv-fields">
+              {h.answers.map((x) => <div key={x.q}><dt>{x.q}</dt><dd>{x.a}</dd></div>)}
+            </dl>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}

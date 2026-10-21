@@ -9,7 +9,7 @@ import { Button, Card, Empty, ErrorBox, Loading, PageHeader, SearchBox, StatusBa
 import { vitalsSummary } from '../../components/VitalSigns.jsx';
 import Icon from '../../components/Icon.jsx';
 import { DosDontSummary } from '../../components/DosDontList.jsx';
-import { pastHistoryLine } from '../../components/PastHistoryList.jsx';
+import { PastHistorySummary } from '../../components/PastHistoryList.jsx';
 
 function PatientSearch() {
   const { t } = useT();
@@ -70,9 +70,6 @@ export default function PatientHistory({ params }) {
         subtitle={`${patient.patient_code} · ${genderLabel(patient.gender, t)} / ${ageLabel(patient)} · ${patient.mobile}`}
         actions={<Button variant="ghost" onClick={() => navigate('/doctor/history')}>{t('history.another')}</Button>}
       />
-      {patient.past_history?.length > 0 && (
-        <Card><p className="past-history-line"><b>{t('examine.pastHistory')}:</b> {pastHistoryLine(patient.past_history)}</p></Card>
-      )}
       {!visits.length && <Card><Empty>{t('history.noVisits')}</Empty></Card>}
       <ol className="timeline">
         {visits.map((v) => (
@@ -105,6 +102,12 @@ export default function PatientHistory({ params }) {
                 {v.dos_donts?.length > 0 && <DosDontSummary marks={v.dos_donts} />}
                 {v.follow_up_date && <div><dt>{t('examine.followUp')}</dt><dd>{fmtDate(v.follow_up_date)}</dd></div>}
               </dl>
+              {v.past_history?.length > 0 && (
+                <div className="tl-past">
+                  <h4>{t('examine.pastHistory')}</h4>
+                  <PastHistorySummary value={v.past_history} />
+                </div>
+              )}
               {v.prescriptions?.length > 0 && (
                 <div className="table-wrap">
                   <table className="table table-compact">
