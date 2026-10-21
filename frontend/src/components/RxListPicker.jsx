@@ -17,9 +17,7 @@ import Icon from './Icon.jsx';
  */
 export default function RxListPicker({ kind, value, list, onChange, onListChange, disabled }) {
   const { t } = useT();
-  const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);     // pop-up: { id (null = new), old, text, order, oldOrder }
   const [mode, setMode] = useState(null);           // null | 'edit' | 'delete' – row icons only in a mode
   const [removing, setRemoving] = useState(null);   // row waiting for delete confirmation
@@ -28,7 +26,6 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
   const menu = useRef(null);
   const menuId = useId();
   const name = t(`examine.${kind}`);                 // "Potency" / "Dosage"
-  const url = `/visits/${kind}-options`;
 
   useEffect(() => {
     const close = (e) => { if (box.current && !box.current.contains(e.target)) { setOpen(false); setMode(null); } };
@@ -72,54 +69,10 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
   const pick = (v) => { onChange(v); setOpen(false); setMode(null); };
   const toggleMode = (m) => setMode((cur) => (cur === m ? null : m));
 
-  async function remove() {
-    setBusy(true);
-    try {
-      const r = await api(`${url}/${removing.id}`, { method: 'DELETE' });
-      onListChange?.(r);
-      toast(t('rxList.deleted', { value: removing.value }));
-      setRemoving(null);
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
   const startNew = () => {
     setOpen(false);
-    setEditing({ id: null, old: '', text: exact ? '' : typed, order: String(nextOrder(list.added || [])), oldOrder: null });
+    setEditing(newListRow(list, exact ? '' : typed));
   };
-
-  async function save(e) {
-    e?.preventDefault();
-    const oldValue = editing.old;
-    const text = cleanDosage(editing.text);
-    const order = cleanOrder(editing.order);
-    if (!text) { toast(t('rxList.empty', { name }), 'error'); return; }
-    if (order === null) { toast(t('rxList.orderBad', { max: MAX_ORDER }), 'error'); return; }
-    if (editing.id && text === oldValue && order === editing.oldOrder) { setEditing(null); return; }
-    setBusy(true);
-    try {
-      if (!editing.id) {                           // "+ New"
-        const r = await api(url, { method: 'POST', body: { value: text, sort_order: order } });
-        onListChange?.(r);
-        onChange(r.value);
-        setEditing(null);
-        const isNew = r.added.some((a) => a.value === r.value && a.sort_order === order) && r.value.toLowerCase() === text.toLowerCase();
-        toast(isNew ? t('rxList.added', { value: r.value }) : t('rxList.exists', { value: r.value }));
-        return;
-      }
-      const r = await api(`${url}/${editing.id}`, { method: 'PUT', body: { value: text, sort_order: order } });
-      onListChange?.(r);
-      if (cleanDosage(value).toLowerCase() === oldValue.toLowerCase()) onChange(r.value);   // keep this line in step
-      setEditing(null);
-      toast(text === oldValue ? t('rxList.reordered', { value: r.value, n: order }) : t('rxList.renamed', { from: oldValue, to: r.value }));
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="picker rx-list-picker" ref={box}>
@@ -140,7 +93,7 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
                   onMouseEnter={() => setActive(idx)} onClick={() => pick(o)}><span className="pick-title">{o}</span></button>
                 {mode === 'edit' && row && (
                   <button type="button" className="icon-btn dosage-pencil" title={t('rxList.edit', { name })} aria-label={`${t('rxList.edit', { name })}: ${o}`}
-                    onClick={() => { setOpen(false); setEditing({ id: row.id, old: o, text: o, order: String(row.sort_order), oldOrder: row.sort_order }); }}>
+                    onClick={() => { setOpen(false); setEditing(editListRow(row)); }}>
                     <Icon name="edit" size={14} />
                   </button>
                 )}
@@ -167,6 +120,98 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
         </ul>
       )}
 
+      <RxListModals kind={kind} name={name} list={list} onListChange={onListChange}
+        editing={editing} setEditing={setEditing} removing={removing} setRemoving={setRemoving}
+        onAdded={onChange}
+        onRenamed={(from, to) => { if (cleanDosage(value).toLowerCase() === from.toLowerCase()) onChange(to); }} />
+    </div>
+  );
+}
+
+/** "+ New" / "Edit" / "Delete" buttons above a list box; Edit and Delete switch a mode (Done ends it). */
+export function ListTools({ mode, setMode, onNew }) {
+  const { t } = useT();
+  const toggle = (m) => setMode((cur) => (cur === m ? null : m));
+  return (
+    <div className="dosdont-tools">
+      <Button variant="ghost" size="sm" onClick={() => { setMode(null); onNew(); }}>
+        <Icon name="plus" size={14} /> {t('rxList.newShort')}
+      </Button>
+      <Button variant="ghost" size="sm" className={mode === 'edit' ? 'on' : ''} aria-pressed={mode === 'edit'} onClick={() => toggle('edit')}>
+        {mode === 'edit' ? t('rxList.done') : <><Icon name="edit" size={13} /> {t('common.edit')}</>}
+      </Button>
+      <Button variant="ghost" size="sm" className={mode === 'delete' ? 'on danger' : ''} aria-pressed={mode === 'delete'} onClick={() => toggle('delete')}>
+        {mode === 'delete' ? t('rxList.done') : <><Icon name="trash" size={13} /> {t('rxList.deleteShort')}</>}
+      </Button>
+    </div>
+  );
+}
+
+/** Pop-up state for "+ New": text pre-filled, Order after the last row. */
+export const newListRow = (list, text = '') => ({ id: null, old: '', text, order: String(nextOrder(list.added || [])), oldOrder: null });
+/** Pop-up state for editing a row of list.added. */
+export const editListRow = (row) => ({ id: row.id, old: row.value, text: row.value, order: String(row.sort_order), oldOrder: row.sort_order });
+
+/**
+ * The "+ New" / Edit pop-up and the Delete confirm for one list kind (shared by the prescription
+ * pickers and the Do's and Don'ts list). editing / removing are owned by the caller:
+ * editing = { id (null = new), old, text, order, oldOrder }, removing = { id, value }.
+ * onAdded(value) after "+ New"; onRenamed(from, to) after a rename.
+ * url: the list's API (default /visits/{kind}-options); it answers with { value?, rows, added }.
+ */
+export function RxListModals({ kind, url: listUrl, name, list, onListChange, editing, setEditing, removing, setRemoving, onAdded, onRenamed }) {
+  const { t } = useT();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const url = listUrl || `/visits/${kind}-options`;
+
+  async function remove() {
+    setBusy(true);
+    try {
+      const r = await api(`${url}/${removing.id}`, { method: 'DELETE' });
+      onListChange?.(r);
+      toast(t('rxList.deleted', { value: removing.value }));
+      setRemoving(null);
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save(e) {
+    e?.preventDefault();
+    const oldValue = editing.old;
+    const text = cleanDosage(editing.text);
+    const order = cleanOrder(editing.order);
+    if (!text) { toast(t('rxList.empty', { name }), 'error'); return; }
+    if (order === null) { toast(t('rxList.orderBad', { max: MAX_ORDER }), 'error'); return; }
+    if (editing.id && text === oldValue && order === editing.oldOrder) { setEditing(null); return; }
+    setBusy(true);
+    try {
+      if (!editing.id) {                           // "+ New"
+        const r = await api(url, { method: 'POST', body: { value: text, sort_order: order } });
+        onListChange?.(r);
+        onAdded?.(r.value);
+        setEditing(null);
+        const isNew = r.added.some((a) => a.value === r.value && a.sort_order === order) && r.value.toLowerCase() === text.toLowerCase();
+        toast(isNew ? t('rxList.added', { value: r.value }) : t('rxList.exists', { value: r.value }));
+        return;
+      }
+      const r = await api(`${url}/${editing.id}`, { method: 'PUT', body: { value: text, sort_order: order } });
+      onListChange?.(r);
+      onRenamed?.(oldValue, r.value);              // keep what was picked in step
+      setEditing(null);
+      toast(text === oldValue ? t('rxList.reordered', { value: r.value, n: order }) : t('rxList.renamed', { from: oldValue, to: r.value }));
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
       {removing && (
         <Modal title={t('rxList.delete', { name })} onClose={() => !busy && setRemoving(null)}
           footer={(
@@ -204,6 +249,6 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
           </form>
         </Modal>
       )}
-    </div>
+    </>
   );
 }

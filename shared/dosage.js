@@ -5,6 +5,8 @@ export const RX_LIST_DEFAULTS = {
   potency: ['6C', '30C', '200C', '1M', '10M', 'Q'],
   dosage: ['1 Tablet', '2 Tablet', '4 Tablet'],
   repetition: ['TDS', 'QDS', 'OD', 'HS'],          // saved in prescriptions.frequency
+  dosdont: ['Smoking', 'Alcohol'],                 // Examine → Advice → Do's and Don'ts (saved in visits.dos_donts)
+  pasthistory: ['ENT', 'Ortho', 'Dental'],         // Examine → Complaints & diagnosis → Past History (patients.past_history)
 };
 export const RX_LIST_KINDS = Object.keys(RX_LIST_DEFAULTS);
 export const DOSAGE_MASTER = RX_LIST_DEFAULTS.dosage;

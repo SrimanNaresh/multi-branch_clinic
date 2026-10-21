@@ -462,6 +462,61 @@ CREATE TABLE dbo.repetition_master (
   CONSTRAINT uq_repetition_clinic_value UNIQUE (clinic_id, value)
 );
 GO
+/* Do's and Don'ts list (Examine → Advice, e.g. Smoking, Alcohol): same behaviour as the dosage list.
+   What the doctor marks for a visit is saved in visits.dos_donts. */
+IF OBJECT_ID(N'dbo.dosdont_master', N'U') IS NULL
+CREATE TABLE dbo.dosdont_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_dosdont_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_dosdont_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_dosdont_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_dosdont_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_dosdont_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_dosdont_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+/* Past History list (Examine → Complaints & diagnosis, e.g. ENT, Ortho, Dental): same behaviour as the
+   dosage list. What is ticked belongs to the patient (patients.past_history), so it carries to the next visit. */
+IF OBJECT_ID(N'dbo.pasthistory_master', N'U') IS NULL
+CREATE TABLE dbo.pasthistory_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_pasthistory_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_pasthistory_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_pasthistory_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_pasthistory_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_pasthistory_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_pasthistory_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+/* Questions asked when a Past History item is ticked (e.g. ENT → Symptom Character, Triggers, Duration …).
+   One list per item, same behaviour as the dosage list (defaults once, rename / reorder / hide, + New). */
+IF OBJECT_ID(N'dbo.pasthistory_question', N'U') IS NULL
+CREATE TABLE dbo.pasthistory_question (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_phq_clinic REFERENCES dbo.clinics(id),
+  item_id     INT NOT NULL CONSTRAINT fk_phq_item REFERENCES dbo.pasthistory_master(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_phq_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_phq_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_phq_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_phq_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_phq_item_value UNIQUE (item_id, value)
+);
+GO
+/* A patient's past history, as JSON:
+   [{"item":"ENT","note":"Tonsillectomy 2019","answers":[{"q":"Duration","a":"2 years"}]}, …] */
+IF COL_LENGTH(N'dbo.patients', N'past_history') IS NULL
+  ALTER TABLE dbo.patients ADD past_history NVARCHAR(4000) NULL;
+GO
+/* Do's and Don'ts marked for a visit, as JSON: [{"item":"Smoking","rule":"dont"}, …] */
+IF COL_LENGTH(N'dbo.visits', N'dos_donts') IS NULL
+  ALTER TABLE dbo.visits ADD dos_donts NVARCHAR(4000) NULL;
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_rx_visit' AND object_id = OBJECT_ID(N'dbo.prescriptions'))
   CREATE INDEX ix_rx_visit ON dbo.prescriptions(visit_id);
 GO

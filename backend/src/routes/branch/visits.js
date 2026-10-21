@@ -5,13 +5,15 @@ import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, conflict, notFound, pick, toAmount, toId } from '../../utils/http.js';
 import { isISODate } from '../../utils/dates.js';
 import { cleanDosage, cleanOrder, defaultsFor, dosageOptions, MAX_ORDER, nextOrder, RX_LIST_KINDS } from '../../../../shared/dosage.js';
+import { cleanDosDonts, parseDosDonts } from '../../../../shared/dosdonts.js';
+import { cleanPastHistory, parsePastHistory, pastQuestionDefaults } from '../../../../shared/pastHistory.js';
 
 const router = Router();
 router.use(clinicScope());
 
 async function loadVisit(clinicId, id) {
   const [visit] = await query(
-    `SELECT v.*, p.patient_code, p.name AS patient_name, p.gender, p.age_years, p.dob, p.mobile, p.blood_group,
+    `SELECT v.*, p.patient_code, p.name AS patient_name, p.gender, p.age_years, p.dob, p.mobile, p.blood_group, p.past_history,
             d.name AS doctor_name, d.qualification AS doctor_qualification, d.designation AS doctor_designation,
             q.token_no, q.queue_date, q.status AS queue_status,
             c.name AS clinic_name, c.address AS clinic_address, c.city AS clinic_city, c.phone AS clinic_phone,
@@ -30,6 +32,8 @@ async function loadVisit(clinicId, id) {
   );
   if (!visit) return null;
   if (typeof visit.vitals === 'string') { try { visit.vitals = JSON.parse(visit.vitals); } catch { visit.vitals = null; } }
+  visit.dos_donts = parseDosDonts(visit.dos_donts);
+  visit.past_history = parsePastHistory(visit.past_history);
   visit.prescriptions = await query(
     `SELECT rx.*, i.stock_qty, i.price, i.unit, i.generic_name
        FROM prescriptions rx LEFT JOIN items i ON i.id = rx.item_id
@@ -64,13 +68,17 @@ router.post('/start', requirePermission('visit.examine'), async (req, res) => {
   res.status(201).json(await loadVisit(req.clinicId, visitId));
 });
 
-/* ---------- prescription lists: Potency, Dosage, Repetition (Examine → Prescription) ----------
+/* ---------- lists: Potency, Dosage, Repetition (Examine → Prescription), Do's and Don'ts (Advice),
+   Past History (Complaints & diagnosis) ----------
    One list per clinic and kind. A clinic gets the defaults once (is_default = 1); after that every row
    can be renamed, reordered or deleted, and new ones added. Delete only hides a row (is_deleted = 1), so
    deleted defaults don't come back; adding the same value again un-hides it.
    Prescriptions keep the text they were saved with. */
-const RX_LIST_TABLE = { dosage: 'dosage_master', potency: 'potency_master', repetition: 'repetition_master' };
-const RX_LIST_NAME = { dosage: 'dosage', potency: 'potency', repetition: 'repetition' };
+const RX_LIST_TABLE = {
+  dosage: 'dosage_master', potency: 'potency_master', repetition: 'repetition_master',
+  dosdont: 'dosdont_master', pasthistory: 'pasthistory_master',
+};
+const RX_LIST_NAME = { dosage: 'dosage', potency: 'potency', repetition: 'repetition', dosdont: 'item', pasthistory: 'item' };
 
 async function ensureDefaults(kind, clinicId, userId) {
   const table = RX_LIST_TABLE[kind];
@@ -168,17 +176,115 @@ for (const kind of RX_LIST_KINDS) {
   });
 }
 
+/* ---------- Past History questions: one list per Past History item (ENT → Symptom Character, …) ----------
+   Same behaviour as the lists above; an item gets its default questions once (ENT has seven, others none).
+   Answers are saved as text on the patient, so they stay even if a question is later renamed or deleted. */
+const PHQ = 'pasthistory_question';
+
+async function pastItem(clinicId, itemId) {
+  const [item] = await query('SELECT id, value FROM pasthistory_master WHERE id = ? AND clinic_id = ? AND is_deleted = 0', [itemId, clinicId]);
+  if (!item) throw notFound('Past History item');
+  return item;
+}
+
+async function ensureQuestionDefaults(clinicId, item, userId) {
+  const defaults = pastQuestionDefaults(item.value);
+  if (!defaults.length) return;
+  const [done] = await query(`SELECT TOP 1 id FROM ${PHQ} WHERE item_id = ? AND is_default = 1`, [item.id]);
+  if (done) return;
+  await tx(async (q) => {
+    const [again] = await q(`SELECT TOP 1 id FROM ${PHQ} WITH (UPDLOCK, HOLDLOCK) WHERE item_id = ? AND is_default = 1`, [item.id]);
+    if (again) return;
+    for (const d of defaults) {
+      const [same] = await q(`SELECT id FROM ${PHQ} WITH (UPDLOCK, HOLDLOCK) WHERE item_id = ? AND value = ?`, [item.id, d.value]);
+      if (same) await q(`UPDATE ${PHQ} SET is_default = 1 WHERE id = ?`, [same.id]);
+      else await insertRow(q, PHQ, { clinic_id: clinicId, item_id: item.id, value: d.value, sort_order: d.sort_order, is_default: 1, created_by: userId });
+    }
+  });
+}
+
+/** { rows: the item's questions by Order, added: [{ id, value, sort_order }] } */
+async function loadQuestions(clinicId, item, userId = null) {
+  await ensureQuestionDefaults(clinicId, item, userId);
+  const added = await query(
+    `SELECT id, value, sort_order FROM ${PHQ} WHERE item_id = ? AND clinic_id = ? AND is_deleted = 0 ORDER BY sort_order, value`, [item.id, clinicId],
+  );
+  return { rows: dosageOptions(added), added };
+}
+
+// GET /api/visits/pasthistory-questions – every item's questions: { [itemId]: { rows, added } }
+router.get('/pasthistory-questions', requirePermission('visit.examine'), async (req, res) => {
+  const { added: items } = await loadOptions('pasthistory', req.clinicId, req.user.id);
+  const out = {};
+  for (const item of items) out[item.id] = await loadQuestions(req.clinicId, item, req.user.id);
+  res.json(out);
+});
+
+// POST /api/visits/pasthistory-questions/:itemId { value, sort_order? } – "+ New" question for an item
+router.post('/pasthistory-questions/:itemId', requirePermission('visit.examine'), async (req, res) => {
+  const item = await pastItem(req.clinicId, toId(req.params.itemId));
+  const value = cleanDosage(req.body?.value);
+  if (!value) throw badRequest('Enter the question to add', 'VALIDATION');
+  const order = readOrder(req.body);
+  const { rows, added } = await loadQuestions(req.clinicId, item, req.user.id);
+  const existing = rows.find((d) => d.toLowerCase() === value.toLowerCase());
+  if (!existing) {
+    const [hidden] = await query(`SELECT id FROM ${PHQ} WHERE item_id = ? AND is_deleted = 1 AND value = ?`, [item.id, value]);
+    try {
+      if (hidden) await query(`UPDATE ${PHQ} SET is_deleted = 0, value = ?, sort_order = ? WHERE id = ?`, [value, order ?? nextOrder(added), hidden.id]);
+      else await insertRow(query, PHQ, { clinic_id: req.clinicId, item_id: item.id, value, sort_order: order ?? nextOrder(added), created_by: req.user.id });
+    } catch (e) {
+      if (!isDuplicateKey(e)) throw e;
+    }
+  }
+  res.status(existing ? 200 : 201).json({ value: existing || value, ...(await loadQuestions(req.clinicId, item)) });
+});
+
+// PUT /api/visits/pasthistory-questions/:itemId/:id { value, sort_order } – rename / reorder a question
+router.put('/pasthistory-questions/:itemId/:id', requirePermission('visit.examine'), async (req, res) => {
+  const item = await pastItem(req.clinicId, toId(req.params.itemId));
+  const id = toId(req.params.id);
+  const value = cleanDosage(req.body?.value);
+  if (!value) throw badRequest('Enter the question', 'VALIDATION');
+  const order = readOrder(req.body);
+  const [row] = await query(`SELECT id, value, sort_order FROM ${PHQ} WHERE id = ? AND item_id = ? AND clinic_id = ? AND is_deleted = 0`, [id, item.id, req.clinicId]);
+  if (!row) throw notFound('Question');
+  const { rows } = await loadQuestions(req.clinicId, item);
+  const clash = rows.find((d) => d.toLowerCase() === value.toLowerCase() && d.toLowerCase() !== row.value.toLowerCase());
+  if (clash) throw conflict(`"${clash}" is already in the list`, 'DUPLICATE');
+  try {
+    await tx(async (q) => {
+      await q(`DELETE FROM ${PHQ} WHERE item_id = ? AND is_deleted = 1 AND value = ? AND id <> ?`, [item.id, value, id]);
+      await q(`UPDATE ${PHQ} SET value = ?, sort_order = ? WHERE id = ?`, [value, order ?? row.sort_order, id]);
+    });
+  } catch (e) {
+    if (isDuplicateKey(e)) throw conflict(`"${value}" is already in the list`, 'DUPLICATE');
+    throw e;
+  }
+  res.json({ value, ...(await loadQuestions(req.clinicId, item)) });
+});
+
+// DELETE /api/visits/pasthistory-questions/:itemId/:id – remove a question (hidden; answers keep their text)
+router.delete('/pasthistory-questions/:itemId/:id', requirePermission('visit.examine'), async (req, res) => {
+  const item = await pastItem(req.clinicId, toId(req.params.itemId));
+  const r = await query(`UPDATE ${PHQ} SET is_deleted = 1 WHERE id = ? AND item_id = ? AND clinic_id = ? AND is_deleted = 0`,
+    [toId(req.params.id), item.id, req.clinicId]);
+  if (!r.affectedRows) throw notFound('Question');
+  res.json(await loadQuestions(req.clinicId, item));
+});
+
 // GET /api/visits/patient/:patientId – Patient History (all visits + prescriptions)
 router.get('/patient/:patientId', requirePermission('patient.history'), async (req, res) => {
   const patientId = toId(req.params.patientId, 'patient');
   const [patient] = await query(
-    'SELECT id, patient_code, name, gender, age_years, dob, mobile, blood_group, address FROM patients WHERE id = ? AND clinic_id = ?',
+    'SELECT id, patient_code, name, gender, age_years, dob, mobile, blood_group, address, past_history FROM patients WHERE id = ? AND clinic_id = ?',
     [patientId, req.clinicId],
   );
   if (!patient) throw notFound('Patient');
+  patient.past_history = parsePastHistory(patient.past_history);
   const visits = await query(
     `SELECT v.id, v.visit_date, v.complaints, v.examination_notes, v.diagnosis, v.vitals, v.advice, v.follow_up_date,
-            v.consultation_fee, v.status, d.name AS doctor_name, q.token_no,
+            v.dos_donts, v.consultation_fee, v.status, d.name AS doctor_name, q.token_no,
             pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm, pv.temperature_f,
             pv.comments AS vitals_comments, pv.id AS vitals_id
        FROM visits v LEFT JOIN employees d ON d.id = v.doctor_id LEFT JOIN queue_entries q ON q.id = v.queue_id
@@ -193,6 +299,7 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
     );
     for (const v of visits) {
       if (typeof v.vitals === 'string') { try { v.vitals = JSON.parse(v.vitals); } catch { v.vitals = null; } }
+      v.dos_donts = parseDosDonts(v.dos_donts);
       v.prescriptions = rx.filter((r) => r.visit_id === v.id);
     }
   }
@@ -213,6 +320,10 @@ router.put('/:id', requirePermission('visit.examine'), async (req, res) => {
   if (data.follow_up_date && !isISODate(data.follow_up_date)) throw badRequest('Invalid follow-up date', 'VALIDATION');
   if (body.consultation_fee !== undefined) data.consultation_fee = toAmount(body.consultation_fee, 'consultation_fee');
   if (body.vitals !== undefined) data.vitals = body.vitals ? JSON.stringify(body.vitals) : null;
+  if (body.dos_donts !== undefined) {
+    const marks = cleanDosDonts(body.dos_donts);
+    data.dos_donts = marks.length ? JSON.stringify(marks) : null;
+  }
 
   await tx(async (q) => {
     const [visit] = await q('SELECT * FROM visits WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
@@ -245,6 +356,13 @@ router.put('/:id', requirePermission('visit.examine'), async (req, res) => {
           quantity: qty || 1, instructions: line.instructions || null, sort_order: order++,
         });
       }
+    }
+
+    // Past History belongs to the patient, not the visit
+    if (body.past_history !== undefined) {
+      const past = cleanPastHistory(body.past_history);
+      await q('UPDATE patients SET past_history = ? WHERE id = ? AND clinic_id = ?',
+        [past.length ? JSON.stringify(past) : null, visit.patient_id, req.clinicId]);
     }
 
     if (body.complete) data.status = 'completed';

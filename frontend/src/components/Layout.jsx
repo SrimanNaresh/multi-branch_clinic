@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../lib/auth.jsx';
 import { useT } from '../lib/i18n.jsx';
 import { Link, navigate } from '../lib/router.jsx';
@@ -45,9 +45,10 @@ function ClinicSwitcher() {
   );
 }
 
-function Sidebar({ path, open, onClose }) {
+// Menu groups this user can see, shared by the left menu and the horizontal menu bar.
+// locked: an admin has not picked a clinic yet, so the clinic menus are not shown.
+function useMenu(path) {
   const auth = useAuth();
-  const { t } = useT();
   const branchReady = !!auth.activeClinic;
 
   const groups = MENU.map((g) => ({ ...g, items: g.items.filter((i) => auth.can(i.perm)) }))
@@ -59,19 +60,24 @@ function Sidebar({ path, open, onClose }) {
     .sort((a, b) => b.length - a.length)[0];
   const isActive = (p) => p === activePath;
 
+  return {
+    groups: groups.filter((g) => !(g.scope === 'branch' && auth.isGlobal && !branchReady)),
+    locked: auth.isGlobal && !branchReady,
+    isActive,
+  };
+}
+
+function Sidebar({ path, open, onClose }) {
+  const auth = useAuth();
+  const { t } = useT();
+  const { groups, locked, isActive } = useMenu(path);
+
   return (
     <>
       <div className={`sidebar-backdrop ${open ? 'show' : ''}`} onClick={onClose} />
       <aside className={`sidebar ${open ? 'open' : ''}`}>
-        <div className="brand">
-          <div className="brand-mark"><img src="/logo-128.png" alt="" /></div>
-          <div>
-            <strong>Ayush Pro</strong>
-            <small>SmartClinic</small>
-          </div>
-        </div>
         <nav>
-          {groups.filter((g) => !(g.scope === 'branch' && auth.isGlobal && !branchReady)).map((g) => (
+          {groups.map((g) => (
             <div key={g.id} className="nav-group">
               <div className="nav-title">
                 {t(g.label)}
@@ -84,7 +90,7 @@ function Sidebar({ path, open, onClose }) {
               ))}
             </div>
           ))}
-          {auth.isGlobal && !branchReady && (
+          {locked && (
             <div className="nav-group locked">
               <div className="nav-title">{t('nav.clinicMenus')}</div>
               <p className="nav-hint">{t('nav.selectClinicHint')}</p>
@@ -96,21 +102,90 @@ function Sidebar({ path, open, onClose }) {
   );
 }
 
+// Horizontal menu bar under the header: one button per group, its pages open in a drop-down.
+// While one drop-down is open, moving the mouse to another group opens that one instead.
+function TopNav({ path }) {
+  const { t } = useT();
+  const { groups, locked, isActive } = useMenu(path);
+  const [openId, setOpenId] = useState(null);
+  const bar = useRef(null);
+
+  useEffect(() => setOpenId(null), [path]);
+  useEffect(() => {
+    if (!openId) return undefined;
+    const close = (e) => { if (bar.current && !bar.current.contains(e.target)) setOpenId(null); };
+    const esc = (e) => { if (e.key === 'Escape') setOpenId(null); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
+  }, [openId]);
+
+  return (
+    <nav className="topnav" ref={bar} aria-label={t('topbar.menu')}>
+      {groups.map((g) => {
+        const isOpen = openId === g.id;
+        const current = g.items.some((i) => isActive(i.path));
+        return (
+          <div key={g.id} className="topnav-group" onMouseEnter={() => { if (openId && !isOpen) setOpenId(g.id); }}>
+            <button type="button" className={`topnav-btn ${current ? 'current' : ''} ${isOpen ? 'open' : ''}`}
+              aria-expanded={isOpen} aria-haspopup="true" onClick={() => setOpenId(isOpen ? null : g.id)}>
+              {t(g.label)} <Icon name="chevronDown" size={14} />
+            </button>
+            {isOpen && (
+              <div className="topnav-menu">
+                {g.items.map((i) => (
+                  <Link key={i.path} to={i.path} className={`topnav-item ${isActive(i.path) ? 'active' : ''}`} onClick={() => setOpenId(null)}>
+                    <Icon name={i.icon} size={16} /> <span>{t(i.label)}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {locked && <span className="topnav-hint">{t('nav.selectClinicHint')}</span>}
+    </nav>
+  );
+}
+
+// The header (Ayush Pro logo + top bar) is fixed across the top.
+// Wide screens: the menu button switches between the left menu and the horizontal menu bar
+// (remembered on this browser). Narrow screens: the menu is a drawer and the same button opens it.
+const MENU_MODE_KEY = 'sc_menu_mode';
+const NARROW = '(max-width: 900px)';
+const readMenuMode = () => { try { return localStorage.getItem(MENU_MODE_KEY) === 'top' ? 'top' : 'side'; } catch { return 'side'; } };
+
 export default function Layout({ path, children }) {
   const auth = useAuth();
   const { t } = useT();
   const [open, setOpen] = useState(false);
+  const [menuMode, setMenuMode] = useState(readMenuMode);
   const [menu, setMenu] = useState(false);
   useEffect(() => setMenu(false), [path]);
 
+  const toggleMenu = () => {
+    if (window.matchMedia(NARROW).matches) { setOpen(true); return; }
+    const mode = menuMode === 'top' ? 'side' : 'top';
+    setMenuMode(mode);
+    try { localStorage.setItem(MENU_MODE_KEY, mode); } catch { /* private mode: not remembered */ }
+  };
+  const menuLabel = menuMode === 'top' ? t('topbar.menuSide') : t('topbar.menuTop');
+
   return (
-    <div className="shell">
-      <Sidebar path={path} open={open} onClose={() => setOpen(false)} />
-      <div className="main">
-        <header className="topbar">
-          <button className="icon-btn hamburger" onClick={() => setOpen(true)} aria-label={t('topbar.menu')}>
+    <div className={`shell menu-${menuMode}`}>
+      <header className="app-header">
+        <div className="brand header-brand">
+          <div className="brand-mark"><img src="/logo-128.png" alt="" /></div>
+          <div className="brand-text">
+            <strong>Ayush Pro</strong>
+            <small>SmartClinic</small>
+          </div>
+          {/* at the right end of the logo column, above the menu's scroll bar */}
+          <button className="icon-btn hamburger" onClick={toggleMenu} aria-label={menuLabel} title={menuLabel}>
             <Icon name="menu" size={22} />
           </button>
+        </div>
+        <div className="topbar">
           <ClinicSwitcher />
           <div className="topbar-right">
             <LangToggle />
@@ -130,8 +205,12 @@ export default function Layout({ path, children }) {
               )}
             </div>
           </div>
-        </header>
-        <main className="content">{children}</main>
+        </div>
+      </header>
+      {menuMode === 'top' && <TopNav path={path} />}
+      <div className="app-body">
+        <Sidebar path={path} open={open} onClose={() => setOpen(false)} />
+        <main className="content main">{children}</main>
       </div>
     </div>
   );

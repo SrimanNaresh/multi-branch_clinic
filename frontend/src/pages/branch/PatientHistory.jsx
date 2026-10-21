@@ -1,12 +1,15 @@
 // Doctor → Patient History: all previous visits and prescriptions
 import { useState } from 'react';
 import { api } from '../../lib/api.js';
+import { useAuth } from '../../lib/auth.jsx';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel, money } from '../../lib/format.js';
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, SearchBox, StatusBadge, useAsync, useDebounced } from '../../components/ui.jsx';
 import { vitalsSummary } from '../../components/VitalSigns.jsx';
 import Icon from '../../components/Icon.jsx';
+import { DosDontSummary } from '../../components/DosDontList.jsx';
+import { pastHistoryLine } from '../../components/PastHistoryList.jsx';
 
 function PatientSearch() {
   const { t } = useT();
@@ -50,6 +53,7 @@ function Vitals({ v, visit }) {
 
 export default function PatientHistory({ params }) {
   const { t } = useT();
+  const auth = useAuth();
   const h = useAsync(() => (params.patientId ? api(`/visits/patient/${params.patientId}`) : Promise.resolve(null)), [params.patientId]);
 
   if (!params.patientId) {
@@ -66,6 +70,9 @@ export default function PatientHistory({ params }) {
         subtitle={`${patient.patient_code} · ${genderLabel(patient.gender, t)} / ${ageLabel(patient)} · ${patient.mobile}`}
         actions={<Button variant="ghost" onClick={() => navigate('/doctor/history')}>{t('history.another')}</Button>}
       />
+      {patient.past_history?.length > 0 && (
+        <Card><p className="past-history-line"><b>{t('examine.pastHistory')}:</b> {pastHistoryLine(patient.past_history)}</p></Card>
+      )}
       {!visits.length && <Card><Empty>{t('history.noVisits')}</Empty></Card>}
       <ol className="timeline">
         {visits.map((v) => (
@@ -77,6 +84,11 @@ export default function PatientHistory({ params }) {
                   <span className="muted"> · {v.doctor_name || '—'}{v.token_no ? ` · #${v.token_no}` : ''}</span>
                 </div>
                 <div className="row-actions">
+                  {auth.user.role === 'super_admin' && (   /* editing a past visit: Super Admin only */
+                    <Button size="sm" variant="ghost" onClick={() => navigate(`/doctor/examine/${v.id}?from=history&patient=${patient.id}`)}>
+                      <Icon name="edit" size={14} /> {t('common.edit')}
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => navigate(`/doctor/prescription/${v.id}`)}>
                     <Icon name="print" size={14} /> {t('rxPrint.print')}
                   </Button>
@@ -90,6 +102,7 @@ export default function PatientHistory({ params }) {
                 {v.examination_notes && <div><dt>{t('examine.examination')}</dt><dd>{v.examination_notes}</dd></div>}
                 {v.diagnosis && <div><dt>{t('examine.diagnosis')}</dt><dd>{v.diagnosis}</dd></div>}
                 {v.advice && <div><dt>{t('examine.advice')}</dt><dd>{v.advice}</dd></div>}
+                {v.dos_donts?.length > 0 && <DosDontSummary marks={v.dos_donts} />}
                 {v.follow_up_date && <div><dt>{t('examine.followUp')}</dt><dd>{fmtDate(v.follow_up_date)}</dd></div>}
               </dl>
               {v.prescriptions?.length > 0 && (
