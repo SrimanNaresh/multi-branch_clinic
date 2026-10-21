@@ -26,6 +26,8 @@ export default {
   'menu.billing': 'பில்லிங்',
   'menu.patientBill': 'நோயாளி பில்',
   'menu.billList': 'பில் பட்டியல்',
+  'menu.communication': 'தொடர்பு',
+  'menu.tickets': 'டிக்கெட்டுகள்',
 
   // top bar / nav
   'topbar.allClinics': 'அனைத்து கிளினிக்குகள்',
@@ -250,6 +252,8 @@ export default {
   'perm.bill.create': 'நோயாளர் பில்',
   'perm.bill.view': 'பில் பட்டியல்',
   'perm.bill.cancel': 'பில்களை ரத்து செய்',
+  'perm.ticket.view': 'டிக்கெட்டுகள்',
+  'tickets.empty': 'இன்னும் டிக்கெட்டுகள் இல்லை.',
 
   // vital signs (after Confirm)
   'vitals.title': 'உயிர் அறிகுறிகள்',
@@ -341,6 +345,7 @@ export default {
   'patients.registerAnyway': 'இருந்தாலும் பதிவு செய்',
   'patients.searchHint': 'பெயர், கைபேசி அல்லது நோயாளி எண் மூலம் தேடு…',
   'patients.count': '{n} நோயாளிகள்',
+  'patients.card': 'நோயாளி அட்டை',
   'patients.registeredOn': 'பதிவு தேதி',
   'patients.visits': 'வருகைகள்',
   'patients.lastVisit': 'கடைசி வருகை',

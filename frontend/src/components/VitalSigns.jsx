@@ -8,7 +8,7 @@ import { bmi, checkVitals, VITAL_LIMITS } from '../../../shared/vitals.js';
 import { Button, ErrorBox, Loading, Modal, useAsync, useToast } from './ui.jsx';
 import Attachments from './Attachments.jsx';
 
-const EMPTY = { height_cm: '', weight_kg: '', bp_systolic: '', bp_diastolic: '', pulse_bpm: '', temperature_c: '', comments: '' };
+const EMPTY = { height_cm: '', weight_kg: '', bp_systolic: '', bp_diastolic: '', pulse_bpm: '', temperature_f: '', comments: '' };
 
 const toForm = (v) => Object.fromEntries(Object.keys(EMPTY).map((k) => [k, v?.[k] ?? '']));
 
@@ -18,17 +18,18 @@ export function vitalsSummary(v, t) {
   return [
     v.bp_systolic != null && `${t('vitals.bpShort')} ${v.bp_systolic}/${v.bp_diastolic}`,
     v.pulse_bpm != null && `${t('vitals.pulseShort')} ${v.pulse_bpm}`,
-    v.temperature_c != null && `${v.temperature_c} °C`,
+    v.temperature_f != null && `${v.temperature_f} °F`,
     v.weight_kg != null && `${v.weight_kg} kg`,
     v.height_cm != null && `${v.height_cm} cm`,
   ].filter(Boolean).join(' · ');
 }
 
 /**
+ * `hideMeta`: leave out the "Recorded by … · edited by …" line (the pop-up does).
  * `beforeActions`: shown under the fields and above Later / Save (outside the <form>, so pressing Enter
  * there does not save the vitals; the buttons still submit this form through form={formId}).
  */
-export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly, beforeActions }) {
+export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly, beforeActions, hideMeta }) {
   const { t } = useT();
   const toast = useToast();
   const [f, setF] = useState(() => toForm(initial));
@@ -93,7 +94,7 @@ export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly, befo
           {(err('bp_systolic') || err('bp_diastolic')) && <small className="field-error">{err('bp_systolic') || err('bp_diastolic')}</small>}
         </label>
         {num('pulse_bpm', t('vitals.pulse'), 'bpm', '1')}
-        {num('temperature_c', t('vitals.temperature'), '°C', '0.1')}
+        {num('temperature_f', t('vitals.temperature'), '°F', '0.1')}
         <label className="field field-full">
           <span className="field-label">{t('vitals.comments')}</span>
           <textarea rows={1} maxLength={500} value={f.comments} onChange={set('comments')} disabled={readOnly} />
@@ -101,7 +102,7 @@ export function VitalsForm({ queueId, initial, onSaved, onCancel, readOnly, befo
         </label>
       </div>
       {submitted && errors._form && <div className="alert alert-error">{t('vitals.err.empty')}</div>}
-      {initial?.recorded_at && (
+      {!hideMeta && initial?.recorded_at && (
         <p className="muted small vitals-meta">
           {t('vitals.recordedBy', { name: initial.recorded_by_name || '—', at: fmtDate(initial.recorded_at, true) })}
           {initial.updated_at && ` · ${t('vitals.updatedBy', { name: initial.updated_by_name || '—', at: fmtDate(initial.updated_at, true) })}`}
@@ -127,7 +128,7 @@ export function VitalsModal({ entry, onClose, onSaved, readOnly }) {
     <Modal title={`${t('vitals.title')} – #${entry.token_no} ${entry.patient_name}`} onClose={onClose} wide>
       {current.loading && !current.data ? <Loading /> : <ErrorBox error={current.error} onRetry={current.reload} />}
       {current.data && (
-        <VitalsForm queueId={entry.id} initial={current.data.vitals} onCancel={onClose} readOnly={readOnly}
+        <VitalsForm queueId={entry.id} initial={current.data.vitals} onCancel={onClose} readOnly={readOnly} hideMeta
           onSaved={(v) => { onSaved?.(v); onClose(); }}
           // lab reports & scans are saved on their own, right away – independent of Save below
           beforeActions={<Attachments entry={entry} canEdit={!readOnly} />} />

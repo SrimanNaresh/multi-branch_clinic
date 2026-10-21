@@ -247,7 +247,7 @@ CREATE TABLE dbo.patient_vitals (
   bp_systolic    SMALLINT NULL CONSTRAINT chk_vitals_sys CHECK (bp_systolic BETWEEN 50 AND 260),
   bp_diastolic   SMALLINT NULL CONSTRAINT chk_vitals_dia CHECK (bp_diastolic BETWEEN 30 AND 160),
   pulse_bpm      SMALLINT NULL CONSTRAINT chk_vitals_pulse CHECK (pulse_bpm BETWEEN 30 AND 220),
-  temperature_c  DECIMAL(3,1) NULL CONSTRAINT chk_vitals_temp CHECK (temperature_c BETWEEN 30 AND 45),
+  temperature_f  DECIMAL(4,1) NULL CONSTRAINT chk_vitals_temp_f CHECK (temperature_f BETWEEN 86 AND 113),
   comments       NVARCHAR(500) NULL,
   recorded_by    INT NULL CONSTRAINT fk_vitals_by REFERENCES dbo.employees(id),
   recorded_at    DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
@@ -255,6 +255,20 @@ CREATE TABLE dbo.patient_vitals (
   updated_at     DATETIME2(0) NULL,
   CONSTRAINT chk_vitals_bp CHECK ((bp_systolic IS NULL AND bp_diastolic IS NULL) OR (bp_diastolic < bp_systolic))
 );
+GO
+/* Temperature is recorded in °F: an older table with temperature_c is converted once
+   (°C × 9/5 + 32, one decimal) and the °C column is removed. */
+IF COL_LENGTH(N'dbo.patient_vitals', N'temperature_f') IS NULL
+BEGIN
+  ALTER TABLE dbo.patient_vitals ADD
+    temperature_f DECIMAL(4,1) NULL CONSTRAINT chk_vitals_temp_f CHECK (temperature_f BETWEEN 86 AND 113);
+  IF COL_LENGTH(N'dbo.patient_vitals', N'temperature_c') IS NOT NULL
+  BEGIN
+    EXEC(N'UPDATE dbo.patient_vitals SET temperature_f = ROUND(temperature_c * 9.0 / 5 + 32, 1) WHERE temperature_c IS NOT NULL');
+    IF OBJECT_ID(N'dbo.chk_vitals_temp', N'C') IS NOT NULL ALTER TABLE dbo.patient_vitals DROP CONSTRAINT chk_vitals_temp;
+    ALTER TABLE dbo.patient_vitals DROP COLUMN temperature_c;
+  END
+END
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_vitals_patient' AND object_id = OBJECT_ID(N'dbo.patient_vitals'))
   CREATE INDEX ix_vitals_patient ON dbo.patient_vitals(clinic_id, patient_id);

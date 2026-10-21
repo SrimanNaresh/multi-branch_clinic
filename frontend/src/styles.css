@@ -60,6 +60,9 @@ input[type='checkbox'] { width: 16px; height: 16px; min-height: 0; accent-color:
 
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .field-full { grid-column: 1 / -1; }
+.gender-checks { display: flex; gap: 16px; align-items: center; min-height: 30px; flex-wrap: wrap; }
+.gender-checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.gender-checks input[type='radio'] { width: 16px; height: 16px; margin: 0; accent-color: var(--brand); }
 .field-label { font-size: 12.5px; font-weight: 600; color: #3a4655; }
 .req { color: var(--danger); }
 .field-error { color: var(--danger); }
@@ -70,6 +73,12 @@ input[type='checkbox'] { width: 16px; height: 16px; min-height: 0; accent-color:
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px 16px; }
 .form-grid.cols-4 { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .form-grid > .field:has(textarea) { grid-column: 1 / -1; }
+/* Patient registration: 5 columns; Address takes two of them, next to Mobile / Alternate mobile / Email */
+@media (min-width: 900px) {
+  .form-grid.patient-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .patient-grid > .field:has(textarea[name='address']) { grid-column: span 2; }
+  .patient-grid textarea[name='address'] { height: 30px; min-height: 30px; resize: vertical; }
+}
 .form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .slot-row { display: grid; grid-template-columns: 28px repeat(5, minmax(110px, 1fr)) minmax(120px, auto); gap: 10px 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .slot-row:first-of-type { padding-top: 0; }
@@ -77,7 +86,9 @@ input[type='checkbox'] { width: 16px; height: 16px; min-height: 0; accent-color:
 .slot-side { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 26px; white-space: nowrap; }
 .field.has-error input { border-color: var(--danger); }
 .slot-hint { margin: 10px 0 0; }
-.vitals-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 14px; }
+.form-grid.vitals-grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 22px; }
+.vitals-grid > .field-full { flex-basis: 100%; }
+.vitals-grid input[type='number'] { width: 110px; }
 .vitals-grid .field { gap: 3px; }
 .bp-pair { display: flex; align-items: center; gap: 6px; }
 .bp-pair b { color: var(--muted); }
@@ -572,7 +583,8 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .slot-row { grid-template-columns: 1fr 1fr; }
   .perm-layout { grid-template-columns: 1fr; }
   .slot-row > .slot-no { margin-top: 0; grid-column: 1 / -1; grid-row: auto; }
-  .form-grid.vitals-grid { grid-template-columns: 1fr 1fr; }
+  .form-grid.vitals-grid { display: grid; grid-template-columns: 1fr 1fr; }
+  .vitals-grid > .field > input[type='number'] { width: 100%; }
   .vitals-grid > .field:has(.bp-pair), .vitals-grid > .field-full { grid-column: 1 / -1; }
   .token-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
   .modal-backdrop { padding: 8px; align-items: end; }
@@ -606,9 +618,18 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .invoice { border: 0; padding: 0; max-width: none; }
   .inv-table th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+/* Patient card printed from the Patient List pop-up: just the card */
+@media print {
+  body.printing-card .content > :not(.modal-backdrop) { display: none !important; }
+  body.printing-card .modal-backdrop { position: static; background: none; padding: 0; display: block; }
+  body.printing-card .modal { width: 100%; max-height: none; box-shadow: none; }
+  body.printing-card .modal-head { padding: 0 0 10px; border: 0; }
+  body.printing-card .modal-head .icon-btn, body.printing-card .modal-foot { display: none; }
+  body.printing-card .modal-body { padding: 0; overflow: visible; }
+}
 
 /* ---------- Lab Reports & Scans (vital signs pop-up) ---------- */
-.attach { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+.attach { margin-top: 16px; padding-top: 14px; border-top: 2px solid var(--brand); display: grid; gap: 12px; }
 .attach-head { display: flex; align-items: flex-start; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .attach-head h3 { margin: 0; font-size: 15px; }
 .attach-head p { margin: 2px 0 0; }
@@ -632,3 +653,15 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 @media (max-width: 640px) {
   .attach-form { grid-template-columns: 1fr; }
 }
+
+/* Patient card (tile view from the patient list) */
+.patient-card { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.patient-card dl { margin: 0; padding: 14px 16px; display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; align-content: start; }
+.patient-card dl + dl { border-left: 1px solid var(--line); }
+.patient-card dt { font-size: 12.5px; font-weight: 600; color: #3a4655; }
+.patient-card dd { margin: 0; overflow-wrap: anywhere; }
+.patient-card .pre-line { white-space: pre-line; }
+.patient-card-icon { display: block; }
+.table th.col-center { text-align: center; }
+.table td.col-center > .cell { display: flex; justify-content: center; }
+@media (max-width: 640px) { .patient-card { grid-template-columns: 1fr; } .patient-card dl + dl { border-left: 0; border-top: 1px solid var(--line); } }

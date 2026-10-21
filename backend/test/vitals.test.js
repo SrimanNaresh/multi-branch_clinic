@@ -3,12 +3,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bmi, checkVitals } from '../../shared/vitals.js';
 
-const full = { height_cm: '170', weight_kg: '65.5', bp_systolic: '120', bp_diastolic: '80', pulse_bpm: '72', temperature_c: '36.8', comments: ' fasting ' };
+const full = { height_cm: '170', weight_kg: '65.5', bp_systolic: '120', bp_diastolic: '80', pulse_bpm: '72', temperature_f: '98.4', comments: ' fasting ' };
 
 test('valid vitals are converted to numbers', () => {
   const { data, errors } = checkVitals(full);
   assert.deepEqual(errors, {});
-  assert.deepEqual(data, { height_cm: 170, weight_kg: 65.5, bp_systolic: 120, bp_diastolic: 80, pulse_bpm: 72, temperature_c: 36.8, comments: 'fasting' });
+  assert.deepEqual(data, { height_cm: 170, weight_kg: 65.5, bp_systolic: 120, bp_diastolic: 80, pulse_bpm: 72, temperature_f: 98.4, comments: 'fasting' });
   assert.equal(bmi(data), 22.7);
 });
 
@@ -19,7 +19,7 @@ test('every field is optional, but not all of them together', () => {
 });
 
 test('ranges, decimals and numbers are checked', () => {
-  assert.equal(checkVitals({ ...full, temperature_c: '98.6' }).errors.temperature_c, 'range'); // °F typed by mistake
+  assert.equal(checkVitals({ ...full, temperature_f: '37' }).errors.temperature_f, 'range'); // °C typed by mistake
   assert.equal(checkVitals({ ...full, height_cm: '17' }).errors.height_cm, 'range');
   assert.equal(checkVitals({ ...full, pulse_bpm: '72.5' }).errors.pulse_bpm, 'decimals');
   assert.equal(checkVitals({ ...full, weight_kg: 'abc' }).errors.weight_kg, 'number');

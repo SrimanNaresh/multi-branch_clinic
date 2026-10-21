@@ -16,22 +16,26 @@ export const ROLE_PERMISSIONS = {
     'patient.view', 'patient.edit',
     'employee.view',
     'queue.confirm', 'queue.view', 'queue.update', 'vitals.record',
+    'ticket.view',
   ],
   doctor: [
     'patient.view', 'patient.history',
     'queue.view', 'queue.update', 'vitals.record',
     'visit.examine',
     'item.view',
+    'ticket.view',
   ],
   pharmacist: [
     'patient.view',
     'item.view', 'item.manage', 'stock.manage', 'supplier.manage',
     'dispense',
+    'ticket.view',
   ],
   billing: [
     'patient.view',
     'queue.view',
     'bill.create', 'bill.view',
+    'ticket.view',
   ],
 };
 
@@ -60,6 +64,7 @@ export const PERMISSION_GROUPS = [
   { id: 'doctor', label: 'menu.doctor', perms: ['visit.examine', 'patient.history'] },
   { id: 'pharmacy', label: 'menu.pharmacy', perms: ['item.manage', 'item.view', 'stock.manage', 'supplier.manage', 'dispense'] },
   { id: 'billing', label: 'menu.billing', perms: ['bill.create', 'bill.view', 'bill.cancel'] },
+  { id: 'communication', label: 'menu.communication', perms: ['ticket.view'] },
 ];
 export const ALL_PERMISSIONS = PERMISSION_GROUPS.flatMap((g) => g.perms);
 

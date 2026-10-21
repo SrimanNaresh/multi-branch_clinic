@@ -22,7 +22,7 @@ const QUEUE_SELECT = `
          q.patient_id, p.patient_code, p.name AS patient_name, p.mobile, p.gender, p.age_years,
          q.doctor_id, d.name AS doctor_name, v.id AS visit_id, v.status AS visit_status,
          pv.id AS vitals_id, pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm,
-         pv.temperature_c, pv.comments AS vitals_comments
+         pv.temperature_f, pv.comments AS vitals_comments
     FROM queue_entries q
     JOIN patients p ON p.id = q.patient_id
     LEFT JOIN employees d ON d.id = q.doctor_id
@@ -264,7 +264,7 @@ router.get('/:id/vitals', requirePermission('queue.view', 'vitals.record'), asyn
   res.json({ vitals: vitals || null });
 });
 
-// PUT /api/queue/:id/vitals { height_cm, weight_kg, bp_systolic, bp_diastolic, pulse_bpm, temperature_c, comments }
+// PUT /api/queue/:id/vitals { height_cm, weight_kg, bp_systolic, bp_diastolic, pulse_bpm, temperature_f, comments }
 // Records the vital signs the first time, edits them afterwards. The status is not changed here –
 // the patient moves to Examine only through Send to doctor.
 router.put('/:id/vitals', requirePermission('vitals.record'), async (req, res) => {

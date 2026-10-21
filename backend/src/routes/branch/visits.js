@@ -16,7 +16,7 @@ async function loadVisit(clinicId, id) {
             q.token_no, q.queue_date, q.status AS queue_status,
             c.name AS clinic_name, c.address AS clinic_address, c.city AS clinic_city, c.phone AS clinic_phone,
             pv.id AS vitals_id, pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm,
-            pv.temperature_c, pv.comments AS vitals_comments,
+            pv.temperature_f, pv.comments AS vitals_comments,
             (SELECT COUNT(*) FROM pharmacy_issues pi WHERE pi.visit_id = v.id) AS issue_count,
             (SELECT TOP 1 b.id FROM bills b WHERE b.visit_id = v.id AND b.status <> 'cancelled') AS bill_id
        FROM visits v
@@ -179,7 +179,7 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
   const visits = await query(
     `SELECT v.id, v.visit_date, v.complaints, v.examination_notes, v.diagnosis, v.vitals, v.advice, v.follow_up_date,
             v.consultation_fee, v.status, d.name AS doctor_name, q.token_no,
-            pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm, pv.temperature_c,
+            pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm, pv.temperature_f,
             pv.comments AS vitals_comments, pv.id AS vitals_id
        FROM visits v LEFT JOIN employees d ON d.id = v.doctor_id LEFT JOIN queue_entries q ON q.id = v.queue_id
        LEFT JOIN patient_vitals pv ON pv.queue_id = v.queue_id

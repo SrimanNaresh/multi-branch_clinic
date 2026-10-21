@@ -8,7 +8,7 @@ export const VITAL_LIMITS = {
   bp_systolic: [50, 260, 0],
   bp_diastolic: [30, 160, 0],
   pulse_bpm: [30, 220, 0],
-  temperature_c: [30, 45, 1],
+  temperature_f: [86, 113, 1],
 };
 export const VITAL_FIELDS = [...Object.keys(VITAL_LIMITS), 'comments'];
 

@@ -14,7 +14,7 @@ export default function PatientForm({ params }) {
   const id = params.id;
   const f = useForm({
     name: '', gender: '', age_years: '', dob: '', mobile: '', alt_mobile: '', email: '',
-    address: '', city: '', blood_group: '', occupation: '', notes: '', status: 'active',
+    address: '', blood_group: '', notes: '', status: 'active',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -56,19 +56,28 @@ export default function PatientForm({ params }) {
       />
       <form onSubmit={(e) => { e.preventDefault(); save(false); }}>
         <Card>
-          <div className="form-grid">
+          <div className="form-grid patient-grid">
             <Input label={t('field.name')} required {...f.bind('name')} autoFocus={!id} />
-            <Input label={t('field.mobile')} type="tel" required inputMode="tel" {...f.bind('mobile')} />
-            <Select label={t('field.gender')} {...f.bind('gender')} placeholder="—"
-              options={['M', 'F', 'O'].map((g) => ({ value: g, label: t(`gender.${g}`) }))} />
             <Input label={t('field.age')} type="number" min="0" max="130" {...f.bind('age_years')} />
+            <div className="field">
+              <span className="field-label">{t('field.gender')}</span>
+              <div className="gender-checks">
+                {['M', 'F', 'O'].map((g) => (
+                  <label key={g}>
+                    <input type="radio" name="gender" value={g} checked={f.values.gender === g}
+                      onChange={() => f.set('gender', g)} />
+                    {t(`gender.${g}`)}
+                  </label>
+                ))}
+              </div>
+            </div>
             <Input label={t('field.dob')} type="date" {...f.bind('dob')} />
             <Select label={t('field.bloodGroup')} {...f.bind('blood_group')} placeholder="—" options={BLOOD.map((b) => ({ value: b, label: b }))} />
+            {/* Address shares one row with Mobile, Alternate mobile and Email (styles: .patient-grid) */}
+            <TextArea label={t('field.address')} rows={1} {...f.bind('address')} />
+            <Input label={t('field.mobile')} type="tel" required inputMode="tel" {...f.bind('mobile')} />
             <Input label={t('field.altMobile')} type="tel" {...f.bind('alt_mobile')} />
             <Input label={t('field.email')} type="email" {...f.bind('email')} />
-            <Input label={t('field.occupation')} {...f.bind('occupation')} />
-            <Input label={t('field.city')} {...f.bind('city')} />
-            <TextArea label={t('field.address')} rows={2} {...f.bind('address')} />
             <TextArea label={t('field.notes')} rows={2} {...f.bind('notes')} />
             {id && (
               <Select label={t('field.status')} {...f.bind('status')}

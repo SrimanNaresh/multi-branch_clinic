@@ -2,6 +2,7 @@ import vitalsIconUrl from '../assets/vitals-icon.png';
 import cancelIconUrl from '../assets/cancel-icon.png';
 import doctorIconUrl from '../assets/doctor-icon.png';
 import confirmIconUrl from '../assets/confirm-icon.png';
+import patientCardIconUrl from '../assets/patient-card-icon.png';
 
 // Small stroke icons (24×24, currentColor)
 const PATHS = {
@@ -40,6 +41,7 @@ const PATHS = {
   key: 'M15 7a4 4 0 1 1-3.9 5H8v3H5v-3H3V9h8.1A4 4 0 0 1 15 7',
   chevronLeft: 'M15 18l-6-6 6-6',
   chevronRight: 'M9 18l6-6-6-6',
+  message: 'M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12',
 };
 
 // Heart-in-hand picture (used for "Add vital signs")
@@ -60,6 +62,11 @@ export function DoctorIcon({ size = 28 }) {
 // Green round tick picture (used for "Confirm token")
 export function ConfirmIcon({ size = 28 }) {
   return <img className="confirm-icon" src={confirmIconUrl} width={size} height={size} alt="" aria-hidden />;
+}
+
+// Document-with-cross picture (used for "Patient card")
+export function PatientCardIcon({ size = 22 }) {
+  return <img className="patient-card-icon" src={patientCardIconUrl} width={size} height={size} alt="" aria-hidden />;
 }
 
 export default function Icon({ name, size = 18, className = '' }) {
