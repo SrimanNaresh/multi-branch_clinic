@@ -28,12 +28,18 @@ if not exist "backend\.env" (
   start /wait notepad "backend\.env"
 )
 
+rem Tables are checked on every start (safe to repeat) so database updates in a new version are applied
+echo.
+echo Checking the SmartClinic tables in SQL Server...
+pushd backend
+node scripts\init-db.js
+if errorlevel 1 goto dbfail
+popd
+
 if not exist "backend\.db-ready" (
   echo.
-  echo Creating the SmartClinic tables and demo data in SQL Server...
+  echo Adding the SmartClinic demo data...
   pushd backend
-  node scripts\init-db.js
-  if errorlevel 1 goto dbfail
   node scripts\seed.js
   if errorlevel 1 goto dbfail
   echo ok> .db-ready

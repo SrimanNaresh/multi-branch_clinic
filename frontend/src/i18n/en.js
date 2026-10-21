@@ -25,6 +25,8 @@ export default {
   'menu.billing': 'Billing',
   'menu.patientBill': 'Patient Bill',
   'menu.billList': 'Bill List',
+  'menu.communication': 'Communication',
+  'menu.tickets': 'Tickets',
 
   // top bar / nav
   'topbar.allClinics': 'All clinics',
@@ -249,6 +251,8 @@ export default {
   'perm.bill.create': 'Patient Bill',
   'perm.bill.view': 'Bill List',
   'perm.bill.cancel': 'Cancel bills',
+  'perm.ticket.view': 'Tickets',
+  'tickets.empty': 'No tickets yet.',
 
   // vital signs (after Confirm)
   'vitals.title': 'Vital signs',
@@ -340,6 +344,7 @@ export default {
   'patients.registerAnyway': 'Register anyway',
   'patients.searchHint': 'Search by name, mobile or patient ID…',
   'patients.count': '{n} patients',
+  'patients.card': 'Patient card',
   'patients.registeredOn': 'Registered',
   'patients.visits': 'Visits',
   'patients.lastVisit': 'Last visit',

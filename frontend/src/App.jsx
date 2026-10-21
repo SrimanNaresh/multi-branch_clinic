@@ -31,6 +31,7 @@ import Dispense from './pages/branch/Dispense.jsx';
 import PatientBill from './pages/branch/PatientBill.jsx';
 import BillList from './pages/branch/BillList.jsx';
 import BillView from './pages/branch/BillView.jsx';
+import Tickets from './pages/branch/Tickets.jsx';
 
 // branch: true → needs an active clinic (admins pick one in the switcher)
 const ROUTES = [
@@ -72,6 +73,8 @@ const ROUTES = [
   { path: '/billing/:visitId', perm: 'bill.create', el: PatientBill, branch: true },
   { path: '/bills', perm: 'bill.view', el: BillList, branch: true },
   { path: '/bills/:id', perm: ['bill.view', 'bill.create'], el: BillView, branch: true },
+
+  { path: '/tickets', perm: 'ticket.view', el: Tickets, branch: true },
 
   { path: '/profile', el: Profile },
 ];

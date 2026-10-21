@@ -54,6 +54,12 @@ export const MENU = [
       { path: '/bills', label: 'menu.billList', perm: 'bill.view', icon: 'list' },
     ],
   },
+  {
+    id: 'communication', scope: 'branch', label: 'menu.communication',
+    items: [
+      { path: '/tickets', label: 'menu.tickets', perm: 'ticket.view', icon: 'message' },
+    ],
+  },
 ];
 
 /** First page a user lands on after login. */

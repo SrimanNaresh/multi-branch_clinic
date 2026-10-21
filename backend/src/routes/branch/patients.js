@@ -52,7 +52,7 @@ router.get('/', requirePermission('patient.view'), async (req, res) => {
   const w = where.join(' AND ');
   const [{ total }] = await query(`SELECT COUNT(*) AS total FROM patients p WHERE ${w}`, params);
   const rows = await query(
-    `SELECT p.id, p.patient_code, p.name, p.gender, p.age_years, p.dob, p.mobile, p.city, p.status, p.created_at
+    `SELECT p.id, p.patient_code, p.name, p.gender, p.age_years, p.dob, p.mobile, p.address, p.city, p.status, p.created_at
        FROM patients p WHERE ${w} ORDER BY p.id DESC ${pageSql}`,
     [...params, offset, limit],
   );
