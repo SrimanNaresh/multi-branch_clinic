@@ -9,6 +9,9 @@ export const MAX_PAST_HISTORY = 50;
 export const MAX_PAST_NOTE = 200;
 export const MAX_PAST_ANSWER = 200;
 export const MAX_PAST_ANSWERS = 30;
+/** Medical History: how long, as a short text + Months / Years (e.g. "5" Years) */
+export const MAX_PAST_DURATION = 20;
+export const DURATION_UNITS = ['months', 'years'];
 
 /** Questions an item starts with (matched by item name, any case); other items start with none. */
 export const PAST_QUESTION_DEFAULTS = {
@@ -42,8 +45,12 @@ export function cleanPastHistory(list) {
     if (!item) continue;
     const note = tidy(h?.note, MAX_PAST_NOTE);
     const answers = cleanAnswers(h?.answers);
+    const dur = tidy(h?.dur, MAX_PAST_DURATION);
+    const row = { item, note };
+    if (dur) Object.assign(row, { dur, unit: DURATION_UNITS.includes(h?.unit) ? h.unit : 'years' });
+    if (answers.length) row.answers = answers;
     byItem.delete(item.toLowerCase());
-    byItem.set(item.toLowerCase(), answers.length ? { item, note, answers } : { item, note });
+    byItem.set(item.toLowerCase(), row);
   }
   return [...byItem.values()].slice(0, MAX_PAST_HISTORY);
 }

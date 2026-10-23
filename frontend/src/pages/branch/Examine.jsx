@@ -13,6 +13,8 @@ import PastHistoryList, { PastHistorySummary } from '../../components/PastHistor
 import RxListPicker from '../../components/RxListPicker.jsx';
 import Icon from '../../components/Icon.jsx';
 import { VitalsForm, vitalsSummary } from '../../components/VitalSigns.jsx';
+import Attachments from '../../components/Attachments.jsx';
+import ComparativeStudy from '../../components/ComparativeStudy.jsx';
 
 const emptyLine = () => ({ key: Math.random().toString(36).slice(2), medicine_name: '', item_id: null, potency: '', dosage: '', frequency: '', duration: '', quantity: 1, instructions: '' });
 
@@ -115,6 +117,12 @@ function PastVisitDetails({ v }) {
         <Fields rows={[[t('examine.complaints'), v.complaints], [t('examine.examination'), v.examination_notes], [t('examine.diagnosis'), v.diagnosis]]} />
       </section>
     ),
+    v.medical_history?.length > 0 && (
+      <section key="med" className="pv-sec">
+        <h4>{t('examine.medicalHistory')}</h4>
+        <PastHistorySummary value={v.medical_history} />
+      </section>
+    ),
     v.past_history?.length > 0 && (
       <section key="past" className="pv-sec">
         <h4>{t('examine.pastHistory')}</h4>
@@ -173,17 +181,30 @@ function PastVisits({ patientId, excludeId, footer }) {
 }
 
 // Vital signs recorded at reception (after Confirm); the doctor can correct them here.
-function QueueVitals({ queueId, readOnly, footer }) {
+// Lab Reports & Scans uploaded with the vitals are listed here too (files only – no upload here).
+function QueueVitals({ queueId, patientName, readOnly, footer }) {
   const { t } = useT();
   const v = useAsync(() => api(`/queue/${queueId}/vitals`), [queueId]);
   return (
     <Card>
       {v.loading && !v.data ? <Loading /> : <ErrorBox error={v.error} onRetry={v.reload} />}
-      {v.data && <VitalsForm queueId={queueId} initial={v.data.vitals} onSaved={v.reload} readOnly={readOnly} />}
+      {v.data && (
+        <VitalsForm queueId={queueId} initial={v.data.vitals} onSaved={v.reload} readOnly={readOnly}
+          beforeActions={<Attachments entry={{ id: queueId, patient_name: patientName }} canEdit={false} showHead={false} />} />
+      )}
       {footer}
     </Card>
   );
 }
+
+// Complaints & diagnosis: its sections as tabs down the left side, in this order: [key, label]
+const CLINICAL_TABS = [
+  ['complaints', 'examine.complaints'],
+  ['medical', 'examine.medicalHistory'],
+  ['exam', 'examine.pastHistory'],
+  ['diagnosis', 'examine.diagnosis'],
+  ['compare', 'cs.title'],
+];
 
 // Patient details tabs, in this order: [key, label]
 const EXAMINE_TABS = [
@@ -203,11 +224,14 @@ function VisitForm({ visitId, backPath }) {
   const [repetitionList, setRepetitionList] = useRxList('repetition');
   const [dosDontList, setDosDontList] = useRxList('dosdont');
   const [pastList, setPastList] = useRxList('pasthistory');
+  const [medList, setMedList] = useRxList('medhistory');
   const [f, setF] = useState(null);
   const [lines, setLines] = useState([emptyLine()]);
   const [focusLine, setFocusLine] = useState(null);   // line whose Medicine box gets the cursor after render
   const [saving, setSaving] = useState(null);
   const [tab, setTab] = useState('history');
+  const [subTab, setSubTab] = useState('complaints');   // Complaints & diagnosis section
+  const [csCount, setCsCount] = useState(0);             // Comparative Study rows (for the tab mark)
   const tabIndex = EXAMINE_TABS.findIndex(([key]) => key === tab);
   const prevTab = EXAMINE_TABS[tabIndex - 1];
   const nextTab = EXAMINE_TABS[tabIndex + 1];
@@ -239,7 +263,7 @@ function VisitForm({ visitId, backPath }) {
     setF({
       complaints: visit.complaints || '', examination_notes: visit.examination_notes || '', diagnosis: visit.diagnosis || '',
       advice: visit.advice || '', follow_up_date: visit.follow_up_date || '', consultation_fee: visit.consultation_fee ?? 0,
-      dos_donts: visit.dos_donts || [], past_history: visit.past_history || [],
+      dos_donts: visit.dos_donts || [], past_history: visit.past_history || [], medical_history: visit.medical_history || [],
     });
     setLines(visit.prescriptions.length ? visit.prescriptions.map((p) => ({ ...p, key: String(p.id) })) : [emptyLine()]);
   }, [visit]);
@@ -266,7 +290,7 @@ function VisitForm({ visitId, backPath }) {
       const body = {
         complaints: f.complaints, examination_notes: f.examination_notes, diagnosis: f.diagnosis, advice: f.advice,
         follow_up_date: f.follow_up_date || null, consultation_fee: f.consultation_fee, dos_donts: f.dos_donts,
-        past_history: f.past_history,
+        past_history: f.past_history, medical_history: f.medical_history,
         complete,
       };
       if (!locked) body.prescriptions = lines.filter((l) => l.medicine_name.trim()).map(({ key, ...l }) => l);
@@ -310,7 +334,7 @@ function VisitForm({ visitId, backPath }) {
       </section>
 
       <section role="tabpanel" id="panel-vitals" aria-labelledby="tab-vitals" hidden={tab !== 'vitals'}>
-      {visit.queue_id ? <QueueVitals queueId={visit.queue_id} readOnly={visit.queue_status === 'cancelled'} footer={tabNav} /> : <Card><Empty>{t('examine.noVitals')}</Empty>{tabNav}</Card>}
+      {visit.queue_id ? <QueueVitals queueId={visit.queue_id} patientName={visit.patient_name} readOnly={visit.queue_status === 'cancelled'} footer={tabNav} /> : <Card><Empty>{t('examine.noVitals')}</Empty>{tabNav}</Card>}
       {visit.vitals && Object.values(visit.vitals).some(Boolean) && (
         <p className="muted small">{t('vitals.olderNote')}: {[
           visit.vitals.bp && `${t('examine.bp')} ${visit.vitals.bp}`, visit.vitals.pulse && `${t('examine.pulse')} ${visit.vitals.pulse}`,
@@ -321,15 +345,48 @@ function VisitForm({ visitId, backPath }) {
 
       <section role="tabpanel" id="panel-clinical" aria-labelledby="tab-clinical" hidden={tab !== 'clinical'}>
       <Card>
-        {/* left: complaints, examination notes, diagnosis – right: the patient's Past History */}
-        <div className="tab-split">
-          <div className="tab-split-left">
-            <TextArea label={t('examine.complaints')} rows={3} value={f.complaints} onChange={set('complaints')} />
-            <TextArea label={t('examine.examination')} rows={3} value={f.examination_notes} onChange={set('examination_notes')} />
-            <TextArea label={t('examine.diagnosis')} rows={2} value={f.diagnosis} onChange={set('diagnosis')} />
+        {/* sections as tabs on the left; every section stays mounted (only hidden), so nothing typed is lost */}
+        <div className="subtabs">
+          <div className="subtab-list" role="tablist" aria-orientation="vertical">
+            {CLINICAL_TABS.map(([key, label], i) => {
+              const filled = {
+                complaints: f.complaints.trim() ? '✓' : null,
+                medical: f.medical_history.length || (f.examination_notes.trim() ? '✓' : null),
+                exam: f.past_history.length || null,
+                diagnosis: f.diagnosis.trim() ? '✓' : null,
+                compare: csCount || null,
+              }[key];
+              return (
+                <button key={key} type="button" role="tab" id={`sub-${key}`} aria-selected={subTab === key} aria-controls={`subpanel-${key}`}
+                  className={subTab === key ? 'on' : ''} onClick={() => setSubTab(key)}>
+                  <span className="subtab-no">{i + 1}</span>
+                  <span className="subtab-label">{t(label)}</span>
+                  {filled && <span className="subtab-mark">{filled}</span>}
+                </button>
+              );
+            })}
           </div>
-          <PastHistoryList list={pastList} onListChange={setPastList} copiedFrom={visit.past_history_from}
-            value={f.past_history} onChange={(past_history) => setF((cur) => ({ ...cur, past_history }))} />
+          <div className="subtab-panels">
+            <section role="tabpanel" id="subpanel-complaints" aria-labelledby="sub-complaints" hidden={subTab !== 'complaints'}>
+              <TextArea label={t('examine.complaints')} rows={8} value={f.complaints} onChange={set('complaints')} />
+            </section>
+            {/* Medical History: the list on the left, the notes on the right */}
+            <section role="tabpanel" id="subpanel-medical" aria-labelledby="sub-medical" hidden={subTab !== 'medical'} className="tab-split">
+              <PastHistoryList kind="medhistory" list={medList} onListChange={setMedList} copiedFrom={visit.medical_history_from}
+                value={f.medical_history} onChange={(medical_history) => setF((cur) => ({ ...cur, medical_history }))} />
+              <TextArea label={t('examine.examination')} rows={10} value={f.examination_notes} onChange={set('examination_notes')} />
+            </section>
+            <section role="tabpanel" id="subpanel-exam" aria-labelledby="sub-exam" hidden={subTab !== 'exam'}>
+              <PastHistoryList list={pastList} onListChange={setPastList} copiedFrom={visit.past_history_from}
+                value={f.past_history} onChange={(past_history) => setF((cur) => ({ ...cur, past_history }))} />
+            </section>
+            <section role="tabpanel" id="subpanel-diagnosis" aria-labelledby="sub-diagnosis" hidden={subTab !== 'diagnosis'}>
+              <TextArea label={t('examine.diagnosis')} rows={8} value={f.diagnosis} onChange={set('diagnosis')} />
+            </section>
+            <section role="tabpanel" id="subpanel-compare" aria-labelledby="sub-compare" hidden={subTab !== 'compare'}>
+              <ComparativeStudy patientId={visit.patient_id} visitId={visit.id} onCount={setCsCount} />
+            </section>
+          </div>
         </div>
         {tabNav}
       </Card>

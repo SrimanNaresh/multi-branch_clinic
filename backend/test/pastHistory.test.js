@@ -39,3 +39,15 @@ test('answers keep only filled ones, once per question, and ride along with the 
   assert.deepEqual(cleanPastHistory([{ item: 'ENT', note: '', answers: [{ q: 'Triggers', a: 'Cold' }] }, { item: 'Ortho', answers: [] }]),
     [{ item: 'ENT', note: '', answers: [{ q: 'Triggers', a: 'Cold' }] }, { item: 'Ortho', note: '' }]);
 });
+
+test('Medical History keeps a duration (text + Months / Years); an unknown unit becomes Years', () => {
+  assert.deepEqual(cleanPastHistory([
+    { item: 'Smoking', dur: ' 5 ', unit: 'months' },
+    { item: 'Alcohol', dur: '2', unit: 'weeks' },
+    { item: 'Tobacco', dur: '  ', unit: 'months' },
+  ]), [
+    { item: 'Smoking', note: '', dur: '5', unit: 'months' },
+    { item: 'Alcohol', note: '', dur: '2', unit: 'years' },
+    { item: 'Tobacco', note: '' },
+  ]);
+});

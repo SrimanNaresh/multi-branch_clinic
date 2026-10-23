@@ -10,6 +10,7 @@ import { vitalsSummary } from '../../components/VitalSigns.jsx';
 import Icon from '../../components/Icon.jsx';
 import { DosDontSummary } from '../../components/DosDontList.jsx';
 import { PastHistorySummary } from '../../components/PastHistoryList.jsx';
+import ComparativeStudy from '../../components/ComparativeStudy.jsx';
 
 function PatientSearch() {
   const { t } = useT();
@@ -51,6 +52,16 @@ function Vitals({ v, visit }) {
   return parts.length ? <p className="muted small">{parts.join(' · ')}</p> : null;
 }
 
+/** The patient's Comparative Study table, read only; nothing when there are no readings. */
+function ComparativeHistory({ patientId }) {
+  const [count, setCount] = useState(null);
+  return (
+    <div className={count ? 'card' : ''}>
+      <ComparativeStudy patientId={patientId} readOnly onCount={setCount} />
+    </div>
+  );
+}
+
 export default function PatientHistory({ params }) {
   const { t } = useT();
   const auth = useAuth();
@@ -70,6 +81,7 @@ export default function PatientHistory({ params }) {
         subtitle={`${patient.patient_code} · ${genderLabel(patient.gender, t)} / ${ageLabel(patient)} · ${patient.mobile}`}
         actions={<Button variant="ghost" onClick={() => navigate('/doctor/history')}>{t('history.another')}</Button>}
       />
+      <ComparativeHistory patientId={patient.id} />
       {!visits.length && <Card><Empty>{t('history.noVisits')}</Empty></Card>}
       <ol className="timeline">
         {visits.map((v) => (
@@ -102,6 +114,12 @@ export default function PatientHistory({ params }) {
                 {v.dos_donts?.length > 0 && <DosDontSummary marks={v.dos_donts} />}
                 {v.follow_up_date && <div><dt>{t('examine.followUp')}</dt><dd>{fmtDate(v.follow_up_date)}</dd></div>}
               </dl>
+              {v.medical_history?.length > 0 && (
+                <div className="tl-past">
+                  <h4>{t('examine.medicalHistory')}</h4>
+                  <PastHistorySummary value={v.medical_history} />
+                </div>
+              )}
               {v.past_history?.length > 0 && (
                 <div className="tl-past">
                   <h4>{t('examine.pastHistory')}</h4>

@@ -360,8 +360,32 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .examine-tabs { margin-bottom: 12px; }
 /* Examine tabs: Previous / Next stepper at the bottom of each tab's card */
 /* Examine tabs split in two: fields on the left, a list (Past History / Do's and Don'ts) on the right */
+/* Complaints & diagnosis: section tabs down the left, the chosen section on the right */
+.subtabs { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 18px; align-items: start; }
+.subtab-list { display: grid; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); position: sticky; top: calc(var(--header-h) + 12px); }
+.subtab-list button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--text); text-align: left; cursor: pointer; }
+.subtab-list button:hover { background: var(--brand-50); }
+.subtab-list button.on { background: var(--brand-gradient); color: #fff; }
+.subtab-no { display: inline-grid; place-items: center; width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; background: var(--brand-50); color: var(--brand); font-size: 11.5px; font-weight: 700; }
+.subtab-list button.on .subtab-no { background: rgba(255, 255, 255, .2); color: #fff; }
+.subtab-label { flex: 1; min-width: 0; }
+.subtab-mark { min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--success-50); color: var(--success); font-size: 11px; font-weight: 700; text-align: center; }
+.subtab-list button.on .subtab-mark { background: rgba(255, 255, 255, .25); color: #fff; }
+@media (max-width: 760px) {
+  .subtabs { grid-template-columns: 1fr; }
+  .subtab-list { position: static; display: flex; overflow-x: auto; }
+  .subtab-list button { width: auto; white-space: nowrap; }
+}
+/* Comparative Study table + its pop-up */
+.cs-table td, .cs-table th { white-space: nowrap; }
+.cs-table .col-actions { width: 1%; text-align: right; }
+.cs-draft input { width: 100%; min-width: 90px; height: 28px; min-height: 28px; padding: 0 8px; font-size: 13px; }
+.cs-draft td { padding-top: 3px; padding-bottom: 3px; }
+.cs-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 520px) { .cs-form { grid-template-columns: 1fr; } }
 .tab-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 28px; align-items: start; }
 .tab-split-left { display: grid; gap: 12px; }
+.tab-split > .field-full { grid-column: auto; }   /* a text box here takes its own column, not the full row */
 .dosdont { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: var(--surface-2); }
 .dosdont-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .dosdont-head h3 { font-size: 14px; margin: 0; }
@@ -408,6 +432,13 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 /* questions under a ticked item (ENT → Symptom Character, …) */
 .ph-row { flex-wrap: wrap; }
 .pasthistory .dosdont-list { height: 300px; }
+.medhistory .dosdont-list { height: 150px; }
+/* Medical History: how long = textbox + Months / Years */
+.ph-duration { display: inline-flex; align-items: center; gap: 4px; flex: 0 1 220px; min-width: 0; }
+/* both 26px: element + class selectors so they win over the global 30px text-box rule */
+.ph-duration input.ph-dur, .ph-duration select.ph-unit { box-sizing: border-box; height: 26px; min-height: 26px; padding-top: 0; padding-bottom: 0; font-size: 12.5px; line-height: 1; }
+.ph-duration input.ph-dur { width: 80px; min-width: 0; padding-left: 8px; padding-right: 8px; }
+.ph-duration select.ph-unit { flex: 1; min-width: 80px; padding-left: 6px; }
 .ph-questions { flex-basis: 100%; margin: 4px 0 6px 23px; padding: 6px 8px; border-left: 3px solid var(--brand); border-radius: 0 6px 6px 0; background: var(--surface); }
 .phq-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; font-size: 12px; font-weight: 700; color: var(--brand); }
 .phq-head .dosdont-tools .btn { min-height: 24px; padding: 0 7px; font-size: 12px; }

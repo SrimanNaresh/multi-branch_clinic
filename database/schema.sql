@@ -520,6 +520,50 @@ GO
 IF COL_LENGTH(N'dbo.visits', N'past_history') IS NULL
   ALTER TABLE dbo.visits ADD past_history NVARCHAR(4000) NULL;
 GO
+/* Medical History list (Examine → Complaints & diagnosis, e.g. Smoking, Alcohol, Tobacco): same behaviour
+   as the dosage list. What is ticked for a visit (with a note each) is saved in visits.medical_history,
+   like Past History: JSON [{"item":"Smoking","note":"10 a day"}, …], NULL = never saved, '[]' = none ticked. */
+IF OBJECT_ID(N'dbo.medhistory_master', N'U') IS NULL
+CREATE TABLE dbo.medhistory_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_medhistory_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_medhistory_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_medhistory_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_medhistory_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_medhistory_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_medhistory_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+IF COL_LENGTH(N'dbo.visits', N'medical_history') IS NULL
+  ALTER TABLE dbo.visits ADD medical_history NVARCHAR(4000) NULL;
+GO
+/* Comparative Study (Examine → Complaints & diagnosis → 5): one running table per patient, each row a
+   reading on its own date with Tine, Rt.H and Lt.H as short text, so readings can be compared over time.
+   visit_id = the visit it was added from (for reference only). */
+IF OBJECT_ID(N'dbo.comparative_study', N'U') IS NULL
+CREATE TABLE dbo.comparative_study (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_cs_clinic REFERENCES dbo.clinics(id),
+  patient_id  INT NOT NULL CONSTRAINT fk_cs_patient REFERENCES dbo.patients(id),
+  visit_id    INT NULL CONSTRAINT fk_cs_visit REFERENCES dbo.visits(id),
+  study_date  DATE NOT NULL,
+  study_time  NVARCHAR(20) NULL,              -- the Tine column, as typed
+  rt_h        NVARCHAR(100) NULL,
+  lt_h        NVARCHAR(100) NULL,
+  created_by  INT NULL CONSTRAINT fk_cs_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  updated_by  INT NULL CONSTRAINT fk_cs_upd REFERENCES dbo.employees(id),
+  updated_at  DATETIME2(0) NULL
+);
+GO
+IF COL_LENGTH(N'dbo.comparative_study', N'study_time') < 40      -- bytes: NVARCHAR(20) = 40
+  ALTER TABLE dbo.comparative_study ALTER COLUMN study_time NVARCHAR(20) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_cs_patient' AND object_id = OBJECT_ID(N'dbo.comparative_study'))
+  CREATE INDEX ix_cs_patient ON dbo.comparative_study(clinic_id, patient_id, study_date);
+GO
 /* one-time move: a patient's Past History goes onto the patient's latest visit */
 UPDATE v SET past_history = p.past_history
   FROM dbo.visits v JOIN dbo.patients p ON p.id = v.patient_id

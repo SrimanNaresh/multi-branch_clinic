@@ -7,9 +7,28 @@ import { isISODate } from '../../utils/dates.js';
 import { cleanDosage, cleanOrder, defaultsFor, dosageOptions, MAX_ORDER, nextOrder, RX_LIST_KINDS } from '../../../../shared/dosage.js';
 import { cleanDosDonts, parseDosDonts } from '../../../../shared/dosdonts.js';
 import { cleanPastHistory, parsePastHistory, pastQuestionDefaults } from '../../../../shared/pastHistory.js';
+import { checkComparative } from '../../../../shared/comparative.js';
 
 const router = Router();
 router.use(clinicScope());
+
+/**
+ * Past History / Medical History of a visit (column = 'past_history' | 'medical_history'): the visit's own;
+ * never saved yet → the patient's latest earlier visit that has one, and visit[column + '_from'] = its date.
+ */
+async function carryForward(visit, clinicId, column) {
+  visit[`${column}_from`] = null;
+  if (visit[column] != null) { visit[column] = parsePastHistory(visit[column]); return; }
+  const [prev] = await query(
+    `SELECT TOP 1 visit_date, ${column} AS saved FROM visits
+      WHERE patient_id = ? AND clinic_id = ? AND ${column} IS NOT NULL AND id <> ?
+        AND (visit_date < ? OR (visit_date = ? AND id < ?))
+      ORDER BY visit_date DESC, id DESC`,
+    [visit.patient_id, clinicId, visit.id, visit.visit_date, visit.visit_date, visit.id],
+  );
+  visit[column] = prev ? parsePastHistory(prev.saved) : [];
+  if (visit[column].length) visit[`${column}_from`] = prev.visit_date;
+}
 
 async function loadVisit(clinicId, id) {
   const [visit] = await query(
@@ -33,21 +52,8 @@ async function loadVisit(clinicId, id) {
   if (!visit) return null;
   if (typeof visit.vitals === 'string') { try { visit.vitals = JSON.parse(visit.vitals); } catch { visit.vitals = null; } }
   visit.dos_donts = parseDosDonts(visit.dos_donts);
-  // Past History: this visit's own; never saved yet → the patient's latest earlier visit that has one
-  visit.past_history_from = null;
-  if (visit.past_history == null) {
-    const [prev] = await query(
-      `SELECT TOP 1 visit_date, past_history FROM visits
-        WHERE patient_id = ? AND clinic_id = ? AND past_history IS NOT NULL AND id <> ?
-          AND (visit_date < ? OR (visit_date = ? AND id < ?))
-        ORDER BY visit_date DESC, id DESC`,
-      [visit.patient_id, clinicId, visit.id, visit.visit_date, visit.visit_date, visit.id],
-    );
-    visit.past_history = prev ? parsePastHistory(prev.past_history) : [];
-    if (visit.past_history.length) visit.past_history_from = prev.visit_date;
-  } else {
-    visit.past_history = parsePastHistory(visit.past_history);
-  }
+  await carryForward(visit, clinicId, 'past_history');
+  await carryForward(visit, clinicId, 'medical_history');
   visit.prescriptions = await query(
     `SELECT rx.*, i.stock_qty, i.price, i.unit, i.generic_name
        FROM prescriptions rx LEFT JOIN items i ON i.id = rx.item_id
@@ -90,9 +96,11 @@ router.post('/start', requirePermission('visit.examine'), async (req, res) => {
    Prescriptions keep the text they were saved with. */
 const RX_LIST_TABLE = {
   dosage: 'dosage_master', potency: 'potency_master', repetition: 'repetition_master',
-  dosdont: 'dosdont_master', pasthistory: 'pasthistory_master',
+  dosdont: 'dosdont_master', pasthistory: 'pasthistory_master', medhistory: 'medhistory_master',
 };
-const RX_LIST_NAME = { dosage: 'dosage', potency: 'potency', repetition: 'repetition', dosdont: 'item', pasthistory: 'item' };
+const RX_LIST_NAME = {
+  dosage: 'dosage', potency: 'potency', repetition: 'repetition', dosdont: 'item', pasthistory: 'item', medhistory: 'item',
+};
 
 async function ensureDefaults(kind, clinicId, userId) {
   const table = RX_LIST_TABLE[kind];
@@ -287,6 +295,61 @@ router.delete('/pasthistory-questions/:itemId/:id', requirePermission('visit.exa
   res.json(await loadQuestions(req.clinicId, item));
 });
 
+/* ---------- Comparative Study: one running table per patient (Date, Time, Rt.H, Lt.H) ----------
+   Each add / edit / delete is saved right away (not with Save draft). */
+const COMPARATIVE_ERR = { date: 'Enter a valid date', reading: 'Enter Rt.H or Lt.H' };
+const readComparative = (body) => {
+  const { row, error } = checkComparative(body || {});
+  if (error) throw badRequest(COMPARATIVE_ERR[error], 'VALIDATION');
+  return row;
+};
+const listComparative = (clinicId, patientId) => query(
+  `SELECT id, visit_id, study_date, study_time, rt_h, lt_h FROM comparative_study
+    WHERE clinic_id = ? AND patient_id = ? ORDER BY study_date, id`, [clinicId, patientId],   // typed times do not sort as text
+);
+
+// GET /api/visits/patient/:patientId/comparative
+router.get('/patient/:patientId/comparative', requirePermission('visit.examine', 'patient.history'), async (req, res) => {
+  res.json({ rows: await listComparative(req.clinicId, toId(req.params.patientId, 'patient')) });
+});
+
+// POST /api/visits/patient/:patientId/comparative { study_date, study_time, rt_h, lt_h, visit_id? }
+router.post('/patient/:patientId/comparative', requirePermission('visit.examine'), async (req, res) => {
+  const patientId = toId(req.params.patientId, 'patient');
+  const [patient] = await query('SELECT id FROM patients WHERE id = ? AND clinic_id = ?', [patientId, req.clinicId]);
+  if (!patient) throw notFound('Patient');
+  const row = readComparative(req.body);
+  let visitId = null;
+  if (req.body?.visit_id) {
+    const [v] = await query('SELECT id FROM visits WHERE id = ? AND clinic_id = ? AND patient_id = ?', [toId(req.body.visit_id, 'visit'), req.clinicId, patientId]);
+    visitId = v?.id ?? null;
+  }
+  await insertRow(query, 'comparative_study', { clinic_id: req.clinicId, patient_id: patientId, visit_id: visitId, ...row, created_by: req.user.id });
+  res.status(201).json({ rows: await listComparative(req.clinicId, patientId) });
+});
+
+// PUT /api/visits/comparative/:id { study_date, study_time, rt_h, lt_h }
+router.put('/comparative/:id', requirePermission('visit.examine'), async (req, res) => {
+  const id = toId(req.params.id);
+  const [old] = await query('SELECT id, patient_id FROM comparative_study WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+  if (!old) throw notFound('Comparative Study row');
+  const row = readComparative(req.body);
+  await query(
+    'UPDATE comparative_study SET study_date = ?, study_time = ?, rt_h = ?, lt_h = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
+    [row.study_date, row.study_time, row.rt_h, row.lt_h, req.user.id, id],
+  );
+  res.json({ rows: await listComparative(req.clinicId, old.patient_id) });
+});
+
+// DELETE /api/visits/comparative/:id
+router.delete('/comparative/:id', requirePermission('visit.examine'), async (req, res) => {
+  const id = toId(req.params.id);
+  const [old] = await query('SELECT id, patient_id FROM comparative_study WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+  if (!old) throw notFound('Comparative Study row');
+  await query('DELETE FROM comparative_study WHERE id = ?', [id]);
+  res.json({ rows: await listComparative(req.clinicId, old.patient_id) });
+});
+
 // GET /api/visits/patient/:patientId – Patient History (all visits + prescriptions)
 router.get('/patient/:patientId', requirePermission('patient.history'), async (req, res) => {
   const patientId = toId(req.params.patientId, 'patient');
@@ -297,7 +360,7 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
   if (!patient) throw notFound('Patient');
   const visits = await query(
     `SELECT v.id, v.visit_date, v.complaints, v.examination_notes, v.diagnosis, v.vitals, v.advice, v.follow_up_date,
-            v.dos_donts, v.past_history, v.consultation_fee, v.status, d.name AS doctor_name, q.token_no,
+            v.dos_donts, v.past_history, v.medical_history, v.consultation_fee, v.status, d.name AS doctor_name, q.token_no,
             pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm, pv.temperature_f,
             pv.comments AS vitals_comments, pv.id AS vitals_id
        FROM visits v LEFT JOIN employees d ON d.id = v.doctor_id LEFT JOIN queue_entries q ON q.id = v.queue_id
@@ -314,6 +377,7 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
       if (typeof v.vitals === 'string') { try { v.vitals = JSON.parse(v.vitals); } catch { v.vitals = null; } }
       v.dos_donts = parseDosDonts(v.dos_donts);
       v.past_history = parsePastHistory(v.past_history);
+      v.medical_history = parsePastHistory(v.medical_history);
       v.prescriptions = rx.filter((r) => r.visit_id === v.id);
     }
   }
@@ -340,6 +404,7 @@ router.put('/:id', requirePermission('visit.examine'), async (req, res) => {
   }
   // Past History of this visit; '[]' (not NULL) when nothing is ticked, so it does not refill from the last visit
   if (body.past_history !== undefined) data.past_history = JSON.stringify(cleanPastHistory(body.past_history));
+  if (body.medical_history !== undefined) data.medical_history = JSON.stringify(cleanPastHistory(body.medical_history));
 
   await tx(async (q) => {
     const [visit] = await q('SELECT * FROM visits WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);

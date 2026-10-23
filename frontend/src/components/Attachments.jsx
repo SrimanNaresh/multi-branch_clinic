@@ -8,7 +8,8 @@ import { ATTACHMENT_TYPES, CATEGORY_MAX, checkAttachment, fileSize } from '../..
 import { Button, Empty, ErrorBox, Input, Loading, Select, useAsync, useToast } from './ui.jsx';
 import Icon from './Icon.jsx';
 
-export default function Attachments({ entry, canEdit = true }) {
+// showHead = false: just the files, without the "Lab Reports & Scans" heading (Examine → Vital signs)
+export default function Attachments({ entry, canEdit = true, showHead = true }) {
   const { t } = useT();
   const toast = useToast();
   const fileInput = useRef(null);
@@ -114,13 +115,15 @@ export default function Attachments({ entry, canEdit = true }) {
   const rows = list.data?.rows || [];
   return (
     <section className="attach">
-      <header className="attach-head">
-        <span className="attach-icon"><Icon name="folder" size={16} /></span>
-        <div>
-          <h3>{t('attach.title')}</h3>
-          <p className="muted small">{t('attach.subtitle', { name: entry.patient_name })}</p>
-        </div>
-      </header>
+      {showHead && (
+        <header className="attach-head">
+          <span className="attach-icon"><Icon name="folder" size={16} /></span>
+          <div>
+            <h3>{t('attach.title')}</h3>
+            <p className="muted small">{t('attach.subtitle', { name: entry.patient_name })}</p>
+          </div>
+        </header>
+      )}
 
       {canEdit && (
         <div className="attach-form">

@@ -1,33 +1,43 @@
-// Examine → Complaints & diagnosis → Past History: the clinic's list (ENT, Ortho, Dental, …).
+// Examine → Complaints & diagnosis: a tick + note list, used twice (kind):
+//   'pasthistory' – Examination History (ENT, Ortho, Dental, …), with questions per item
+//   'medhistory'  – Medical History (Smoking, Alcohol, Tobacco, …), how long (text + Months / Years) instead of
+//                   a note, no questions
 // Tick what applies to the patient and add a short note; it is saved with this visit. A visit never
 // saved starts from the patient's previous visit (copiedFrom = that visit's date).
 // "+ New", "Edit" and "Delete" change the clinic's list (same pop-ups as Potency).
 // A ticked item that was later deleted from the list still shows, so the patient keeps it.
-// Ticking an item also shows its questions (ENT → Symptom Character, Triggers, …) with a short answer
-// each; every item has its own question list with + New / Edit / Delete.
+// Examination History only: ticking an item also shows its questions (ENT → Symptom Character, …) with a
+// short answer each; every item has its own question list with + New / Edit / Delete.
 import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { useT } from '../lib/i18n.jsx';
 import { fmtDate } from '../lib/format.js';
-import { MAX_PAST_ANSWER, MAX_PAST_NOTE } from '../../../shared/pastHistory.js';
+import { DURATION_UNITS, MAX_PAST_ANSWER, MAX_PAST_DURATION, MAX_PAST_NOTE } from '../../../shared/pastHistory.js';
 import Icon from './Icon.jsx';
 import { useAsync } from './ui.jsx';
 import { editListRow, ListTools, newListRow, RxListModals } from './RxListPicker.jsx';
 
+const KIND_TEXT = {
+  pasthistory: { title: 'examine.pastHistory', note: 'examine.pastNote', hint: 'examine.pastHint' },
+  medhistory: { title: 'examine.medicalHistory', note: 'examine.medNote', hint: 'examine.medHint' },
+};
+
 /**
- * list: { rows: [text], added: [{ id, value, sort_order }] } from /api/visits/pasthistory-options
+ * list: { rows: [text], added: [{ id, value, sort_order }] } from /api/visits/{kind}-options
  * value: [{ item, note, answers?: [{ q, a }] }]; onChange(value)
  */
-export default function PastHistoryList({ list, onListChange, value, onChange, copiedFrom }) {
+export default function PastHistoryList({ kind = 'pasthistory', list, onListChange, value, onChange, copiedFrom }) {
   const { t } = useT();
   const [mode, setMode] = useState(null);           // null | 'edit' | 'delete' – row icons only in a mode
   const [editing, setEditing] = useState(null);
   const [removing, setRemoving] = useState(null);
   const [q, setQ] = useState('');                   // filter: text in the item name
   const [show, setShow] = useState('all');          // filter: 'all' | 'ticked'
-  const name = t('examine.pasthistory');
+  const name = t(`examine.${kind}`);
+  const text_ = KIND_TEXT[kind];
+  const withQuestions = kind === 'pasthistory';
   // every item's questions { [itemId]: { rows, added } }; replaced per item after an add / edit / delete
-  const questions = useAsync(() => api('/visits/pasthistory-questions'), []);
+  const questions = useAsync(() => (withQuestions ? api('/visits/pasthistory-questions') : Promise.resolve({})), [withQuestions]);
   const [qChanged, setQChanged] = useState({});
   const qmap = { ...(questions.data || {}), ...qChanged };
 
@@ -44,13 +54,16 @@ export default function PastHistoryList({ list, onListChange, value, onChange, c
     ? value.filter((h) => key(h.item) !== key(item))
     : [...value, { item, note: '' }]);
   const setNote = (item, note) => onChange(value.map((h) => (key(h.item) === key(item) ? { ...h, note } : h)));
+  const withDuration = kind === 'medhistory';
+  const rowOf = (item) => value.find((h) => key(h.item) === key(item)) || {};
+  const setField = (item, patch) => onChange(value.map((h) => (key(h.item) === key(item) ? { ...h, ...patch } : h)));
   const answersOf = (item) => value.find((h) => key(h.item) === key(item))?.answers || [];
   const setAnswers = (item, answers) => onChange(value.map((h) => (key(h.item) === key(item) ? { ...h, answers } : h)));
 
   return (
-    <div className="dosdont pasthistory">
+    <div className={`dosdont ${kind}`}>
       <div className="dosdont-head">
-        <h3>{t('examine.pastHistory')}</h3>
+        <h3>{t(text_.title)}</h3>
         <ListTools mode={mode} setMode={setMode} onNew={() => setEditing(newListRow(list))} />
       </div>
       {copiedFrom && <p className="ph-copied small">{t('examine.pastCopied', { date: fmtDate(copiedFrom) })}</p>}
@@ -84,9 +97,20 @@ export default function PastHistoryList({ list, onListChange, value, onChange, c
                   <input type="checkbox" checked={ticked} onChange={() => toggle(item)} />
                   <span className="dosdont-item">{item}</span>
                 </label>
-                {ticked && (
+                {ticked && withDuration && (
+                  <span className="ph-duration">
+                    <input className="ph-dur" value={rowOf(item).dur || ''} maxLength={MAX_PAST_DURATION} inputMode="numeric"
+                      placeholder={t('examine.durationPh')} aria-label={`${item}: ${t('examine.howLong')}`}
+                      onChange={(e) => setField(item, { dur: e.target.value, unit: rowOf(item).unit || 'years' })} />
+                    <select className="ph-unit" value={rowOf(item).unit || 'years'} aria-label={`${item}: ${t('examine.durationUnit')}`}
+                      onChange={(e) => setField(item, { unit: e.target.value })}>
+                      {DURATION_UNITS.map((u) => <option key={u} value={u}>{t(`examine.unit.${u}`)}</option>)}
+                    </select>
+                  </span>
+                )}
+                {ticked && !withDuration && (
                   <input className="ph-note" value={noteOf.get(key(item))} maxLength={MAX_PAST_NOTE}
-                    placeholder={t('examine.pastNote')} aria-label={`${item}: ${t('examine.pastNote')}`}
+                    placeholder={t(text_.note)} aria-label={`${item}: ${t(text_.note)}`}
                     onChange={(e) => setNote(item, e.target.value)} />
                 )}
                 {mode === 'edit' && row && (
@@ -101,7 +125,7 @@ export default function PastHistoryList({ list, onListChange, value, onChange, c
                     <Icon name="trash" size={14} />
                   </button>
                 )}
-                {ticked && (row || answersOf(item).length > 0) && (
+                {withQuestions && ticked && (row || answersOf(item).length > 0) && (
                   <PastQuestions item={item} itemId={row?.id}
                     qlist={(row && qmap[row.id]) || { rows: [], added: [] }} loading={!!row && !qmap[row.id] && questions.loading}
                     onQListChange={(r) => setQChanged((m) => ({ ...m, [row.id]: { rows: r.rows, added: r.added } }))}
@@ -112,9 +136,9 @@ export default function PastHistoryList({ list, onListChange, value, onChange, c
           })}
         </ul>
       )}
-      <p className="muted small dosdont-hint">{t('examine.pastHint')}</p>
+      <p className="muted small dosdont-hint">{t(text_.hint)}</p>
 
-      <RxListModals kind="pasthistory" name={name} list={list} onListChange={onListChange}
+      <RxListModals kind={kind} name={name} list={list} onListChange={onListChange}
         editing={editing} setEditing={setEditing} removing={removing} setRemoving={setRemoving}
         onRenamed={(from, to) => onChange(value.map((h) => (key(h.item) === key(from) ? { ...h, item: to } : h)))} />
     </div>
@@ -184,11 +208,16 @@ function PastQuestions({ item, itemId, qlist, loading, onQListChange, answers, o
 
 /** A patient's past history to read: each ticked item with its note, then its answered questions. */
 export function PastHistorySummary({ value = [] }) {
+  const { t } = useT();
   return (
     <div className="ph-summary">
       {value.map((h) => (
         <div key={h.item} className="ph-summary-item">
-          <div className="ph-summary-head"><Icon name="check" size={14} /> <b>{h.item}</b>{h.note && <span className="muted"> – {h.note}</span>}</div>
+          <div className="ph-summary-head">
+            <Icon name="check" size={14} /> <b>{h.item}</b>
+            {h.dur && <span className="muted"> – {h.dur} {t(`examine.unit.${h.unit || 'years'}`)}</span>}
+            {h.note && <span className="muted"> – {h.note}</span>}
+          </div>
           {h.answers?.length > 0 && (
             <dl className="pv-fields">
               {h.answers.map((x) => <div key={x.q}><dt>{x.q}</dt><dd>{x.a}</dd></div>)}
