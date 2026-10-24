@@ -198,6 +198,11 @@ router.patch('/:id/status', requirePermission('queue.update'), async (req, res) 
     const [vitals] = await query('SELECT TOP 1 id FROM patient_vitals WHERE queue_id = ?', [id]);
     if (vitals) throw conflict('This token is confirmed (vital signs are saved) and cannot be cancelled', 'TOKEN_CONFIRMED');
   }
+  // Send to doctor needs the token confirmed and vital signs saved
+  if (current.status === 'waiting' && status === 'with_doctor') {
+    const [vitals] = await query('SELECT TOP 1 id FROM patient_vitals WHERE queue_id = ?', [id]);
+    if (!vitals) throw badRequest('Confirm the token and save vital signs before sending to the doctor', 'VITALS_REQUIRED');
+  }
   const extra = status === 'with_doctor' ? ', called_at = NOW()' : status === 'done' ? ', completed_at = NOW()' : '';
   try {
     await query(`UPDATE queue_entries SET status = ?${extra} WHERE id = ? AND clinic_id = ?`, [status, id, req.clinicId]);
