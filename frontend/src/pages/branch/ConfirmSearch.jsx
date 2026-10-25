@@ -25,11 +25,14 @@ export default function ConfirmSearch() {
 
   async function confirm(p) {
     if (!doctorId) { toast(t('queue.doctorRequired'), 'error'); return; }
+    // already seen today (Done): a second consultation the same day gets its own new token
+    const again = p.queue_status === 'done';
+    if (again && !window.confirm(t('tokens.bookAgainConfirm', { name: p.name, n: p.token_no }))) return;
     setBusyId(p.id);
     try {
       const entry = await api('/queue', {
         method: 'POST',
-        body: { patient_id: p.id, visit_type: p.last_visit ? 'follow_up' : 'new', doctor_id: doctorId },
+        body: { patient_id: p.id, visit_type: p.last_visit || again ? 'follow_up' : 'new', doctor_id: doctorId },
       });
       setLast(entry);
       toast(t('queue.confirmed', { n: entry.token_no, name: p.name }));
@@ -89,7 +92,10 @@ export default function ConfirmSearch() {
                   <div className="result-side">
                     <span className="token-chip">#{p.token_no}</span>
                     <StatusBadge status={p.queue_status} />
-                    {auth.can('vitals.record') && (
+                    {p.queue_status === 'done' ? (
+                      <Button size="sm" onClick={() => confirm(p)} loading={busyId === p.id} disabled={!doctorId}
+                        title={!doctorId ? t('queue.doctorRequired') : undefined}>{t('queue.confirmAgain')}</Button>
+                    ) : auth.can('vitals.record') && (
                       <Button size="sm" variant="ghost" onClick={() => setVitalsFor({ id: p.queue_id, token_no: p.token_no, patient_name: p.name })}>
                         {t('vitals.title')}
                       </Button>
