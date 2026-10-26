@@ -360,7 +360,7 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
   if (!patient) throw notFound('Patient');
   const visits = await query(
     `SELECT v.id, v.visit_date, v.complaints, v.examination_notes, v.diagnosis, v.vitals, v.advice, v.follow_up_date,
-            v.dos_donts, v.past_history, v.medical_history, v.consultation_fee, v.status, d.name AS doctor_name, q.token_no,
+            v.dos_donts, v.past_history, v.medical_history, v.consultation_fee, v.status, v.queue_id, d.name AS doctor_name, q.token_no,
             pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm, pv.temperature_f,
             pv.comments AS vitals_comments, pv.id AS vitals_id
        FROM visits v LEFT JOIN employees d ON d.id = v.doctor_id LEFT JOIN queue_entries q ON q.id = v.queue_id

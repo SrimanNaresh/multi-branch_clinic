@@ -111,6 +111,12 @@ function PastVisitDetails({ v }) {
         <Fields rows={[[t('vitals.comments'), v.vitals_comments]]} />
       </section>
     ),
+    v.queue_id && (
+      <section key="attach" className="pv-sec wide">
+        <h4>{t('attach.title')}</h4>
+        <Attachments entry={{ id: v.queue_id }} canEdit={false} showHead={false} />
+      </section>
+    ),
     [v.complaints, v.examination_notes, v.diagnosis].some(filled) && (
       <section key="clinical" className="pv-sec">
         <h4>{t('examine.clinical')}</h4>
