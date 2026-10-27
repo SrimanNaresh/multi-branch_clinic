@@ -32,7 +32,7 @@ test('new dosages go to the end; Order and text are tidied', () => {
 
 test('Repetition starts with TDS, QDS, OD, HS', async () => {
   const { defaultsFor, RX_LIST_KINDS } = await import('../../shared/dosage.js');
-  assert.deepEqual(RX_LIST_KINDS, ['potency', 'dosage', 'repetition', 'dosdont', 'pasthistory', 'medhistory']);
+  assert.deepEqual(RX_LIST_KINDS, ['potency', 'dosage', 'repetition', 'dosdont', 'pasthistory', 'medhistory', 'dbroutine', 'dbduration', 'dbfrequency']);
   assert.deepEqual(dosageOptions(defaultsFor('medhistory')), ['Smoking', 'Alcohol', 'Tobacco']);
   assert.deepEqual(dosageOptions(defaultsFor('repetition')), ['TDS', 'QDS', 'OD', 'HS']);
 });

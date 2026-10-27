@@ -270,6 +270,21 @@ BEGIN
   END
 END
 GO
+/* Blood pressure of the right arm (Vital Signs → R – Blood pressure); bp_systolic / bp_diastolic are the left arm */
+IF COL_LENGTH(N'dbo.patient_vitals', N'bp_r_systolic') IS NULL
+  ALTER TABLE dbo.patient_vitals ADD
+    bp_r_systolic  SMALLINT NULL CONSTRAINT chk_vitals_r_sys CHECK (bp_r_systolic BETWEEN 50 AND 260),
+    bp_r_diastolic SMALLINT NULL CONSTRAINT chk_vitals_r_dia CHECK (bp_r_diastolic BETWEEN 30 AND 160),
+    CONSTRAINT chk_vitals_r_bp CHECK ((bp_r_systolic IS NULL AND bp_r_diastolic IS NULL) OR (bp_r_diastolic < bp_r_systolic));
+GO
+/* Blood sugar (Vital Signs → Blood sugar): the test picked from the drop-down and its result –
+   FBS / PPBS / RBS in mg/dL, HbA1c in %; both NULL = not checked */
+IF COL_LENGTH(N'dbo.patient_vitals', N'sugar_type') IS NULL
+  ALTER TABLE dbo.patient_vitals ADD
+    sugar_type  NVARCHAR(10) NULL CONSTRAINT chk_vitals_sugar_type CHECK (sugar_type IN (N'FBS', N'PPBS', N'RBS', N'HbA1c')),
+    sugar_value DECIMAL(4,1) NULL CONSTRAINT chk_vitals_sugar_value CHECK (sugar_value BETWEEN 3 AND 600),
+    CONSTRAINT chk_vitals_sugar CHECK ((sugar_type IS NULL AND sugar_value IS NULL) OR (sugar_type IS NOT NULL AND sugar_value IS NOT NULL));
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_vitals_patient' AND object_id = OBJECT_ID(N'dbo.patient_vitals'))
   CREATE INDEX ix_vitals_patient ON dbo.patient_vitals(clinic_id, patient_id);
 GO
@@ -438,6 +453,14 @@ GO
 IF COL_LENGTH(N'dbo.prescriptions', N'potency') IS NULL
   ALTER TABLE dbo.prescriptions ADD potency NVARCHAR(100) NULL;
 GO
+-- Examine → Prescription → Un Willing (under the medicines): ticked when the patient is unwilling to take the prescription
+IF COL_LENGTH(N'dbo.visits', N'rx_unwilling') IS NULL
+  ALTER TABLE dbo.visits ADD rx_unwilling BIT NOT NULL CONSTRAINT df_visits_rx_unwilling DEFAULT 0;
+GO
+-- Examine → Advice → Un Willing: ticked when the patient is unwilling to follow the advice
+IF COL_LENGTH(N'dbo.visits', N'advice_unwilling') IS NULL
+  ALTER TABLE dbo.visits ADD advice_unwilling BIT NOT NULL CONSTRAINT df_visits_advice_unwilling DEFAULT 0;
+GO
 -- Delete in the Potency / Dosage lists hides the row (is_deleted = 1) so deleted defaults don't come back;
 -- adding the same value again un-hides it.
 IF COL_LENGTH(N'dbo.dosage_master', N'is_deleted') IS NULL
@@ -563,6 +586,65 @@ IF COL_LENGTH(N'dbo.comparative_study', N'study_time') < 40      -- bytes: NVARC
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_cs_patient' AND object_id = OBJECT_ID(N'dbo.comparative_study'))
   CREATE INDEX ix_cs_patient ON dbo.comparative_study(clinic_id, patient_id, study_date);
+GO
+/* Day Book (Examine → Prescription → Day Book): one row per visit – Routine, Duration, Frequency, each
+   picked from its own clinic list (same behaviour as the dosage list: + New / Edit / Delete). */
+IF OBJECT_ID(N'dbo.dbroutine_master', N'U') IS NULL
+CREATE TABLE dbo.dbroutine_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_dbroutine_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_dbroutine_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_dbroutine_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_dbroutine_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_dbroutine_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_dbroutine_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+IF OBJECT_ID(N'dbo.dbduration_master', N'U') IS NULL
+CREATE TABLE dbo.dbduration_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_dbduration_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_dbduration_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_dbduration_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_dbduration_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_dbduration_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_dbduration_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+IF OBJECT_ID(N'dbo.dbfrequency_master', N'U') IS NULL
+CREATE TABLE dbo.dbfrequency_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_dbfrequency_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_dbfrequency_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_dbfrequency_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_dbfrequency_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_dbfrequency_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_dbfrequency_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+IF COL_LENGTH(N'dbo.visits', N'daybook_routine') IS NULL
+  ALTER TABLE dbo.visits ADD
+    daybook_routine   NVARCHAR(100) NULL,
+    daybook_duration  NVARCHAR(100) NULL,
+    daybook_frequency NVARCHAR(100) NULL;
+GO
+-- Day Book → Routine is multi-select: saved as a JSON list, e.g. ["Walking","Yoga"]
+IF COL_LENGTH(N'dbo.visits', N'daybook_routine') < 2000      -- bytes: NVARCHAR(1000) = 2000
+  ALTER TABLE dbo.visits ALTER COLUMN daybook_routine NVARCHAR(1000) NULL;
+GO
+-- Day Book → day-wise chart: what is typed in its boxes, as JSON { "2026-10-27|Walking|once": "20 min", … }
+IF COL_LENGTH(N'dbo.visits', N'daybook_chart') IS NULL
+  ALTER TABLE dbo.visits ADD daybook_chart NVARCHAR(MAX) NULL;
+GO
+-- Day Book → Date (the screen fills in today's date)
+IF COL_LENGTH(N'dbo.visits', N'daybook_date') IS NULL
+  ALTER TABLE dbo.visits ADD daybook_date DATE NULL;
 GO
 /* one-time move: a patient's Past History goes onto the patient's latest visit */
 UPDATE v SET past_history = p.past_history

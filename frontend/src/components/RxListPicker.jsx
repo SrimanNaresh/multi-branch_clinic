@@ -3,6 +3,8 @@
 // rename / change Order in the same pop-up) and "Delete" (a bin on each row, with a confirm pop-up).
 // Edit / Delete stay on until "Done" or the list closes.
 // Keyboard: ↑ / ↓ move through the list, Enter picks (or "+ New" for unlisted text), Esc closes.
+// `multiple` (Day Book → Routine): value is an array; clicking a row ticks / unticks it and the list
+// stays open; the box shows the ticked ones ("Walking, Yoga") and, while open, filters as you type.
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useT } from '../lib/i18n.jsx';
@@ -15,27 +17,30 @@ import Icon from './Icon.jsx';
  * list: { rows: [text], added: [{ id, value, sort_order }] } from /api/visits/{kind}-options
  * onListChange(list) is called after an add or edit, so every line shares the new list.
  */
-export default function RxListPicker({ kind, value, list, onChange, onListChange, disabled }) {
+export default function RxListPicker({ kind, value, list, onChange, onListChange, disabled, multiple = false }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);     // pop-up: { id (null = new), old, text, order, oldOrder }
   const [mode, setMode] = useState(null);           // null | 'edit' | 'delete' – row icons only in a mode
   const [removing, setRemoving] = useState(null);   // row waiting for delete confirmation
   const [active, setActive] = useState(-1);         // highlighted row, -1 = none
+  const [filter, setFilter] = useState('');         // multiple: text typed to filter the list
   const box = useRef(null);
   const menu = useRef(null);
   const menuId = useId();
   const name = t(`examine.${kind}`);                 // "Potency" / "Dosage"
 
   useEffect(() => {
-    const close = (e) => { if (box.current && !box.current.contains(e.target)) { setOpen(false); setMode(null); } };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    const outside = (e) => { if (box.current && !box.current.contains(e.target)) { setOpen(false); setMode(null); setFilter(''); } };
+    document.addEventListener('mousedown', outside);
+    return () => document.removeEventListener('mousedown', outside);
   }, []);
 
   const options = list.rows;
   const rowBy = new Map((list.added || []).map((a) => [a.value.toLowerCase(), a]));
-  const typed = cleanDosage(value);
+  const picked = multiple ? (value || []) : null;
+  const isPicked = (o) => picked.some((p) => p.toLowerCase() === o.toLowerCase());
+  const typed = cleanDosage(multiple ? filter : value);
   const q = typed.toLowerCase();
   const shown = options.filter((o) => !q || o.toLowerCase().includes(q));
   const exact = options.some((o) => o.toLowerCase() === q);
@@ -57,7 +62,7 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
       const step = e.key === 'ArrowDown' ? 1 : -1;
       setActive((a) => (a < 0 && step < 0 ? shown.length - 1 : (a + step + shown.length) % shown.length));
     } else if (e.key === 'Escape') {
-      setOpen(false); setMode(null);
+      close();
     } else if (e.key === 'Enter' && open) {
       e.preventDefault();
       if (active >= 0 && shown[active]) pick(shown[active]);
@@ -66,7 +71,15 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
     }
   };
 
-  const pick = (v) => { onChange(v); setOpen(false); setMode(null); };
+  const pick = (v) => {
+    if (multiple) {                                 // tick / untick, keep the list open
+      onChange(isPicked(v) ? picked.filter((p) => p.toLowerCase() !== v.toLowerCase()) : [...picked, v]);
+      setFilter('');
+      return;
+    }
+    onChange(v); setOpen(false); setMode(null);
+  };
+  const close = () => { setOpen(false); setMode(null); setFilter(''); };
   const toggleMode = (m) => setMode((cur) => (cur === m ? null : m));
 
   const startNew = () => {
@@ -77,11 +90,12 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
   return (
     <div className="picker rx-list-picker" ref={box}>
       <input className="combo-input" aria-label={name} placeholder={t('rxList.placeholder')} autoComplete="off"
-        value={value || ''} disabled={disabled}
+        value={multiple ? (showMenu ? filter : picked.join(', ')) : value || ''} disabled={disabled}
+        title={multiple ? picked.join(', ') : undefined}
         role="combobox" aria-expanded={showMenu} aria-controls={menuId} aria-autocomplete="list"
         aria-activedescendant={showMenu && active >= 0 ? `${menuId}-${active}` : undefined}
         onFocus={() => setOpen(true)} onClick={() => setOpen(true)}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onChange={(e) => { if (multiple) setFilter(e.target.value); else onChange(e.target.value); setOpen(true); }}
         onKeyDown={onKeyDown} />
       {showMenu && (
         <ul className="picker-menu dosage-menu" id={menuId} ref={menu}>
@@ -90,7 +104,11 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
             return (
               <li key={o} className="dosage-row" id={`${menuId}-${idx}`}>
                 <button type="button" tabIndex={-1} className={idx === active ? 'active' : ''}
-                  onMouseEnter={() => setActive(idx)} onClick={() => pick(o)}><span className="pick-title">{o}</span></button>
+                  aria-selected={multiple ? isPicked(o) : undefined}
+                  onMouseEnter={() => setActive(idx)} onClick={() => pick(o)}>
+                  {multiple && <input type="checkbox" className="pick-check" tabIndex={-1} readOnly checked={isPicked(o)} />}
+                  <span className="pick-title">{o}</span>
+                </button>
                 {mode === 'edit' && row && (
                   <button type="button" className="icon-btn dosage-pencil" title={t('rxList.edit', { name })} aria-label={`${t('rxList.edit', { name })}: ${o}`}
                     onClick={() => { setOpen(false); setEditing(editListRow(row)); }}>
@@ -122,8 +140,11 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
 
       <RxListModals kind={kind} name={name} list={list} onListChange={onListChange}
         editing={editing} setEditing={setEditing} removing={removing} setRemoving={setRemoving}
-        onAdded={onChange}
-        onRenamed={(from, to) => { if (cleanDosage(value).toLowerCase() === from.toLowerCase()) onChange(to); }} />
+        onAdded={(v) => (multiple ? !isPicked(v) && onChange([...picked, v]) : onChange(v))}
+        onRenamed={(from, to) => {
+          if (multiple) onChange(picked.map((p) => (p.toLowerCase() === from.toLowerCase() ? to : p)));
+          else if (cleanDosage(value).toLowerCase() === from.toLowerCase()) onChange(to);
+        }} />
     </div>
   );
 }

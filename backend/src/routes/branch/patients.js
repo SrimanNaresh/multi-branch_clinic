@@ -59,6 +59,13 @@ router.get('/', requirePermission('patient.view'), async (req, res) => {
   res.json({ rows, total, page, limit });
 });
 
+// GET /api/patients/clinic-info – the clinic's name, address and phone for printed forms (Patient Consent Form)
+router.get('/clinic-info', requirePermission('patient.view'), async (req, res) => {
+  const [clinic] = await query('SELECT name, address, city, phone FROM clinics WHERE id = ?', [req.clinicId]);
+  if (!clinic) throw notFound('Clinic');
+  res.json(clinic);
+});
+
 router.get('/:id', requirePermission('patient.view'), async (req, res) => {
   const row = await getPatient(req.clinicId, toId(req.params.id));
   if (!row) throw notFound('Patient');

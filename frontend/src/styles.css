@@ -94,6 +94,7 @@ input[type='checkbox'] { width: 16px; height: 16px; min-height: 0; accent-color:
 .vitals-grid .field { gap: 3px; }
 .bp-pair { display: flex; align-items: center; gap: 6px; }
 .bp-pair b { color: var(--muted); }
+.vitals-grid select.sugar-type { width: 90px; }
 input.invalid { border-color: var(--danger); }
 .vitals-meta { margin: 10px 0 0; }
 .vitals-cell { display: inline-flex; align-items: center; gap: 4px; }
@@ -362,6 +363,7 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 /* Examine tabs split in two: fields on the left, a list (Past History / Do's and Don'ts) on the right */
 /* Complaints & diagnosis: section tabs down the left, the chosen section on the right */
 .subtabs { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 18px; align-items: start; }
+.subtabs.subtabs-narrow { grid-template-columns: 160px minmax(0, 1fr); gap: 14px; }
 .subtab-list { display: grid; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); position: sticky; top: calc(var(--header-h) + 12px); }
 .subtab-list button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--text); text-align: left; cursor: pointer; }
 .subtab-list button:hover { background: var(--brand-50); }
@@ -589,11 +591,50 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .patient-strip .muted { font-size: 13px; }
 .patient-strip .token-chip.big { font-size: 15px; min-width: 44px; padding: 3px 8px; }
 .rx-table { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-.rx-row { display: grid; grid-template-columns: minmax(170px, 2fr) 0.9fr 1fr 0.9fr 0.8fr 1.4fr 34px; gap: 8px; align-items: center; position: relative; }
+.rx-row { display: grid; grid-template-columns: minmax(130px, 2fr) repeat(3, minmax(0, 1fr)) minmax(0, 0.8fr) minmax(0, 1.4fr) 34px 34px; gap: 6px; align-items: center; position: relative; }
 .rx-head { font-size: 12px; color: var(--muted); font-weight: 600; }
 .rx-stock { grid-column: 1; margin-top: -4px; font-size: 11.5px; }
 .rx-stock.warn { color: var(--warning); }
 .rx-locked { font-weight: 600; }
+.rx-foot { display: flex; align-items: center; gap: 16px; }
+.rx-unwilling { flex: none; white-space: nowrap; }
+.icon-btn.rx-add { color: var(--brand); }
+/* Patient & Queue → Patient Consent Form (screen and printout) */
+.consent-print { max-width: 800px; }
+.consent-title { text-align: center; font-size: 18px; letter-spacing: .5px; text-transform: uppercase; margin: 14px 0 12px; }
+.consent-details { display: grid; gap: 8px; margin-bottom: 14px; }
+.consent-line { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px; align-items: end; }
+.consent-label { font-weight: 600; }
+.consent-value { min-height: 22px; border-bottom: 1px dotted #777; padding: 0 4px 2px; }
+.consent-text { line-height: 1.6; margin: 10px 0; }
+.consent-points { line-height: 1.6; margin: 6px 0 10px; padding-left: 22px; }
+.consent-points li { margin-bottom: 4px; }
+.consent-signs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin: 48px 0 18px; text-align: center; font-weight: 600; }
+.consent-signs .rx-sign-line { margin-bottom: 6px; }
+.consent-foot .consent-line { grid-template-columns: 240px minmax(0, 1fr); }
+@media (max-width: 640px) {
+  .consent-line, .consent-foot .consent-line { grid-template-columns: 1fr; gap: 2px; }
+  .consent-signs { grid-template-columns: 1fr; gap: 36px; }
+}
+/* Day Book → day-wise chart (screen preview and printout) */
+.daybook-chart-head { margin-top: 18px; }
+.daybook-days { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.daybook-days input { width: 70px; }
+.daybook-chart { min-width: 480px; }
+.daybook-chart th, .daybook-chart td { padding: 5px 8px; }
+.daybook-chart .center { text-align: center; }
+.daybook-chart tr.not-due td { color: var(--muted); background: var(--surface-2); }
+.daybook-chart .daybook-remarks { min-width: 160px; }
+.daybook-chart .chart-input { width: 100%; min-width: 70px; height: 28px; min-height: 28px; padding: 2px 6px; text-align: center; }
+.daybook-chart .chart-input.wide { text-align: left; }
+/* printout: a blank box to write in (or what was typed) */
+.daybook-chart .chart-box { display: block; min-width: 70px; min-height: 24px; padding: 3px 6px; border: 1px solid #555; border-radius: 3px; }
+.daybook-chart .chart-box.wide { text-align: left; }
+.daybook-note { margin-top: 10px; }
+.db-row { display: grid; grid-template-columns: 150px repeat(3, minmax(0, 1fr)); gap: 8px; align-items: center; }
+.vitals-history td.nowrap { white-space: nowrap; }
+.vitals-history-title { margin: 0 0 10px; font-size: 15px; }
+.check-line { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
 .picker { position: relative; }
 .picker-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-lg); list-style: none; margin: 0; padding: 4px; z-index: 40; max-height: 280px; overflow-y: auto; }
 .picker-menu button { display: flex; justify-content: space-between; gap: 10px; width: 100%; border: 0; background: transparent; padding: 7px 8px; border-radius: 6px; cursor: pointer; font: inherit; text-align: left; }
@@ -603,6 +644,7 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .picker-menu button { align-items: center; }
 .pick-names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .pick-title { font-weight: 600; }
+.dosage-menu .pick-check { width: 15px; height: 15px; margin: 0 8px 0 0; vertical-align: -2px; pointer-events: none; accent-color: var(--brand); }
 .pick-generic { font-size: 11.5px; color: var(--muted); }
 .dosage-menu .dosage-row { display: flex; align-items: center; gap: 2px; }
 .dosage-menu .dosage-row > button:first-child { flex: 1; }
@@ -670,12 +712,16 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .split.main-first .split-main { order: -1; }
   .slot-row { grid-template-columns: 28px repeat(3, minmax(0, 1fr)); }
   .slot-row > .slot-no { grid-row: span 2; }
+}
+/* Prescription: one row per medicine on laptops; stacked into a box per medicine on phones */
+@media (max-width: 760px) {
   .rx-row { grid-template-columns: 1fr 1fr 1fr; }
   .rx-row > .picker:first-child, .rx-row > .rx-locked { grid-column: 1 / -1; }
   .rx-row > input:last-of-type { grid-column: span 2; }
   .rx-head { display: none; }
   .rx-row { padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
   .rx-stock { grid-column: 1 / -1; margin-top: 0; }
+  .db-row { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {
@@ -779,7 +825,12 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .content { padding: 0; max-width: none; }
   .invoice { border: 0; padding: 0; max-width: none; }
   .inv-table th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .daybook-print { page: daybook; }
+  .consent-print { page: consent; max-width: none; font-size: 12.5px; }
+  .daybook-chart tr.not-due td { background: #f3f3f3 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+@page daybook { size: A4 landscape; margin: 10mm; }
+@page consent { size: A4 portrait; margin: 14mm; }
 /* Patient card printed from the Patient List pop-up: just the card */
 @media print {
   body.printing-card .content > :not(.modal-backdrop) { display: none !important; }

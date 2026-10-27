@@ -23,6 +23,8 @@ import ConfirmList from './pages/branch/ConfirmList.jsx';
 import Tokens from './pages/branch/Tokens.jsx';
 import Examine from './pages/branch/Examine.jsx';
 import PrescriptionPrint from './pages/branch/PrescriptionPrint.jsx';
+import DayBookPrint from './pages/branch/DayBookPrint.jsx';
+import ConsentForm from './pages/branch/ConsentForm.jsx';
 import PatientHistory from './pages/branch/PatientHistory.jsx';
 import ItemForm from './pages/branch/ItemForm.jsx';
 import ItemList from './pages/branch/ItemList.jsx';
@@ -55,10 +57,13 @@ const ROUTES = [
   { path: '/queue/confirm', perm: 'queue.confirm', el: ConfirmSearch, branch: true },
   { path: '/queue', perm: 'queue.view', el: ConfirmList, branch: true },
   { path: '/queue/tokens', perm: 'queue.view', el: Tokens, branch: true },
+  { path: '/queue/consent', perm: 'patient.view', el: ConsentForm, branch: true },
+  { path: '/queue/consent/:patientId', perm: 'patient.view', el: ConsentForm, branch: true },
 
   { path: '/doctor/examine', perm: 'visit.examine', el: Examine, branch: true },
   { path: '/doctor/examine/:visitId', perm: 'visit.examine', el: Examine, branch: true },
   { path: '/doctor/prescription/:visitId', perm: 'patient.history', el: PrescriptionPrint, branch: true },
+  { path: '/doctor/daybook/:visitId', perm: 'patient.history', el: DayBookPrint, branch: true },
   { path: '/doctor/history', perm: 'patient.history', el: PatientHistory, branch: true },
   { path: '/doctor/history/:patientId', perm: 'patient.history', el: PatientHistory, branch: true },
 

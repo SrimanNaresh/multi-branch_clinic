@@ -8,6 +8,10 @@ export const RX_LIST_DEFAULTS = {
   dosdont: ['Smoking', 'Alcohol'],                 // Examine → Advice → Do's and Don'ts (saved in visits.dos_donts)
   pasthistory: ['ENT', 'Ortho', 'Dental'],         // Examine → Complaints & diagnosis → Examination History (visits.past_history)
   medhistory: ['Smoking', 'Alcohol', 'Tobacco'],   // Examine → Complaints & diagnosis → Medical History (visits.medical_history)
+  // Examine → Prescription → Day Book: one row per visit (visits.daybook_routine / _duration / _frequency)
+  dbroutine: ['Walking', 'Yoga', 'Exercise', 'Meditation'],
+  dbduration: ['15 minutes', '30 minutes', '1 hour'],
+  dbfrequency: ['Daily', 'Twice a day', 'Weekly'],
 };
 export const RX_LIST_KINDS = Object.keys(RX_LIST_DEFAULTS);
 export const DOSAGE_MASTER = RX_LIST_DEFAULTS.dosage;

@@ -8,6 +8,7 @@ import { cleanDosage, cleanOrder, defaultsFor, dosageOptions, MAX_ORDER, nextOrd
 import { cleanDosDonts, parseDosDonts } from '../../../../shared/dosdonts.js';
 import { cleanPastHistory, parsePastHistory, pastQuestionDefaults } from '../../../../shared/pastHistory.js';
 import { checkComparative } from '../../../../shared/comparative.js';
+import { cleanChartValues } from '../../../../shared/daybook.js';
 
 const router = Router();
 router.use(clinicScope());
@@ -30,13 +31,29 @@ async function carryForward(visit, clinicId, column) {
   if (visit[column].length) visit[`${column}_from`] = prev.visit_date;
 }
 
+/** Day Book → Routine (multi-select): saved as a JSON list; plain text from before counts as one routine. */
+function parseRoutines(raw) {
+  if (!raw) return [];
+  if (String(raw).startsWith('[')) { try { return JSON.parse(raw).filter((r) => typeof r === 'string'); } catch { return []; } }
+  return [String(raw)];
+}
+/** Day Book chart boxes: saved as JSON { key: text }; {} when none. */
+function parseChart(raw) {
+  if (!raw) return {};
+  try { return cleanChartValues(JSON.parse(raw)); } catch { return {}; }
+}
+function cleanRoutines(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : [list]).map(cleanDosage).filter((r) => r && !seen.has(r.toLowerCase()) && seen.add(r.toLowerCase())).slice(0, 20);
+}
+
 async function loadVisit(clinicId, id) {
   const [visit] = await query(
     `SELECT v.*, p.patient_code, p.name AS patient_name, p.gender, p.age_years, p.dob, p.mobile, p.blood_group,
             d.name AS doctor_name, d.qualification AS doctor_qualification, d.designation AS doctor_designation,
             q.token_no, q.queue_date, q.status AS queue_status,
             c.name AS clinic_name, c.address AS clinic_address, c.city AS clinic_city, c.phone AS clinic_phone,
-            pv.id AS vitals_id, pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm,
+            pv.id AS vitals_id, pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.bp_r_systolic, pv.bp_r_diastolic, pv.pulse_bpm, pv.sugar_type, pv.sugar_value,
             pv.temperature_f, pv.comments AS vitals_comments,
             (SELECT COUNT(*) FROM pharmacy_issues pi WHERE pi.visit_id = v.id) AS issue_count,
             (SELECT TOP 1 b.id FROM bills b WHERE b.visit_id = v.id AND b.status <> 'cancelled') AS bill_id
@@ -52,6 +69,8 @@ async function loadVisit(clinicId, id) {
   if (!visit) return null;
   if (typeof visit.vitals === 'string') { try { visit.vitals = JSON.parse(visit.vitals); } catch { visit.vitals = null; } }
   visit.dos_donts = parseDosDonts(visit.dos_donts);
+  visit.daybook_routine = parseRoutines(visit.daybook_routine);
+  visit.daybook_chart = parseChart(visit.daybook_chart);
   await carryForward(visit, clinicId, 'past_history');
   await carryForward(visit, clinicId, 'medical_history');
   visit.prescriptions = await query(
@@ -97,9 +116,11 @@ router.post('/start', requirePermission('visit.examine'), async (req, res) => {
 const RX_LIST_TABLE = {
   dosage: 'dosage_master', potency: 'potency_master', repetition: 'repetition_master',
   dosdont: 'dosdont_master', pasthistory: 'pasthistory_master', medhistory: 'medhistory_master',
+  dbroutine: 'dbroutine_master', dbduration: 'dbduration_master', dbfrequency: 'dbfrequency_master',
 };
 const RX_LIST_NAME = {
   dosage: 'dosage', potency: 'potency', repetition: 'repetition', dosdont: 'item', pasthistory: 'item', medhistory: 'item',
+  dbroutine: 'routine', dbduration: 'duration', dbfrequency: 'frequency',
 };
 
 async function ensureDefaults(kind, clinicId, userId) {
@@ -359,9 +380,9 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
   );
   if (!patient) throw notFound('Patient');
   const visits = await query(
-    `SELECT v.id, v.visit_date, v.complaints, v.examination_notes, v.diagnosis, v.vitals, v.advice, v.follow_up_date,
+    `SELECT v.id, v.visit_date, v.complaints, v.examination_notes, v.diagnosis, v.vitals, v.advice, v.advice_unwilling, v.rx_unwilling, v.daybook_date, v.daybook_routine, v.daybook_duration, v.daybook_frequency, v.follow_up_date,
             v.dos_donts, v.past_history, v.medical_history, v.consultation_fee, v.status, v.queue_id, d.name AS doctor_name, q.token_no,
-            pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.pulse_bpm, pv.temperature_f,
+            pv.height_cm, pv.weight_kg, pv.bp_systolic, pv.bp_diastolic, pv.bp_r_systolic, pv.bp_r_diastolic, pv.pulse_bpm, pv.temperature_f, pv.sugar_type, pv.sugar_value,
             pv.comments AS vitals_comments, pv.id AS vitals_id
        FROM visits v LEFT JOIN employees d ON d.id = v.doctor_id LEFT JOIN queue_entries q ON q.id = v.queue_id
        LEFT JOIN patient_vitals pv ON pv.queue_id = v.queue_id
@@ -376,6 +397,7 @@ router.get('/patient/:patientId', requirePermission('patient.history'), async (r
     for (const v of visits) {
       if (typeof v.vitals === 'string') { try { v.vitals = JSON.parse(v.vitals); } catch { v.vitals = null; } }
       v.dos_donts = parseDosDonts(v.dos_donts);
+      v.daybook_routine = parseRoutines(v.daybook_routine);
       v.past_history = parsePastHistory(v.past_history);
       v.medical_history = parsePastHistory(v.medical_history);
       v.prescriptions = rx.filter((r) => r.visit_id === v.id);
@@ -397,6 +419,24 @@ router.put('/:id', requirePermission('visit.examine'), async (req, res) => {
   const data = pick(body, ['complaints', 'examination_notes', 'diagnosis', 'advice', 'follow_up_date']);
   if (data.follow_up_date && !isISODate(data.follow_up_date)) throw badRequest('Invalid follow-up date', 'VALIDATION');
   if (body.consultation_fee !== undefined) data.consultation_fee = toAmount(body.consultation_fee, 'consultation_fee');
+  if (body.advice_unwilling !== undefined) data.advice_unwilling = !!body.advice_unwilling;
+  if (body.rx_unwilling !== undefined) data.rx_unwilling = !!body.rx_unwilling;
+  // Day Book: one row per visit, each value as picked (or typed) from its list
+  if (body.daybook_routine !== undefined) {
+    const routines = cleanRoutines(body.daybook_routine);
+    data.daybook_routine = routines.length ? JSON.stringify(routines) : null;
+  }
+  for (const k of ['daybook_duration', 'daybook_frequency']) {
+    if (body[k] !== undefined) data[k] = cleanDosage(body[k]) || null;
+  }
+  if (body.daybook_chart !== undefined) {
+    const cells = cleanChartValues(body.daybook_chart);
+    data.daybook_chart = Object.keys(cells).length ? JSON.stringify(cells) : null;
+  }
+  if (body.daybook_date !== undefined) {
+    if (body.daybook_date && !isISODate(body.daybook_date)) throw badRequest('Invalid Day Book date', 'VALIDATION');
+    data.daybook_date = body.daybook_date || null;
+  }
   if (body.vitals !== undefined) data.vitals = body.vitals ? JSON.stringify(body.vitals) : null;
   if (body.dos_donts !== undefined) {
     const marks = cleanDosDonts(body.dos_donts);
