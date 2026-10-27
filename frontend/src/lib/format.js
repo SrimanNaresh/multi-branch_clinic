@@ -24,14 +24,15 @@ export const fmtTimeRange12 = (from, to) => `${fmtTime12(from)} – ${fmtTime12(
 
 /**
  * Status shown for a queue entry (the stored status is 'waiting' for the first three):
- * a patient booked from Tokens is "Token booked" until the Confirm button is clicked, then "Token confirmed";
- * a walk-in is Pre-Examine until their vital signs are saved, then "Token confirmed".
+ * every patient is Pre-Examine once their vital signs are saved; before that,
+ * a patient booked from Tokens is "Token booked" until the Confirm button is clicked, then "Token confirmed",
+ * and a walk-in (Add to queue) is "Token booked".
  * Saving vital signs never changes the stored status; only Send to doctor moves a patient to Examine.
  */
 export function queueStatus(r) {
   if (r.status !== 'waiting') return r.status;
-  if (r.slot_time) return r.arrived_at ? 'confirmed' : 'booked';
-  return r.vitals_id ? 'confirmed' : 'waiting';
+  if (r.vitals_id) return 'waiting';
+  return r.slot_time && r.arrived_at ? 'confirmed' : 'booked';
 }
 
 export function todayLocal() {

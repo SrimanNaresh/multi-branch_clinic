@@ -112,13 +112,17 @@ function BookDialog({ doctor, token, onClose, onBooked }) {
   const initial = /^[+\d\s-]{6,}$/.test(typed) ? { mobile: typed.replace(/\s/g, '') } : { name: typed };
 
   async function book(p) {
+    // already seen today (Done): a second consultation the same day gets its own new token
+    const again = p.queue_status === 'done';
+    if (again && !window.confirm(t('tokens.bookAgainConfirm', { name: p.name, n: p.token_no }))) return;
+    const moving = !!p.queue_id && !again;
     setBusy(p.id);
     try {
-      const entry = p.queue_id
+      const entry = moving
         ? await api(`/queue/${p.queue_id}/slot`, { method: 'PATCH', body: { doctor_id: doctor.id, slot_time: token.start } })
-        : await api('/queue', { method: 'POST', body: { patient_id: p.id, doctor_id: doctor.id, slot_time: token.start, visit_type: p.last_visit ? 'follow_up' : 'new' } });
+        : await api('/queue', { method: 'POST', body: { patient_id: p.id, doctor_id: doctor.id, slot_time: token.start, visit_type: p.last_visit || again ? 'follow_up' : 'new' } });
       toast(t('tokens.booked', { time: fmtTime12(token.start), name: entry.patient_name, n: entry.token_no }));
-      onBooked(entry, !p.queue_id);
+      onBooked(entry, !moving);
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -154,16 +158,22 @@ function BookDialog({ doctor, token, onClose, onBooked }) {
           {results.data.rows.map((p) => {
             const inQueue = !!p.queue_id;
             const canMove = inQueue && p.queue_status === 'waiting';
+            const seenToday = inQueue && p.queue_status === 'done';
             return (
               <li key={p.id}>
                 <div className="result-main">
                   <strong>{p.name}</strong>
                   <span className="muted">{p.patient_code} · {p.mobile} · {genderLabel(p.gender, t)} / {ageLabel(p)}</span>
                   <span className="muted small">
-                    {inQueue ? t('tokens.alreadyInQueue', { n: p.token_no }) : p.last_visit ? `${t('patients.lastVisit')} ${fmtDate(p.last_visit)}` : t('queue.firstVisit')}
+                    {seenToday ? t('tokens.seenToday', { n: p.token_no }) : inQueue ? t('tokens.alreadyInQueue', { n: p.token_no }) : p.last_visit ? `${t('patients.lastVisit')} ${fmtDate(p.last_visit)}` : t('queue.firstVisit')}
                   </span>
                 </div>
-                {(!inQueue || canMove) ? (
+                {seenToday ? (
+                  <div className="result-side">
+                    <StatusBadge status={p.queue_status} />
+                    <Button size="sm" onClick={() => book(p)} loading={busy === p.id}>{t('tokens.bookAgain')}</Button>
+                  </div>
+                ) : (!inQueue || canMove) ? (
                   <Button size="sm" onClick={() => book(p)} loading={busy === p.id}>{inQueue ? t('tokens.giveSlot') : t('tokens.book')}</Button>
                 ) : <StatusBadge status={p.queue_status} />}
               </li>

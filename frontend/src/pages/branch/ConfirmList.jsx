@@ -64,7 +64,8 @@ export default function ConfirmList() {
   const showCancelCol = rows.some((r) => canCancel(r) || canRequeue(r));
 
   const doctorCell = (r) => {
-    if (canMove && r.status === 'waiting') {
+    // Send to doctor only appears once vital signs are saved (a Tokens booking must be confirmed before vitals can be saved)
+    if (canMove && r.status === 'waiting' && r.vitals_id) {
       return (
         <button type="button" className="icon-btn img-btn" title={t('queue.sendToDoctor')} aria-label={t('queue.sendToDoctor')}
           onClick={() => move(r, 'with_doctor')}>
