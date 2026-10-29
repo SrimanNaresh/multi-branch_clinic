@@ -6,10 +6,21 @@ import { badRequest, notFound, oneOf, pick, requireFields, setClause, toId, like
 const router = Router();
 router.use(clinicScope(), requirePermission('supplier.manage'));
 
-const FIELDS = ['name', 'contact_person', 'mobile', 'email', 'address', 'gstin', 'status'];
+const FIELDS = ['name', 'contact_person', 'mobile', 'email', 'address', 'gstin', 'status',
+  'state', 'pincode', 'phone', 'dl_no1', 'dl_no2'];
+const TEXT = { state: 50, pincode: 10, phone: 20, dl_no1: 50, dl_no2: 50 };
 
-function clean(body) {
+function clean(body, isNew = false) {
   const data = pick(body, FIELDS);
+  for (const [f, max] of Object.entries(TEXT)) {
+    if (f in data) data[f] = data[f] == null || String(data[f]).trim() === '' ? null : String(data[f]).trim().slice(0, max);
+  }
+  if (data.pincode && !/^\d{6}$/.test(data.pincode)) throw badRequest('Pin code must be 6 digits', 'VALIDATION');
+  // Address and Mobile No are required: a new vendor must have them, and an edit cannot clear them
+  for (const [f, label] of [['address', 'Address'], ['mobile', 'Mobile No']]) {
+    if (f in data) data[f] = String(data[f] ?? '').trim();
+    if ((isNew || f in data) && !data[f]) throw badRequest(`${label} is required`, 'VALIDATION');
+  }
   oneOf(data.status, ['active', 'inactive'], 'status');
   if (data.gstin) {
     data.gstin = data.gstin.toUpperCase();
@@ -39,7 +50,7 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const data = clean(req.body);
+  const data = clean(req.body, true);
   requireFields(data, ['name']);
   const newId = await insertRow(query, 'suppliers', { ...data, clinic_id: req.clinicId, created_by: req.user.id });
   const [row] = await query('SELECT * FROM suppliers WHERE id = ?', [newId]);

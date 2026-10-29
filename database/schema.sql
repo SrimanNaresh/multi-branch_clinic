@@ -677,6 +677,79 @@ CREATE TABLE dbo.dbfrequency_master (
   CONSTRAINT uq_dbfrequency_clinic_value UNIQUE (clinic_id, value)
 );
 GO
+/* Pharmacy → Item → Generic Name / Manufacturer lists (same behaviour as the lists above; a clinic
+   starts with the values its items already use). Items keep the text they were saved with. */
+IF OBJECT_ID(N'dbo.generic_master', N'U') IS NULL
+CREATE TABLE dbo.generic_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_generic_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_generic_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_generic_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_generic_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_generic_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_generic_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+IF OBJECT_ID(N'dbo.manufacturer_master', N'U') IS NULL
+CREATE TABLE dbo.manufacturer_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_manufacturer_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_manufacturer_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_manufacturer_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_manufacturer_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_manufacturer_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_manufacturer_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+-- Pharmacy → Item → Type / Unit list (starts with the units items already use + Bottle, Box, …)
+IF OBJECT_ID(N'dbo.unit_master', N'U') IS NULL
+CREATE TABLE dbo.unit_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_unit_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_unit_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_unit_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_unit_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_unit_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_unit_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+-- Pharmacy → Item → Category list (starts with the categories items already use)
+IF OBJECT_ID(N'dbo.category_master', N'U') IS NULL
+CREATE TABLE dbo.category_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_category_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_category_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_category_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_category_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_category_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_category_clinic_value UNIQUE (clinic_id, value)
+);
+GO
+-- Pharmacy → Item → Potency of the item (its own list, separate from Examine → Prescription → Potency)
+IF COL_LENGTH(N'dbo.items', N'potency') IS NULL
+  ALTER TABLE dbo.items ADD potency NVARCHAR(100) NULL;
+GO
+IF OBJECT_ID(N'dbo.item_potency_master', N'U') IS NULL
+CREATE TABLE dbo.item_potency_master (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_item_potency_clinic REFERENCES dbo.clinics(id),
+  value       NVARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL CONSTRAINT df_item_potency_order DEFAULT 100,
+  is_default  BIT NOT NULL CONSTRAINT df_item_potency_default DEFAULT 0,
+  is_deleted  BIT NOT NULL CONSTRAINT df_item_potency_deleted DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_item_potency_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_item_potency_clinic_value UNIQUE (clinic_id, value)
+);
+GO
 IF COL_LENGTH(N'dbo.visits', N'daybook_routine') IS NULL
   ALTER TABLE dbo.visits ADD
     daybook_routine   NVARCHAR(100) NULL,
@@ -726,6 +799,22 @@ CREATE TABLE dbo.suppliers (
   created_at      DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
   updated_at      DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME())
 );
+GO
+-- Pharmacy → Vendor: State, Pin code, Phone (landline) and the two Drug Licence numbers
+IF COL_LENGTH(N'dbo.suppliers', N'state') IS NULL
+  ALTER TABLE dbo.suppliers ADD state NVARCHAR(50) NULL;
+GO
+IF COL_LENGTH(N'dbo.suppliers', N'pincode') IS NULL
+  ALTER TABLE dbo.suppliers ADD pincode NVARCHAR(10) NULL;
+GO
+IF COL_LENGTH(N'dbo.suppliers', N'phone') IS NULL
+  ALTER TABLE dbo.suppliers ADD phone NVARCHAR(20) NULL;
+GO
+IF COL_LENGTH(N'dbo.suppliers', N'dl_no1') IS NULL
+  ALTER TABLE dbo.suppliers ADD dl_no1 NVARCHAR(50) NULL;
+GO
+IF COL_LENGTH(N'dbo.suppliers', N'dl_no2') IS NULL
+  ALTER TABLE dbo.suppliers ADD dl_no2 NVARCHAR(50) NULL;
 GO
 
 -- Every stock change is logged here (opening, purchase, issue, adjustment, return)
@@ -826,4 +915,177 @@ CREATE TABLE dbo.bill_items (
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_bill_items_bill' AND object_id = OBJECT_ID(N'dbo.bill_items'))
   CREATE INDEX ix_bill_items_bill ON dbo.bill_items(bill_id);
+GO
+
+/* ---------- 9. PHARMACY: Purchase / Order (an order placed with a vendor; stock is not changed here) ---------- */
+IF OBJECT_ID(N'dbo.purchase_orders', N'U') IS NULL
+CREATE TABLE dbo.purchase_orders (
+  id            INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id     INT NOT NULL CONSTRAINT fk_po_clinic REFERENCES dbo.clinics(id),
+  po_no         NVARCHAR(20) NOT NULL,
+  supplier_id   INT NOT NULL CONSTRAINT fk_po_supplier REFERENCES dbo.suppliers(id),
+  po_date       DATE NOT NULL,
+  details       NVARCHAR(1000) NULL,
+  total_amount  DECIMAL(12,2) NOT NULL CONSTRAINT df_po_total DEFAULT 0,
+  created_by    INT NULL CONSTRAINT fk_po_by REFERENCES dbo.employees(id),
+  created_at    DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  updated_at    DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_po_clinic_no UNIQUE (clinic_id, po_no)
+);
+GO
+-- One row per item on the order. Item details are copied in, so the order keeps them if the item changes later.
+-- rate = mrp - mrp × disc_percent / 100; amount = qty × rate; gst_amount = amount / 100 × (cgst + sgst);
+-- total = amount + gst_amount
+IF OBJECT_ID(N'dbo.purchase_order_items', N'U') IS NULL
+CREATE TABLE dbo.purchase_order_items (
+  id             INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id      INT NOT NULL CONSTRAINT fk_poi_clinic REFERENCES dbo.clinics(id),
+  po_id          INT NOT NULL CONSTRAINT fk_poi_po REFERENCES dbo.purchase_orders(id),
+  item_id        INT NOT NULL CONSTRAINT fk_poi_item REFERENCES dbo.items(id),
+  item_name      NVARCHAR(200) NOT NULL,
+  generic_name   NVARCHAR(150) NULL,
+  hsn_code       NVARCHAR(20)  NULL,
+  manufacturer   NVARCHAR(150) NULL,
+  category       NVARCHAR(100) NULL,
+  pack           NVARCHAR(50)  NULL,
+  mrp            DECIMAL(10,2) NOT NULL DEFAULT 0,
+  disc_percent   DECIMAL(5,2)  NOT NULL DEFAULT 0,
+  rate           DECIMAL(10,2) NOT NULL DEFAULT 0,
+  qty            DECIMAL(10,2) NOT NULL DEFAULT 0,
+  amount         DECIMAL(12,2) NOT NULL DEFAULT 0,
+  cgst_percent   DECIMAL(5,2)  NOT NULL DEFAULT 0,
+  sgst_percent   DECIMAL(5,2)  NOT NULL DEFAULT 0,
+  gst_percent    DECIMAL(5,2)  NOT NULL DEFAULT 0,
+  gst_amount     DECIMAL(12,2) NOT NULL DEFAULT 0,
+  total          DECIMAL(12,2) NOT NULL DEFAULT 0
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_poi_po' AND object_id = OBJECT_ID(N'dbo.purchase_order_items'))
+  CREATE INDEX ix_poi_po ON dbo.purchase_order_items(po_id);
+GO
+
+/* ---------- 10. PHARMACY: Stock In (goods received against a purchase order) ----------
+   Saving adds each line's quantity to the item's stock (stock_movements, ref_type 'stock_in') and makes
+   its Sel.Amount the item's selling price. */
+IF OBJECT_ID(N'dbo.stock_ins', N'U') IS NULL
+CREATE TABLE dbo.stock_ins (
+  id           INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id    INT NOT NULL CONSTRAINT fk_si_clinic REFERENCES dbo.clinics(id),
+  si_no        NVARCHAR(20) NOT NULL,
+  supplier_id  INT NOT NULL CONSTRAINT fk_si_supplier REFERENCES dbo.suppliers(id),
+  po_id        INT NOT NULL CONSTRAINT fk_si_po REFERENCES dbo.purchase_orders(id),
+  si_date      DATE NOT NULL,
+  created_by   INT NULL CONSTRAINT fk_si_by REFERENCES dbo.employees(id),
+  created_at   DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  updated_at   DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_si_clinic_no UNIQUE (clinic_id, si_no)
+);
+GO
+-- sel_amount = rate + sales_percent, less disc_percent (shared/stockin.js)
+IF OBJECT_ID(N'dbo.stock_in_items', N'U') IS NULL
+CREATE TABLE dbo.stock_in_items (
+  id             INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id      INT NOT NULL CONSTRAINT fk_sii_clinic REFERENCES dbo.clinics(id),
+  stock_in_id    INT NOT NULL CONSTRAINT fk_sii_si REFERENCES dbo.stock_ins(id),
+  po_item_id     INT NOT NULL CONSTRAINT fk_sii_poi REFERENCES dbo.purchase_order_items(id),
+  item_id        INT NOT NULL CONSTRAINT fk_sii_item REFERENCES dbo.items(id),
+  item_name      NVARCHAR(200) NOT NULL,
+  batch_no       NVARCHAR(50)  NULL,
+  mfg_date       DATE NULL,
+  exp_date       DATE NULL,
+  qty            DECIMAL(10,2) NOT NULL,
+  rate           DECIMAL(10,2) NOT NULL DEFAULT 0,
+  mrp            DECIMAL(10,2) NOT NULL DEFAULT 0,
+  sales_percent  DECIMAL(6,2)  NOT NULL DEFAULT 0,
+  disc_percent   DECIMAL(5,2)  NOT NULL DEFAULT 0,
+  sel_amount     DECIMAL(10,2) NOT NULL DEFAULT 0
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_sii_si' AND object_id = OBJECT_ID(N'dbo.stock_in_items'))
+  CREATE INDEX ix_sii_si ON dbo.stock_in_items(stock_in_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_sii_poi' AND object_id = OBJECT_ID(N'dbo.stock_in_items'))
+  CREATE INDEX ix_sii_poi ON dbo.stock_in_items(po_item_id);
+GO
+
+/* ---------- 11. PHARMACY: Return (goods sent back to the vendor, from one Stock In) ----------
+   Saving takes each line's quantity out of the item's stock (stock_movements, reason 'return'). */
+IF OBJECT_ID(N'dbo.purchase_returns', N'U') IS NULL
+CREATE TABLE dbo.purchase_returns (
+  id            INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id     INT NOT NULL CONSTRAINT fk_pr_clinic REFERENCES dbo.clinics(id),
+  return_no     NVARCHAR(20) NOT NULL,
+  supplier_id   INT NOT NULL CONSTRAINT fk_pr_supplier REFERENCES dbo.suppliers(id),
+  stock_in_id   INT NOT NULL CONSTRAINT fk_pr_si REFERENCES dbo.stock_ins(id),
+  return_date   DATE NOT NULL,
+  total_amount  DECIMAL(12,2) NOT NULL CONSTRAINT df_pr_total DEFAULT 0,
+  created_by    INT NULL CONSTRAINT fk_pr_by REFERENCES dbo.employees(id),
+  created_at    DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  updated_at    DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_pr_clinic_no UNIQUE (clinic_id, return_no)
+);
+GO
+-- amount = qty × rate (the Stock In's Cur.Rate); item / batch details copied from the Stock In line
+IF OBJECT_ID(N'dbo.purchase_return_items', N'U') IS NULL
+CREATE TABLE dbo.purchase_return_items (
+  id                 INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id          INT NOT NULL CONSTRAINT fk_pri_clinic REFERENCES dbo.clinics(id),
+  return_id          INT NOT NULL CONSTRAINT fk_pri_pr REFERENCES dbo.purchase_returns(id),
+  stock_in_item_id   INT NOT NULL CONSTRAINT fk_pri_sii REFERENCES dbo.stock_in_items(id),
+  item_id            INT NOT NULL CONSTRAINT fk_pri_item REFERENCES dbo.items(id),
+  item_name          NVARCHAR(200) NOT NULL,
+  batch_no           NVARCHAR(50) NULL,
+  mfg_date           DATE NULL,
+  exp_date           DATE NULL,
+  qty                DECIMAL(10,2) NOT NULL,
+  rate               DECIMAL(10,2) NOT NULL DEFAULT 0,
+  amount             DECIMAL(12,2) NOT NULL DEFAULT 0
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_pri_pr' AND object_id = OBJECT_ID(N'dbo.purchase_return_items'))
+  CREATE INDEX ix_pri_pr ON dbo.purchase_return_items(return_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_pri_sii' AND object_id = OBJECT_ID(N'dbo.purchase_return_items'))
+  CREATE INDEX ix_pri_sii ON dbo.purchase_return_items(stock_in_item_id);
+GO
+
+/* ---------- 12. PHARMACY: Sales (counter sale to a customer) ----------
+   Saving takes each line's quantity out of the item's stock (stock_movements, reason 'issue', ref_type 'sale').
+   A line may name the batch (Stock In line) it is sold from. */
+IF OBJECT_ID(N'dbo.sales', N'U') IS NULL
+CREATE TABLE dbo.sales (
+  id             INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id      INT NOT NULL CONSTRAINT fk_sale_clinic REFERENCES dbo.clinics(id),
+  sale_no        NVARCHAR(20) NOT NULL,
+  sale_date      DATE NOT NULL,
+  customer_name  NVARCHAR(150) NOT NULL,
+  mobile         NVARCHAR(20) NULL,
+  total_amount   DECIMAL(12,2) NOT NULL CONSTRAINT df_sale_total DEFAULT 0,
+  created_by     INT NULL CONSTRAINT fk_sale_by REFERENCES dbo.employees(id),
+  created_at     DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  updated_at     DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_sale_clinic_no UNIQUE (clinic_id, sale_no)
+);
+GO
+-- amount = qty × price
+IF OBJECT_ID(N'dbo.sale_items', N'U') IS NULL
+CREATE TABLE dbo.sale_items (
+  id                INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id         INT NOT NULL CONSTRAINT fk_salei_clinic REFERENCES dbo.clinics(id),
+  sale_id           INT NOT NULL CONSTRAINT fk_salei_sale REFERENCES dbo.sales(id),
+  item_id           INT NOT NULL CONSTRAINT fk_salei_item REFERENCES dbo.items(id),
+  item_name         NVARCHAR(200) NOT NULL,
+  stock_in_item_id  INT NULL CONSTRAINT fk_salei_batch REFERENCES dbo.stock_in_items(id),
+  batch_no          NVARCHAR(50) NULL,
+  exp_date          DATE NULL,
+  qty               DECIMAL(10,2) NOT NULL,
+  price             DECIMAL(10,2) NOT NULL DEFAULT 0,
+  amount            DECIMAL(12,2) NOT NULL DEFAULT 0
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_salei_sale' AND object_id = OBJECT_ID(N'dbo.sale_items'))
+  CREATE INDEX ix_salei_sale ON dbo.sale_items(sale_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_salei_batch' AND object_id = OBJECT_ID(N'dbo.sale_items'))
+  CREATE INDEX ix_salei_batch ON dbo.sale_items(stock_in_item_id);
 GO

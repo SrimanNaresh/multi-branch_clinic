@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api.js';
 import { useT } from '../lib/i18n.jsx';
+import { navigate } from '../lib/router.jsx';
 import {
   Button, Card, DataTable, ErrorBox, Input, Loading, Modal, PageHeader, SearchBox, Select, TextArea,
   StatusBadge, useAsync, useDebounced, useToast,
@@ -16,6 +17,8 @@ import Icon from './Icon.jsx';
  */
 export default function CrudPage({
   title, subtitle, endpoint, fields, columns, defaults = {}, canEdit = true, filters, extraQuery = {}, clinic, addLabel, onSaved,
+  compact = false,    // tighter header, toolbar and rows (Pharmacy → Vendor → List)
+  addPath, editPath,  // add / edit on a page of its own (Pharmacy → Vendor) instead of the dialog: '/x/new', (row) => '/x/1/edit'
 }) {
   const { t } = useT();
   const toast = useToast();
@@ -68,15 +71,15 @@ export default function CrudPage({
   const cols = canEdit
     ? [...columns, {
       key: '_edit', label: '', className: 'col-actions',
-      render: (r) => <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); open(r); }}><Icon name="edit" size={15} /> {t('common.edit')}</Button>,
+      render: (r) => <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); if (editPath) navigate(editPath(r)); else open(r); }}><Icon name="edit" size={15} /> {t('common.edit')}</Button>,
     }]
     : columns;
 
   return (
     <>
-      <PageHeader title={title} subtitle={subtitle}
-        actions={canEdit && <Button onClick={() => open(null)}><Icon name="plus" size={16} /> {addLabel || t('common.add')}</Button>} />
-      <Card>
+      <PageHeader title={title} subtitle={subtitle} compact={compact}
+        actions={canEdit && <Button size={compact ? 'sm' : undefined} onClick={() => (addPath ? navigate(addPath) : open(null))}><Icon name="plus" size={16} /> {addLabel || t('common.add')}</Button>} />
+      <Card className={compact ? 'crud-compact' : undefined}>
         <div className="toolbar">
           <SearchBox value={q} onChange={setQ} placeholder={t('common.search')} />
           {filters}

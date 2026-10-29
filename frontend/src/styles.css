@@ -121,11 +121,25 @@ input.invalid { border-color: var(--danger); }
 .import-preview { max-height: 50vh; overflow: auto; margin: 0 0 10px; padding: 0; }
 .import-preview tr.row-error td { background: var(--danger-50); }
 .compact-head-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--brand-50); color: var(--brand); flex-shrink: 0; }
-/* Pharmacy → Item: five across on wide screens, like the paper form */
+/* Pharmacy → Item on wide screens: Name, Unit (two columns each), HSN, Pack, Quantity, MRP, CGST,
+   SGST, Rack, Box all on one row; Generic Name, Manufacturer, Category, Potency, Schedule, Status
+   (two columns each) below */
 .item-grid .grid-break { display: none; }
 @media (min-width: 1200px) {
-  .item-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .item-grid .grid-break { display: block; }
+  .item-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; }
+  .item-grid > :nth-child(-n+2) { grid-column: span 2; }
+  .item-grid .field-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-grid .grid-break { display: block; grid-column: 1 / -1; height: 0; margin: -5px 0; }
+  .item-grid .grid-break ~ .field { grid-column: span 2; }
+}
+/* Pharmacy → Vendor screen on wide screens: Name, Contact Person, Address, Email on the first row; State,
+   Pin code, Phone, Mobile, GSTIN, DL No 1, DL No 2 all on the second; Status below */
+@media (min-width: 1200px) {
+  .form-grid.vendor-grid { grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 14px 10px; }
+  .form-grid.vendor-grid > .field { grid-column: span 2; }
+  .form-grid.vendor-grid > .field:nth-child(1), .form-grid.vendor-grid > .field:nth-child(3) { grid-column: span 4; }
+  .form-grid.vendor-grid > .field:nth-child(2), .form-grid.vendor-grid > .field:nth-child(4) { grid-column: span 3; }
+  .form-grid.vendor-grid .field-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 .item-checks { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
 .item-status { color: var(--text); font-weight: 500; }
@@ -229,6 +243,12 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .nav-item:hover { background: rgba(255, 255, 255, .07); }
 .nav-item.active { background: rgba(255, 255, 255, .15); color: #fff; }
 .nav-item .icon { opacity: .85; flex-shrink: 0; }
+.nav-sub-btn { width: 100%; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.nav-sub-btn > span { flex: 1; }
+.nav-sub-btn.current { color: #fff; }
+.nav-sub-arrow { transition: transform .15s; }
+.nav-sub-arrow.open { transform: rotate(180deg); }
+.nav-child { padding: 6px 10px 6px 38px; font-size: 13.5px; }
 .nav-hint { margin: 2px 10px 6px; font-size: 12px; color: #a9bdcc; }
 .nav-group.locked .nav-title { opacity: .6; }
 .sidebar-backdrop { display: none; }
@@ -253,6 +273,19 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .topnav-item:hover { background: var(--brand-50); }
 .topnav-item.active { background: var(--brand); color: #fff; }
 .topnav-item.active .icon { color: #fff; }
+.topnav-sub + .topnav-sub, .topnav-item + .topnav-sub { margin-top: 2px; padding-top: 2px; border-top: 1px solid var(--line); }
+.topnav-sub-title { display: flex; align-items: center; gap: 8px; padding: 4px 10px 1px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.topnav-sub-title .icon { color: var(--brand); }
+.topnav-child { padding: 3px 10px 3px 32px; font-size: 13px; }
+/* Pharmacy drop-down: one column per sub-menu (Item, Vendor, …), centred on the window */
+.topnav-mega { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; row-gap: 10px; width: max-content; padding: 10px 6px; }
+.topnav-mega .topnav-sub { min-width: 120px; margin: 0; padding: 0 10px; border-top: 0; border-left: 1px solid var(--line); }
+.topnav-mega .topnav-sub:first-child { border-left: 0; }
+/* sub-menu heading: icon in a tinted square, brand colour, a line under it */
+.topnav-mega .topnav-sub-title { gap: 8px; margin-bottom: 4px; padding: 0 4px 7px; border-bottom: 2px solid var(--brand-50); font-size: 12.5px; font-weight: 700; color: var(--brand); letter-spacing: .2px; white-space: nowrap; }
+.topnav-sub-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: var(--brand-50); color: var(--brand); flex-shrink: 0; }
+.topnav-mega .topnav-child { padding: 5px 8px 5px 36px; border-radius: 6px; font-size: 13px; color: var(--text); }
+.topnav-mega .topnav-child.active { color: #fff; font-weight: 600; }
 .topnav-hint { padding: 0 8px; color: var(--muted); font-size: 13px; }
 @media (min-width: 901px) { .shell.menu-top .sidebar { display: none; } }
 @media (max-width: 900px) { .topnav { display: none; } }
@@ -349,6 +382,175 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .table .col-actions { text-align: right; white-space: nowrap; }
 .table .col-icon { text-align: center; white-space: nowrap; width: 1%; }
 .table-compact td, .table-compact th { padding: 6px 8px; }
+/* Pharmacy → Purchase / Order screen: Vendor, Date, Details on one row; item lines as an editable table */
+.form-grid.po-head { grid-template-columns: minmax(200px, 2fr) minmax(150px, 1fr) minmax(220px, 3fr); align-items: start; margin-bottom: 12px; }
+.form-grid.po-head > .field:has(textarea) { grid-column: auto; }
+.form-grid.po-head.po-head-short { grid-template-columns: minmax(240px, 380px) minmax(150px, 200px); }   /* Details hidden */
+.vendor-row { display: flex; align-items: center; gap: 6px; }
+.vendor-row > .picker { flex: 1; min-width: 0; }
+.vendor-row > .po-more { width: 30px; height: 30px; flex-shrink: 0; }
+/* Pharmacy → Stock In: Vendor, Purchase No, Date on one row; the received items as an editable table */
+.form-grid.si-head { grid-template-columns: minmax(240px, 2fr) minmax(240px, 2fr) minmax(150px, 1fr); margin-bottom: 12px; }
+.po-lines.si-lines { overflow-x: auto; }
+/* Stock In → List: totals of the matching rows above the table */
+.si-totals { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-bottom: 8px; padding: 7px 10px; border-radius: 6px; background: var(--brand-50); color: var(--muted); font-size: 13px; }
+.si-totals b { color: var(--text); margin-left: 4px; }
+.si-totals-net b { color: var(--brand); }
+.si-list .table td, .si-list .table th { white-space: nowrap; padding-left: 6px; padding-right: 6px; }   /* one line per item batch */
+.si-tabs { margin-bottom: 8px; }
+/* Date wise: each Stock In's rows as one block – its Stock In No (vendor below) and Edit merged down the block */
+.si-by-date td.si-merged { vertical-align: middle; text-align: center; background: #fbfcfe; border-right: 1px solid var(--line); }   /* centred in its block */
+.si-by-date td.col-actions.si-merged { border-right: 0; border-left: 1px solid var(--line); }
+.si-by-date thead th:first-child { text-align: center; }
+.si-by-date .si-vendor { display: block; font-size: 12px; }
+.si-by-date tr.si-block-first td { border-top: 2px solid #dbe5ee; }
+.si-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+/* grouped by item: a tinted heading row per item with its totals; its batch rows indented under it */
+.si-grouped tr.si-group td { background: var(--brand-50); border-top: 1px solid #c9d8e6; padding-top: 3px; padding-bottom: 3px; line-height: 1.3; }
+.si-grouped tr.si-group td b { color: var(--brand); }
+/* Item wise: click an item's heading to show / hide its batches */
+.si-grouped tr.si-toggle { cursor: pointer; }
+.si-grouped tr.si-toggle:hover td { background: #dde8f2; }
+.si-grouped tr.si-toggle:focus-visible td { outline: 2px solid var(--brand); outline-offset: -2px; }
+/* the Total row at the foot of the list */
+.si-grouped tr.si-sum td { background: var(--brand); color: #fff; border-top: 2px solid var(--brand); padding-top: 6px; padding-bottom: 6px; }
+.si-grouped tr.si-sum td b { color: #fff; }
+.si-chevron { margin-right: 6px; vertical-align: -2px; color: var(--brand); }
+.si-by-item tbody tr:not(.si-group) td:nth-child(2) { padding-left: 22px; }   /* indented under the heading */
+.si-amt { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.si-amt small { color: var(--muted); font-size: 11.5px; font-weight: 400; }   /* no pop-up list in this table, so it may scroll sideways when the extra columns are open */
+.si-lines .table td input.si-batch { width: 90px; text-align: left; }
+.si-lines .table td input.si-date { width: 128px; text-align: left; }
+.si-lines .po-item { min-width: 160px; white-space: normal; }
+.si-lines td.si-over { color: var(--danger); }
+@media (max-width: 900px) { .form-grid.si-head { grid-template-columns: 1fr; } }
+/* Pharmacy → Report → Stock Report */
+.sr-formula { margin: -4px 0 8px; font-size: 12px; }
+.sr-table td, .sr-table th { white-space: nowrap; }
+.sr-table td.sr-in { color: #1f7a3d; }
+.sr-table td.sr-out { color: #b0452b; }
+.sr-table th.sr-now, .sr-table td.sr-now { background: var(--brand-50); }
+.sr-table tr.sr-empty td { color: var(--muted); }
+.sr-table tr.sr-sum td { background: var(--brand); color: #fff; border-top: 2px solid var(--brand); }
+/* click an item to open its stock history under it */
+.sr-table tr.sr-row { cursor: pointer; }
+.sr-table tr.sr-row:hover td { background: #f3f7fb; }
+.sr-table tr.sr-row.open td { background: var(--brand-50); }
+.sr-table tr.sr-row:focus-visible td { outline: 2px solid var(--brand); outline-offset: -2px; }
+.sr-table tr.sr-history-row > td { padding: 6px 10px 12px 34px; background: #fafcfe; }
+.sr-history { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.sr-history th, .sr-history td { padding: 4px 8px; font-size: 12.5px; }
+.sr-kind { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; background: var(--brand-50); color: var(--brand); }
+.sr-kind-stock_in { background: #e3f4e8; color: #1f7a3d; }
+.sr-kind-returned, .sr-kind-sold { background: #fbe9e4; color: #b0452b; }
+.sr-kind-adjusted { background: #fdf0d9; color: #8a5a00; }
+.sr-table tr.sr-sum td b { color: #fff; }
+/* Pharmacy → Report → Vendor Payments */
+.vp-toolbar { align-items: flex-end; }
+.vp-toolbar .field { width: 170px; margin: 0; }
+.sr-history tr.vp-doc { cursor: pointer; }
+.sr-history td.vp-items { white-space: normal; max-width: 260px; font-weight: 600; }   /* several items wrap */
+.sr-history tr.vp-doc:hover td { background: #f3f7fb; }
+/* Pharmacy → Sales: Date, Customer Name, Mobile No on one row; the items as an editable table */
+.form-grid.sale-head { grid-template-columns: minmax(150px, 1fr) minmax(240px, 2fr) minmax(170px, 1fr); margin-bottom: 12px; }
+.sale-lines .table td select.sale-batch { width: 230px; height: 30px; padding: 0 6px; }
+.po-lines.sale-lines .table td input { width: 90px; }   /* room for prices like 1,234.50 */
+.po-lines.sale-lines .table td.po-item input { width: 100%; }
+/* Quantity above Stock: red box and a note under it; Save is off until it is fixed */
+.po-lines.sale-lines .table td input.sale-qty-over { border-color: var(--danger); background: #fdf1ee; color: var(--danger); font-weight: 700; }
+.sale-over-msg { display: block; margin-top: 2px; color: var(--danger); font-size: 11px; font-weight: 600; text-align: center; white-space: nowrap; }
+.sale-lines td.sale-loc { color: var(--brand); font-weight: 600; }   /* Rack / Box: where to pick it from */
+.sale-lines .po-item { min-width: 220px; }
+@media (max-width: 900px) { .form-grid.sale-head { grid-template-columns: 1fr; } }
+/* Pharmacy → Item → Bulk Update: editable grid, changed cells / rows marked until saved */
+.po-lines.bulk-grid { overflow-x: auto; }
+.po-lines.bulk-grid .table td input, .po-lines.bulk-grid .table td select { width: 86px; height: 28px; padding: 0 5px; text-align: left; }
+.po-lines.bulk-grid .table td input[type=number] { width: 64px; text-align: right; }
+/* narrow columns: GST % and the Rack / Box codes are short */
+.po-lines.bulk-grid .table td input.bulk-cgst_percent, .po-lines.bulk-grid .table td input.bulk-sgst_percent { width: 46px; }
+.po-lines.bulk-grid .table td input.bulk-rack, .po-lines.bulk-grid .table td input.bulk-box { width: 52px; }
+.bulk-grid .bulk-name { min-width: 170px; white-space: normal; }
+/* Item Code and Item Name stay in view while the grid scrolls sideways */
+.bulk-grid .table th:nth-child(-n+2), .bulk-grid .table td:nth-child(-n+2) { position: sticky; z-index: 1; background: var(--surface); }
+.bulk-grid .table th:nth-child(-n+2) { background: var(--brand-50); z-index: 2; }
+.bulk-grid .table th:first-child, .bulk-grid .table td:first-child { left: 0; width: 84px; min-width: 84px; }
+.bulk-grid .table th:nth-child(2), .bulk-grid .table td:nth-child(2) { left: 84px; box-shadow: 2px 0 0 var(--line); }
+.bulk-grid tr.bulk-changed td:nth-child(-n+2) { background: #fffaf0; }
+.bulk-grid tr.bulk-error td:nth-child(-n+2) { background: #fdf1ee; }
+.bulk-grid tr.bulk-changed td { background: #fffaf0; }
+.po-lines.bulk-grid .table td .bulk-cell-changed { border-color: #d99a1e; background: #fdf0d9; font-weight: 600; }
+.bulk-grid tr.bulk-error td { background: #fdf1ee; }
+.bulk-pending { color: #8a5a00; font-size: 13px; font-weight: 600; }
+/* Bulk add panel (Purchase / Order) and bulk fill bar (Stock In) */
+.po-bulk-bar { display: flex; justify-content: flex-end; margin: -4px 0 6px; }
+.po-bulk-bar .btn.on { background: var(--brand-50); color: var(--brand); }
+.bulk-pick { margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--brand); border-radius: var(--radius); background: #fbfdff; }
+.bulk-pick-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.bulk-pick-head b { display: inline-flex; align-items: center; gap: 6px; color: var(--brand); }
+.bulk-pick-head .muted { flex: 1; font-size: 12.5px; }
+.bulk-pick .toolbar { margin-bottom: 6px; }
+.bulk-pick-list { max-height: 280px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.bulk-pick-row { display: flex; align-items: center; gap: 10px; padding: 5px 10px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
+.bulk-pick-row:hover { background: #f3f7fb; }
+.bulk-pick-row .bulk-pick-name { flex: 1; min-width: 0; }
+.bulk-pick-row.taken { opacity: .55; cursor: default; }
+.bulk-pick-all { position: sticky; top: 0; z-index: 1; background: var(--brand-50); font-weight: 600; color: var(--brand); }
+.bulk-pick-in { font-style: italic; }
+.bulk-pick-none { padding: 10px; margin: 0; }
+.bulk-pick-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.bulk-pick-foot .muted { margin-right: auto; }
+.si-fill { margin-bottom: 8px; padding: 8px 12px; border: 1px solid var(--brand); border-radius: var(--radius); background: var(--brand-50); }
+.si-fill-title { margin-bottom: 4px; color: var(--brand); font-size: 13px; }
+.si-fill-boxes { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.si-fill-boxes .field { width: 150px; margin: 0; }
+.si-lines .table th.si-tick, .si-lines .table td.si-tick { width: 30px; text-align: center; }
+.po-lines.si-lines .table td.si-tick input, .si-lines .table th.si-tick input { width: auto; height: auto; }
+.si-lines tr.si-ticked td { background: #f1f7fd; }
+/* "+ Add vendor" form under the order heading */
+.po-new-vendor { margin: -2px 0 12px; padding: 10px 12px; border: 1px solid var(--brand); border-radius: var(--radius); background: var(--brand-50); }
+.po-new-vendor-title { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-weight: 700; color: var(--brand); }
+.form-grid.po-new-vendor-grid { grid-template-columns: minmax(180px, 2fr) minmax(220px, 3fr) minmax(140px, 1.3fr) auto; align-items: start; }
+.form-grid.po-new-vendor-grid > .field:has(textarea) { grid-column: auto; }
+.po-new-vendor-actions { display: flex; gap: 6px; align-self: end; padding-bottom: 2px; }
+.vendor-none { padding: 6px 8px; font-size: 13px; }
+@media (max-width: 900px) { .form-grid.po-new-vendor-grid { grid-template-columns: 1fr; } }
+.po-lines { margin-bottom: 8px; overflow: visible; }   /* the item suggestions must not be clipped */
+.po-lines .table th, .po-lines .table td { padding: 4px 3px; font-size: 12.5px; white-space: nowrap; }
+.po-lines .table th { white-space: normal; line-height: 1.2; }
+.po-lines td.po-wrap { white-space: normal; max-width: 100px; line-height: 1.25; }
+.po-lines .table td input { width: 54px; height: 28px; padding: 0 4px; text-align: right; }
+.po-lines .po-item { min-width: 170px; }
+.po-lines .table td.po-item input { width: 100%; text-align: left; }
+/* item table header: brand-tinted band, brand-coloured bold labels, a stronger line under it */
+.po-lines .table thead th { background: var(--brand-50); color: var(--brand); font-weight: 700; font-size: 12px; padding-top: 8px; padding-bottom: 8px; border-bottom: 2px solid var(--brand); vertical-align: bottom; }
+.po-row-actions { display: inline-flex; align-items: center; }
+/* arrow in the Item Name heading: shows / hides Generic Name, Manufacturer, HSN Code, Category */
+.po-item-head { display: flex; align-items: center; gap: 6px; }
+.po-item-head > :first-child { flex: 1; text-align: center; }   /* label centred, arrow at the right edge */
+.po-more { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 1px solid var(--brand); border-radius: 5px; background: var(--surface); color: var(--brand); cursor: pointer; }
+.po-more:hover, .po-more.open { background: var(--brand); color: #fff; }
+/* the shown-on-demand columns (Generic Name … Category) in amber, so they stand apart from the order columns */
+.po-lines .table thead th.po-extra { background: #fdf0d9; color: #8a5a00; border-color: #f0d8a8; border-bottom-color: #d99a1e; }
+.po-lines .table tbody td.po-extra, .po-lines .table tbody tr:nth-child(even) td.po-extra { background: #fffaf0; color: #5c4210; }
+.po-more.open { background: #d99a1e; border-color: #d99a1e; }
+.po-row-actions .icon-btn { width: 28px; height: 28px; }
+/* grid lines: every cell boxed, a darker frame round the table */
+.po-lines .table { border: 1px solid var(--line-strong); }
+.po-lines .table th, .po-lines .table td { border: 1px solid var(--line); }
+.po-lines .table thead th { border-color: #c9d8e6; border-bottom: 2px solid var(--brand); text-align: center; vertical-align: middle; }
+.po-lines .table thead th:first-child, .po-lines .table tbody td:first-child { text-align: center; width: 24px; }
+.po-lines .table tbody tr:nth-child(even) td { background: #fafcfe; }
+.po-lines tfoot td { background: var(--brand-50); padding-top: 7px; padding-bottom: 7px; }
+.picker-menu.picker-browse { min-width: 260px; overflow-x: hidden; }
+.picker-browse .pick-title, .picker-browse .pick-generic { white-space: normal; }
+.po-sum { font-size: 15px; font-weight: 700; color: var(--brand); }
+@media (max-width: 900px) { .form-grid.po-head { grid-template-columns: 1fr; } }
+/* compact list page (Pharmacy → Vendor → List): less padding, shorter rows */
+.card.crud-compact { padding: 10px 12px; }
+.crud-compact .toolbar { margin-bottom: 6px; }
+.crud-compact .search-box input { height: 32px; }
+.crud-compact .table th { padding: 6px 8px; }
+.crud-compact .table td { padding: 4px 8px; }
 .row-done td { opacity: .55; }
 .row-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
 .qty-input { width: 90px; text-align: right; }

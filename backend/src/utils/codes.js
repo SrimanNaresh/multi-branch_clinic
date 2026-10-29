@@ -23,5 +23,9 @@ export const formatPatientCode = (clinicCode, n) => `${clinicCode}-${pad(n, 4)}`
 export const formatBillNo = (clinicCode, n) => `${clinicCode}-B${pad(n, 4)}`;         // CLA-B0001
 export const formatEmployeeCode = (clinicCode, n) => `${clinicCode}-E${pad(n, 3)}`;   // CLA-E001
 export const formatItemCode = (clinicCode, n) => `${clinicCode}-I${pad(n, 4)}`;       // CLA-I0001
+export const formatPurchaseNo = (clinicCode, n) => `${clinicCode}-PO${pad(n, 4)}`;   // CLA-PO0001
+export const formatStockInNo = (clinicCode, n) => `${clinicCode}-SI${pad(n, 4)}`;   // CLA-SI0001
+export const formatReturnNo = (clinicCode, n) => `${clinicCode}-RT${pad(n, 4)}`;     // CLA-RT0001
+export const formatSaleNo = (clinicCode, n) => `${clinicCode}-S${pad(n, 4)}`;         // CLA-S0001
 export const formatAdminCode = (n) => `ADM-${pad(n, 3)}`;                            // ADM-001
 export const tokenKey = (isoDate) => `token:${isoDate}`;

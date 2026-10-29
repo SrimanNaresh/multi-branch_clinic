@@ -3,31 +3,23 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
-import { Button, Card, ErrorBox, Input, Loading, useAsync, useForm, useToast } from '../../components/ui.jsx';
+import { Button, Card, ErrorBox, Input, Loading, Select, useAsync, useForm, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 import ItemImportButtons from '../../components/ItemImport.jsx';
+import RxListPicker from '../../components/RxListPicker.jsx';
 
-export const UNITS = ['nos', 'bottle', 'strip', 'tablet', 'ml', 'gm', 'dram', 'box', 'tube', 'sachet'];
-export const CATEGORIES = ['Dilution', 'Mother Tincture', 'Biochemic', 'Tablet', 'Syrup', 'Ointment', 'Drops', 'Globules', 'Combination', 'Other'];
-const ITEM_TYPES = ['Medicine', 'Consumable', 'Equipment', 'Other'];
-
+// Only these fields are on the screen; anything else on an existing item (category, supplier,
+// purchase rate, …) is not sent, so saving keeps its current value.
 const EMPTY = {
-  name: '', item_type: '', category: '', hsn_code: '',
-  manufacturer: '', supplier_name: '', generic_name: '', brand_name: '', unit: '', pack: '',
-  purchase_rate: '', cgst_percent: '', sgst_percent: '', mrp: '', price: '', discount_percent: '',
+  name: '', generic_name: '', hsn_code: '', manufacturer: '', unit: '', pack: '', category: '', potency: '',
+  mrp: '', cgst_percent: '', sgst_percent: '',
   schedule_h: false, schedule_h1: false, status: 'active', rack: '', box: '',
 };
-const uniq = (...lists) => [...new Set(lists.flat().filter(Boolean))].sort((a, b) => a.localeCompare(b));
-
-/** "Select or add": pick a value already used, or type a new one. */
-function ComboField({ id, label, placeholder, options, ...input }) {
-  return (
-    <label className="field">
-      <span className="field-label">{label}</span>
-      <input className="combo-input" list={id} placeholder={placeholder} autoComplete="off" {...input} />
-      <datalist id={id}>{options.map((o) => <option key={o} value={o} />)}</datalist>
-    </label>
-  );
+/** The clinic's Generic Name / Manufacturer / Type / Unit / Category / Potency list (+ New, Edit, Delete), replaced locally after a change. */
+function useItemList(kind) {
+  const loaded = useAsync(() => api(`/visits/${kind}-options`), [kind]);
+  const [changed, setChanged] = useState(null);
+  return [changed || loaded.data || { rows: [], added: [] }, setChanged];
 }
 
 export default function ItemForm({ params }) {
@@ -37,17 +29,22 @@ export default function ItemForm({ params }) {
   const f = useForm(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [openingStock, setOpeningStock] = useState('');
+  const [qty, setQty] = useState('');            // Quantity: opening stock when adding, current stock when editing
   const existing = useAsync(() => (id ? api(`/items/${id}`) : Promise.resolve(null)), [id]);
-  const opts = useAsync(() => api('/items/options'), []);
+  const [genericList, setGenericList] = useItemList('generic');
+  const [mfrList, setMfrList] = useItemList('manufacturer');
+  const [unitList, setUnitList] = useItemList('unit');
+  const [categoryList, setCategoryList] = useItemList('category');
+  const [potencyList, setPotencyList] = useItemList('itempotency');
 
   useEffect(() => {
     const e = existing.data;
     if (!e) return;
     f.setValues({
       ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, e[k] ?? EMPTY[k]])),
-      supplier_name: e.supplier_name || '', schedule_h: !!e.schedule_h, schedule_h1: !!e.schedule_h1,
+      schedule_h: !!e.schedule_h, schedule_h1: !!e.schedule_h1,
     });
+    setQty(String(Number(e.stock_qty ?? 0)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing.data]);
 
@@ -60,16 +57,17 @@ export default function ItemForm({ params }) {
     const body = {
       ...v,
       unit: v.unit || 'nos',
-      purchase_rate: num(v.purchase_rate), cgst_percent: num(v.cgst_percent), sgst_percent: num(v.sgst_percent),
-      mrp: num(v.mrp), price: num(v.price), discount_percent: num(v.discount_percent),
+      cgst_percent: num(v.cgst_percent), sgst_percent: num(v.sgst_percent),
+      // no separate sell price on the screen: dispense bills at MRP
+      mrp: num(v.mrp), price: num(v.mrp),
     };
-    if (!id) { delete body.status; body.opening_stock = num(openingStock); }
+    if (id) body.stock_qty = num(qty);
+    else body.opening_stock = num(qty);
     try {
       const item = id ? await api(`/items/${id}`, { method: 'PUT', body }) : await api('/items', { method: 'POST', body });
       toast(t('items.saved', { name: item.name }));
-      opts.reload();
       if (id) navigate('/items');
-      else { f.setValues(EMPTY); setOpeningStock(''); }   // ready for the next item
+      else { f.setValues(EMPTY); setQty(''); }   // ready for the next item
     } catch (err) {
       setError(err.message);
     } finally {
@@ -79,7 +77,6 @@ export default function ItemForm({ params }) {
 
   if (id && existing.loading) return <Loading />;
   if (existing.error) return <ErrorBox error={existing.error} />;
-  const o = opts.data || {};
   const money = { type: 'number', min: '0', step: '0.01', placeholder: '0.00', inputMode: 'decimal' };
 
   return (
@@ -96,58 +93,53 @@ export default function ItemForm({ params }) {
               </p>
             </div>
             <div className="compact-head-actions">
-              {!id && <ItemImportButtons onImported={opts.reload} />}
+              {!id && <ItemImportButtons />}
               <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/items')}><Icon name="list" size={15} /> {t('items.viewList')}</Button>
             </div>
           </div>
           <div className="form-grid item-grid">
             <Input label={t('items.name')} required placeholder={t('items.namePh')} autoFocus {...f.bind('name')} />
-            <ComboField id="item-types" label={t('items.type')} placeholder={t('items.typePh')}
-              options={uniq(ITEM_TYPES, o.types || [])} {...f.bind('item_type')} />
-            <ComboField id="item-cats" label={t('items.category')} placeholder={t('items.categoryPh')}
-              options={uniq(CATEGORIES, o.categories || [])} {...f.bind('category')} />
+            <div className="field">
+              <span className="field-label">{t('items.typeUnit')}</span>
+              <RxListPicker kind="unit" label={t('items.typeUnit')} value={f.values.unit} list={unitList}
+                onChange={(v) => f.set('unit', v)} onListChange={setUnitList} />
+            </div>
             <Input label={t('items.hsn')} placeholder={t('items.hsnPh')} maxLength={20} {...f.bind('hsn_code')} />
-            <span className="grid-break" aria-hidden />
-
-            <ComboField id="item-mfrs" label={t('items.manufacturer')} placeholder={t('items.manufacturerPh')}
-              options={o.manufacturers || []} {...f.bind('manufacturer')} />
-            <ComboField id="item-suppliers" label={t('items.supplier')} placeholder={t('items.supplierPh')}
-              options={(o.suppliers || []).map((s) => s.name)} {...f.bind('supplier_name')} />
-            <ComboField id="item-generics" label={t('items.generic')} placeholder={t('items.genericPh')}
-              options={o.generics || []} {...f.bind('generic_name')} />
-            <Input label={t('items.brand')} placeholder={t('items.brandPh')} {...f.bind('brand_name')} />
-            <ComboField id="item-units" label={t('items.unit')} placeholder={t('items.unitPh')}
-              options={uniq(UNITS, o.units || [])} {...f.bind('unit')} />
             <Input label={t('items.pack')} placeholder={t('items.packPh')} {...f.bind('pack')} />
-            {id ? (
-              <Input label={t('items.stock')} value={`${existing.data?.stock_qty ?? 0} ${f.values.unit || ''}`} disabled hint={t('items.stockHint')} />
-            ) : (
-              <Input label={t('items.openingStock')} type="number" min="0" step="0.01" placeholder="0" value={openingStock} onChange={(e) => setOpeningStock(e.target.value)} />
-            )}
+            <Input label={t('items.quantity')} type="number" min="0" step="0.01" placeholder="0" value={qty} onChange={(e) => setQty(e.target.value)} />
+            <Input label={t('items.mrp')} {...money} {...f.bind('mrp')} />
+            <Input label={t('items.cgst')} {...money} max="14" {...f.bind('cgst_percent')} />
+            <Input label={t('items.sgst')} {...money} max="14" {...f.bind('sgst_percent')} />
             <Input label={t('items.rack')} placeholder={t('items.rackPh')} {...f.bind('rack')} />
             <Input label={t('items.box')} placeholder={t('items.boxPh')} {...f.bind('box')} />
             <span className="grid-break" aria-hidden />
 
-            <Input label={t('items.purchaseRate')} {...money} {...f.bind('purchase_rate')} />
-            <Input label={t('items.cgst')} {...money} max="14" {...f.bind('cgst_percent')} />
-            <Input label={t('items.sgst')} {...money} max="14" {...f.bind('sgst_percent')} />
-            <Input label={t('items.mrp')} {...money} {...f.bind('mrp')} />
-            <Input label={t('items.sellPrice')} {...money} {...f.bind('price')} />
-            <Input label={t('items.discount')} {...money} max="100" {...f.bind('discount_percent')} />
-
-            <div className="field-full item-checks">
-              <label className="check"><input type="checkbox" checked={f.values.schedule_h} onChange={(e) => f.set('schedule_h', e.target.checked)} /> {t('items.scheduleH')}</label>
-              <label className="check"><input type="checkbox" checked={f.values.schedule_h1} onChange={(e) => f.set('schedule_h1', e.target.checked)} /> {t('items.scheduleH1')}</label>
-              {id && (
-                <label className="inline-field item-status">
-                  {t('field.status')}
-                  <select {...f.bind('status')}>
-                    <option value="active">{t('status.active')}</option>
-                    <option value="inactive">{t('status.inactive')}</option>
-                  </select>
-                </label>
-              )}
+            <div className="field">
+              <span className="field-label">{t('items.generic')}</span>
+              <RxListPicker kind="generic" label={t('items.generic')} value={f.values.generic_name} list={genericList}
+                onChange={(v) => f.set('generic_name', v)} onListChange={setGenericList} />
             </div>
+            <div className="field">
+              <span className="field-label">{t('items.manufacturer')}</span>
+              <RxListPicker kind="manufacturer" label={t('items.manufacturer')} value={f.values.manufacturer} list={mfrList}
+                onChange={(v) => f.set('manufacturer', v)} onListChange={setMfrList} />
+            </div>
+            <div className="field">
+              <span className="field-label">{t('items.category')}</span>
+              <RxListPicker kind="category" label={t('items.category')} value={f.values.category} list={categoryList}
+                onChange={(v) => f.set('category', v)} onListChange={setCategoryList} />
+            </div>
+            <div className="field">
+              <span className="field-label">{t('items.potency')}</span>
+              <RxListPicker kind="itempotency" label={t('items.potency')} value={f.values.potency} list={potencyList}
+                onChange={(v) => f.set('potency', v)} onListChange={setPotencyList} />
+            </div>
+            {/* one Schedule choice, stored as the two schedule_h / schedule_h1 flags */}
+            <Select label={t('items.schedule')} value={f.values.schedule_h1 ? 'H1' : f.values.schedule_h ? 'H' : ''}
+              onChange={(e) => f.setValues({ ...f.values, schedule_h: e.target.value === 'H', schedule_h1: e.target.value === 'H1' })}
+              options={[{ value: '', label: t('items.scheduleNone') }, { value: 'H', label: 'H' }, { value: 'H1', label: 'H1' }]} />
+            <Select label={t('field.status')} {...f.bind('status')}
+              options={[{ value: 'active', label: t('status.active') }, { value: 'inactive', label: t('status.inactive') }]} />
           </div>
           {error && <div className="alert alert-error">{error}</div>}
           <div className="form-actions item-actions">

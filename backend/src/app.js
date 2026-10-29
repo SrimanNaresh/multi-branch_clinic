@@ -19,6 +19,11 @@ import queueRoutes from './routes/branch/queue.js';
 import visitRoutes from './routes/branch/visits.js';
 import itemRoutes from './routes/branch/items.js';
 import supplierRoutes from './routes/branch/suppliers.js';
+import purchaseRoutes from './routes/branch/purchases.js';
+import stockInRoutes from './routes/branch/stockins.js';
+import returnRoutes from './routes/branch/returns.js';
+import reportRoutes from './routes/branch/reports.js';
+import saleRoutes from './routes/branch/sales.js';
 import dispenseRoutes from './routes/branch/dispense.js';
 import billRoutes from './routes/branch/bills.js';
 
@@ -56,6 +61,11 @@ export function createApp() {
   app.use('/api/visits', visitRoutes);
   app.use('/api/items', itemRoutes);
   app.use('/api/suppliers', supplierRoutes);
+  app.use('/api/purchases', purchaseRoutes);
+  app.use('/api/stock-in', stockInRoutes);
+  app.use('/api/returns', returnRoutes);
+  app.use('/api/reports', reportRoutes);
+  app.use('/api/sales', saleRoutes);
   app.use('/api/dispense', dispenseRoutes);
   app.use('/api/bills', billRoutes);
 

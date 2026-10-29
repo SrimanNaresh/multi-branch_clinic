@@ -11,8 +11,8 @@ router.use(clinicScope());
 
 const FIELDS = ['name', 'category', 'unit', 'price', 'reorder_level', 'pharmacy_id', 'status',
   'item_type', 'hsn_code', 'manufacturer', 'generic_name', 'brand_name', 'purchase_rate', 'mrp', 'discount_percent',
-  'schedule_h', 'schedule_h1', 'cgst_percent', 'sgst_percent', 'pack', 'rack', 'box'];
-const TEXT = { item_type: 50, hsn_code: 20, manufacturer: 150, generic_name: 150, brand_name: 150, category: 100, unit: 30, pack: 50, rack: 50, box: 50 };
+  'schedule_h', 'schedule_h1', 'cgst_percent', 'sgst_percent', 'pack', 'rack', 'box', 'potency'];
+const TEXT = { item_type: 50, hsn_code: 20, manufacturer: 150, generic_name: 150, brand_name: 150, category: 100, unit: 30, pack: 50, rack: 50, box: 50, potency: 100 };
 
 async function clean(body, clinicId, userId) {
   const data = pick(body, FIELDS);
@@ -63,7 +63,7 @@ const getItem = async (clinicId, id) =>
       WHERE i.id = ? AND i.clinic_id = ?`, [id, clinicId],
   ))[0];
 
-// GET /api/items?q=&category=&low_stock=1&status=&page=
+// GET /api/items?q=&category=&manufacturer=&low_stock=1&status=&page=
 router.get('/', requirePermission('item.view'), async (req, res) => {
   const { limit, offset, page } = paging(req.query, { maxLimit: 200 });
   const where = ['i.clinic_id = ?'];
@@ -75,6 +75,10 @@ router.get('/', requirePermission('item.view'), async (req, res) => {
   if (req.query.category) {
     where.push('i.category = ?');
     params.push(req.query.category);
+  }
+  if (req.query.manufacturer) {                      // Purchase / Order → Bulk add
+    where.push('i.manufacturer = ?');
+    params.push(req.query.manufacturer);
   }
   if (req.query.status) {
     where.push('i.status = ?');
@@ -96,11 +100,59 @@ router.get('/options', requirePermission('item.view'), async (req, res) => {
   const distinct = async (col) => (await query(
     `SELECT DISTINCT ${col} AS v FROM items WHERE clinic_id = ? AND ${col} IS NOT NULL AND ${col} <> '' ORDER BY ${col}`, [req.clinicId],
   )).map((r) => r.v);
-  const [types, categories, manufacturers, generics, units] = await Promise.all(
-    ['item_type', 'category', 'manufacturer', 'generic_name', 'unit'].map(distinct),
+  const [types, categories, manufacturers, generics, units, packs] = await Promise.all(
+    ['item_type', 'category', 'manufacturer', 'generic_name', 'unit', 'pack'].map(distinct),
   );
   const suppliers = await query("SELECT id, name FROM suppliers WHERE clinic_id = ? AND status = 'active' ORDER BY name", [req.clinicId]);
-  res.json({ types, categories, manufacturers, generics, units, suppliers });
+  res.json({ types, categories, manufacturers, generics, units, packs, suppliers });
+});
+
+// GET /api/items/stock-report?q=&category=&show=moved|instock|out|all&page= – Pharmacy → Report → Stock Report.
+// Per item, from its stock history: Opening + Stock In − Return − Sold + Adjustment = Current Stock, and
+// Stock Value = Current Stock × selling price. Stock In / Return include their later edits (ref_type).
+// `totals` sums every matching item. show: moved = items with any stock history or stock (default).
+router.get('/stock-report', requirePermission('item.view'), async (req, res) => {
+  const { limit, offset, page } = paging(req.query, { maxLimit: 200, defaultLimit: 50 });
+  const where = ['i.clinic_id = ?'];
+  const params = [req.clinicId];
+  if (req.query.q) {
+    where.push('(i.name LIKE ? OR i.item_code LIKE ? OR i.generic_name LIKE ?)');
+    params.push(...Array(3).fill(like(req.query.q)));
+  }
+  if (req.query.category) {
+    where.push('i.category = ?');
+    params.push(req.query.category);
+  }
+  const show = req.query.show || 'moved';
+  if (show === 'moved') where.push('(m.moves > 0 OR i.stock_qty <> 0)');
+  else if (show === 'instock') where.push('i.stock_qty > 0');
+  else if (show === 'out') where.push('i.stock_qty <= 0 AND m.moves > 0');
+  const w = where.join(' AND ');
+  const from = `FROM items i OUTER APPLY (
+      SELECT COUNT(*) AS moves,
+             COALESCE(SUM(CASE WHEN m.reason = 'opening' THEN m.qty_change END), 0) AS opening,
+             COALESCE(SUM(CASE WHEN m.ref_type = 'stock_in' OR (m.reason = 'purchase' AND m.ref_type IS NULL) THEN m.qty_change END), 0) AS stock_in,
+             COALESCE(-SUM(CASE WHEN m.ref_type = 'purchase_return' OR (m.reason = 'return' AND m.ref_type IS NULL) THEN m.qty_change END), 0) AS returned,
+             COALESCE(-SUM(CASE WHEN m.reason = 'issue' THEN m.qty_change END), 0) AS sold,
+             COALESCE(SUM(CASE WHEN m.reason = 'adjustment' AND m.ref_type IS NULL THEN m.qty_change END), 0) AS adjusted
+        FROM stock_movements m WHERE m.item_id = i.id) m`;
+  const [sum] = await query(
+    `SELECT COUNT(*) AS total, SUM(m.opening) AS opening, SUM(m.stock_in) AS stock_in, SUM(m.returned) AS returned,
+            SUM(m.sold) AS sold, SUM(m.adjusted) AS adjusted, SUM(i.stock_qty) AS stock_qty,
+            SUM(ROUND(i.stock_qty * i.price, 2)) AS stock_value
+       ${from} WHERE ${w}`, params,
+  );
+  const rows = await query(
+    `SELECT i.id, i.item_code, i.name, i.category, i.pack, i.unit, i.stock_qty, i.price, i.mrp, i.status,
+            m.opening, m.stock_in, m.returned, m.sold, m.adjusted, ROUND(i.stock_qty * i.price, 2) AS stock_value
+       ${from} WHERE ${w} ORDER BY i.name ${pageSql}`,
+    [...params, offset, limit],
+  );
+  const n = (v) => Number(v || 0);
+  res.json({
+    rows, total: sum.total, page, limit,
+    totals: Object.fromEntries(['opening', 'stock_in', 'returned', 'sold', 'adjusted', 'stock_qty', 'stock_value'].map((k) => [k, n(sum[k])])),
+  });
 });
 
 router.get('/categories', requirePermission('item.view'), async (req, res) => {
@@ -193,12 +245,73 @@ router.post('/import', requirePermission('item.manage'), async (req, res) => {
   res.json(result);
 });
 
-// PUT /api/items/:id – details only; stock changes go through /stock
+// POST /api/items/bulk { rows: [{ id, category?, potency?, pack?, hsn_code?, manufacturer?, mrp?, cgst_percent?,
+//   sgst_percent?, rack?, box?, status? }] } – Item → Bulk Update: only the fields sent change. Every row is checked
+// first; if any is wrong nothing is saved and the problems come back per item. A lower MRP also brings the
+// selling price down to it.
+const BULK_FIELDS = ['category', 'potency', 'pack', 'hsn_code', 'manufacturer', 'mrp', 'cgst_percent', 'sgst_percent', 'rack', 'box', 'status'];
+const MAX_BULK = 500;
+router.post('/bulk', requirePermission('item.manage'), async (req, res) => {
+  const input = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  if (!input.length) throw badRequest('Nothing to save', 'VALIDATION');
+  if (input.length > MAX_BULK) throw badRequest(`At most ${MAX_BULK} items at a time`, 'VALIDATION');
+  const ids = input.map((r) => toId(r?.id, 'item'));
+  const found = await query(
+    `SELECT id, name, price, cgst_percent, sgst_percent FROM items WHERE clinic_id = ? AND id IN (${ids.map(() => '?').join(', ')})`,
+    [req.clinicId, ...ids],
+  );
+  const byId = new Map(found.map((i) => [i.id, i]));
+  const changes = [];
+  const errors = [];
+  for (const [n, r] of input.entries()) {
+    const item = byId.get(ids[n]);
+    if (!item) { errors.push({ id: ids[n], name: `#${ids[n]}`, message: 'Item not found' }); continue; }
+    try {
+      const body = pick(r, BULK_FIELDS);
+      // GST is checked as the pair, so a change to one keeps the other as saved
+      if ('cgst_percent' in body && !('sgst_percent' in body)) body.sgst_percent = item.sgst_percent;
+      if ('sgst_percent' in body && !('cgst_percent' in body)) body.cgst_percent = item.cgst_percent;
+      const data = await clean(body, req.clinicId, req.user.id);
+      if (data.mrp > 0 && Number(item.price) > data.mrp) data.price = data.mrp;
+      if (Object.keys(data).length) changes.push({ id: item.id, data });
+    } catch (e) {
+      errors.push({ id: item.id, name: item.name, message: e.message });
+    }
+  }
+  if (errors.length) {
+    const err = badRequest(`${errors.length} item(s) need fixing – nothing was saved`, 'BULK_INVALID');
+    err.details = errors;
+    throw err;
+  }
+  await tx(async (q) => {
+    for (const c of changes) {
+      const { sql, params } = setClause(c.data);
+      await q(`UPDATE items SET ${sql}, updated_at = NOW() WHERE id = ? AND clinic_id = ?`, [...params, c.id, req.clinicId]);
+    }
+  });
+  res.json({ updated: changes.length });
+});
+
+// PUT /api/items/:id – details, plus stock_qty (Quantity on the Edit screen): a new quantity is
+// saved and the difference logged as an adjustment in the stock history
 router.put('/:id', requirePermission('item.manage'), async (req, res) => {
   const id = toId(req.params.id);
-  const { sql, params } = setClause(await clean(req.body, req.clinicId, req.user.id));
-  const r = await query(`UPDATE items SET ${sql}, updated_at = NOW() WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
-  if (!r.affectedRows) throw notFound('Item');
+  const data = await clean(req.body, req.clinicId, req.user.id);
+  const newQty = req.body?.stock_qty === undefined || req.body.stock_qty === '' ? null : toAmount(req.body.stock_qty, 'stock_qty');
+  const { sql, params } = Object.keys(data).length || newQty === null ? setClause(data) : { sql: null, params: [] };
+  await tx(async (q) => {
+    const [item] = await q('SELECT stock_qty FROM items WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+    if (!item) throw notFound('Item');
+    if (sql) await q(`UPDATE items SET ${sql}, updated_at = NOW() WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
+    const change = newQty === null ? 0 : Math.round((newQty - Number(item.stock_qty)) * 100) / 100;
+    if (change !== 0) {
+      await q('UPDATE items SET stock_qty = ? WHERE id = ?', [newQty, id]);
+      await insertRow(q, 'stock_movements', {
+        clinic_id: req.clinicId, item_id: id, qty_change: change, balance_after: newQty, reason: 'adjustment',
+        note: 'Quantity changed on Edit Item', created_by: req.user.id,
+      });
+    }
+  });
   res.json(await getItem(req.clinicId, id));
 });
 

@@ -13,11 +13,12 @@ import { Button, Input, Modal, useToast } from './ui.jsx';
 import Icon from './Icon.jsx';
 
 /**
- * kind: 'potency' | 'dosage'
+ * kind: 'potency' | 'dosage' | … (also 'generic' / 'manufacturer' for Pharmacy → Item)
+ * label: the list's name when it is not examine.<kind> (e.g. "Generic Name")
  * list: { rows: [text], added: [{ id, value, sort_order }] } from /api/visits/{kind}-options
  * onListChange(list) is called after an add or edit, so every line shares the new list.
  */
-export default function RxListPicker({ kind, value, list, onChange, onListChange, disabled, multiple = false }) {
+export default function RxListPicker({ kind, label, value, list, onChange, onListChange, disabled, multiple = false }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);     // pop-up: { id (null = new), old, text, order, oldOrder }
@@ -28,7 +29,7 @@ export default function RxListPicker({ kind, value, list, onChange, onListChange
   const box = useRef(null);
   const menu = useRef(null);
   const menuId = useId();
-  const name = t(`examine.${kind}`);                 // "Potency" / "Dosage"
+  const name = label || t(`examine.${kind}`);        // "Potency" / "Dosage"
 
   useEffect(() => {
     const outside = (e) => { if (box.current && !box.current.contains(e.target)) { setOpen(false); setMode(null); setFilter(''); } };

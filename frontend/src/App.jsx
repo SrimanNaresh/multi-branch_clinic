@@ -28,8 +28,20 @@ import ConsentForm from './pages/branch/ConsentForm.jsx';
 import PatientHistory from './pages/branch/PatientHistory.jsx';
 import ItemForm from './pages/branch/ItemForm.jsx';
 import ItemList from './pages/branch/ItemList.jsx';
+import ItemBulk from './pages/branch/ItemBulk.jsx';
 import SuppliersPage from './pages/branch/Suppliers.jsx';
 import Dispense from './pages/branch/Dispense.jsx';
+import SaleForm from './pages/branch/SaleForm.jsx';
+import SaleList from './pages/branch/SaleList.jsx';
+import VendorForm from './pages/branch/VendorForm.jsx';
+import PurchaseForm from './pages/branch/PurchaseForm.jsx';
+import PurchaseList from './pages/branch/PurchaseList.jsx';
+import StockInForm from './pages/branch/StockInForm.jsx';
+import StockInList from './pages/branch/StockInList.jsx';
+import ReturnForm from './pages/branch/ReturnForm.jsx';
+import ReturnList from './pages/branch/ReturnList.jsx';
+import StockReport from './pages/branch/StockReport.jsx';
+import VendorPayments from './pages/branch/VendorPayments.jsx';
 import PatientBill from './pages/branch/PatientBill.jsx';
 import BillList from './pages/branch/BillList.jsx';
 import BillView from './pages/branch/BillView.jsx';
@@ -69,10 +81,27 @@ const ROUTES = [
 
   { path: '/items/new', perm: 'item.manage', el: ItemForm, branch: true },
   { path: '/items', perm: 'item.view', el: ItemList, branch: true },
+  { path: '/items/bulk', perm: 'item.manage', el: ItemBulk, branch: true },
   { path: '/items/:id/edit', perm: 'item.manage', el: ItemForm, branch: true },
   { path: '/suppliers', perm: 'supplier.manage', el: SuppliersPage, branch: true },
+  { path: '/suppliers/new', perm: 'supplier.manage', el: VendorForm, branch: true },
+  { path: '/suppliers/:id/edit', perm: 'supplier.manage', el: VendorForm, branch: true },
   { path: '/dispense', perm: 'dispense', el: Dispense, branch: true },
   { path: '/dispense/:visitId', perm: 'dispense', el: Dispense, branch: true },
+  { path: '/purchase/new', perm: 'stock.manage', el: PurchaseForm, branch: true },
+  { path: '/purchase/:id/edit', perm: 'stock.manage', el: PurchaseForm, branch: true },
+  { path: '/purchase', perm: 'stock.manage', el: PurchaseList, branch: true },
+  { path: '/stock-in/new', perm: 'stock.manage', el: StockInForm, branch: true },
+  { path: '/stock-in/:id/edit', perm: 'stock.manage', el: StockInForm, branch: true },
+  { path: '/stock-in', perm: 'stock.manage', el: StockInList, branch: true },
+  { path: '/returns/new', perm: 'stock.manage', el: ReturnForm, branch: true },
+  { path: '/returns/:id/edit', perm: 'stock.manage', el: ReturnForm, branch: true },
+  { path: '/returns', perm: 'stock.manage', el: ReturnList, branch: true },
+  { path: '/sales/new', perm: 'dispense', el: SaleForm, branch: true },
+  { path: '/sales/:id/edit', perm: 'dispense', el: SaleForm, branch: true },
+  { path: '/sales', perm: 'dispense', el: SaleList, branch: true },
+  { path: '/reports/stock', perm: 'item.view', el: StockReport, branch: true },
+  { path: '/reports/vendor-payments', perm: 'stock.manage', el: VendorPayments, branch: true },
 
   { path: '/billing', perm: 'bill.create', el: PatientBill, branch: true },
   { path: '/billing/:visitId', perm: 'bill.create', el: PatientBill, branch: true },

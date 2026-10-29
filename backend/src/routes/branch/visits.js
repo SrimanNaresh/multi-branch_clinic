@@ -117,11 +117,43 @@ const RX_LIST_TABLE = {
   dosage: 'dosage_master', potency: 'potency_master', repetition: 'repetition_master',
   dosdont: 'dosdont_master', pasthistory: 'pasthistory_master', medhistory: 'medhistory_master',
   dbroutine: 'dbroutine_master', dbduration: 'dbduration_master', dbfrequency: 'dbfrequency_master',
+  generic: 'generic_master', manufacturer: 'manufacturer_master', unit: 'unit_master',
+  category: 'category_master', itempotency: 'item_potency_master',
 };
 const RX_LIST_NAME = {
   dosage: 'dosage', potency: 'potency', repetition: 'repetition', dosdont: 'item', pasthistory: 'item', medhistory: 'item',
   dbroutine: 'routine', dbduration: 'duration', dbfrequency: 'frequency',
+  generic: 'generic name', manufacturer: 'manufacturer', unit: 'type / unit', category: 'category', itempotency: 'potency',
 };
+// Pharmacy → Item → Generic Name / Manufacturer / Type / Unit / Category / Potency use the same lists: open to Item permissions instead of
+// Examine, and a clinic starts with the values its items already use (items.<column>) instead of fixed defaults.
+const ITEM_LIST_COLUMN = {
+  generic: 'generic_name', manufacturer: 'manufacturer', unit: 'unit', category: 'category', itempotency: 'potency',
+};
+// Type / Unit and Potency also start with the common values (after the ones items already use)
+const ITEM_LIST_EXTRA = {
+  unit: ['nos', 'bottle', 'strip', 'tablet', 'ml', 'gm', 'dram', 'box', 'tube', 'sachet'],
+  itempotency: ['6C', '30C', '200C', '1M', '10M', 'Q'],
+};
+
+/** Item lists: copy the clinic's item values in one statement (hundreds of rows), alphabetical Order. */
+async function seedItemList(q, kind, clinicId, userId) {
+  const table = RX_LIST_TABLE[kind];
+  const col = ITEM_LIST_COLUMN[kind];
+  await q(
+    `INSERT INTO ${table} (clinic_id, value, sort_order, is_default, created_by)
+     SELECT ?, v, CASE WHEN rn > ? THEN ? ELSE rn END, 1, ?
+       FROM (SELECT v, ROW_NUMBER() OVER (ORDER BY v) AS rn
+               FROM (SELECT DISTINCT LEFT(LTRIM(RTRIM(${col})), 100) AS v FROM items
+                      WHERE clinic_id = ? AND LTRIM(RTRIM(COALESCE(${col}, ''))) <> '') d) x
+      WHERE NOT EXISTS (SELECT 1 FROM ${table} t WHERE t.clinic_id = ? AND t.value = x.v)`,
+    [clinicId, MAX_ORDER, MAX_ORDER, userId, clinicId, clinicId],
+  );
+  for (const [i, value] of (ITEM_LIST_EXTRA[kind] || []).entries()) {
+    const [same] = await q(`SELECT id FROM ${table} WHERE clinic_id = ? AND value = ?`, [clinicId, value]);
+    if (!same) await insertRow(q, table, { clinic_id: clinicId, value, sort_order: i + 1, is_default: 1, created_by: userId });
+  }
+}
 
 async function ensureDefaults(kind, clinicId, userId) {
   const table = RX_LIST_TABLE[kind];
@@ -131,6 +163,7 @@ async function ensureDefaults(kind, clinicId, userId) {
   await tx(async (q) => {
     const [again] = await q(`SELECT TOP 1 id FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE clinic_id = ? AND is_default = 1`, [clinicId]);
     if (again) return;
+    if (ITEM_LIST_COLUMN[kind]) { await seedItemList(q, kind, clinicId, userId); return; }
     for (const d of defaultsFor(kind)) {
       const [same] = await q(`SELECT id FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE clinic_id = ? AND value = ?`, [clinicId, d.value]);
       if (same) await q(`UPDATE ${table} SET is_default = 1 WHERE id = ?`, [same.id]);
@@ -155,17 +188,19 @@ const readOrder = (body) => {
   return order;
 };
 
-for (const kind of RX_LIST_KINDS) {
+for (const kind of [...RX_LIST_KINDS, ...Object.keys(ITEM_LIST_COLUMN)]) {
   const table = RX_LIST_TABLE[kind];
   const name = RX_LIST_NAME[kind];
+  const canView = ITEM_LIST_COLUMN[kind] ? requirePermission('item.view') : requirePermission('visit.examine');
+  const canEdit = ITEM_LIST_COLUMN[kind] ? requirePermission('item.manage') : requirePermission('visit.examine');
 
   // GET /api/visits/{potency|dosage}-options
-  router.get(`/${kind}-options`, requirePermission('visit.examine'), async (req, res) => {
+  router.get(`/${kind}-options`, canView, async (req, res) => {
     res.json(await loadOptions(kind, req.clinicId, req.user.id));
   });
 
   // PUT /api/visits/{kind}-options/:id { value, sort_order } – rename / reorder any row
-  router.put(`/${kind}-options/:id`, requirePermission('visit.examine'), async (req, res) => {
+  router.put(`/${kind}-options/:id`, canEdit, async (req, res) => {
     const id = toId(req.params.id);
     const value = cleanDosage(req.body?.value);
     if (!value) throw badRequest(`Enter the ${name}`, 'VALIDATION');
@@ -189,7 +224,7 @@ for (const kind of RX_LIST_KINDS) {
   });
 
   // POST /api/visits/{kind}-options { value, sort_order? } – "+ New" (without an Order it goes to the end)
-  router.post(`/${kind}-options`, requirePermission('visit.examine'), async (req, res) => {
+  router.post(`/${kind}-options`, canEdit, async (req, res) => {
     const value = cleanDosage(req.body?.value);
     if (!value) throw badRequest(`Enter the ${name} to add`, 'VALIDATION');
     const order = readOrder(req.body);
@@ -211,7 +246,7 @@ for (const kind of RX_LIST_KINDS) {
   });
 
   // DELETE /api/visits/{kind}-options/:id – remove from the list (hidden; prescriptions keep their text)
-  router.delete(`/${kind}-options/:id`, requirePermission('visit.examine'), async (req, res) => {
+  router.delete(`/${kind}-options/:id`, canEdit, async (req, res) => {
     const id = toId(req.params.id);
     const r = await query(`UPDATE ${table} SET is_deleted = 1 WHERE id = ? AND clinic_id = ? AND is_deleted = 0`, [id, req.clinicId]);
     if (!r.affectedRows) throw notFound(name[0].toUpperCase() + name.slice(1));
