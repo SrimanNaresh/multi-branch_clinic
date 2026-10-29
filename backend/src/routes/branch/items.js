@@ -4,23 +4,29 @@ import { query, tx, insertRow, updateRow, pageSql } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, notFound, oneOf, paging, pick, requireFields, setClause, toAmount, toId, like } from '../../utils/http.js';
 import { checkItemRows, IMPORT_ERRORS, MAX_IMPORT_ROWS } from '../../../../shared/itemImport.js';
+import { nextSequence, formatItemCode } from '../../utils/codes.js';
 
 const router = Router();
 router.use(clinicScope());
 
-const FIELDS = ['name', 'category', 'unit', 'price', 'gst_percent', 'reorder_level', 'pharmacy_id', 'status',
+const FIELDS = ['name', 'category', 'unit', 'price', 'reorder_level', 'pharmacy_id', 'status',
   'item_type', 'hsn_code', 'manufacturer', 'generic_name', 'brand_name', 'purchase_rate', 'mrp', 'discount_percent',
-  'schedule_h', 'schedule_h1'];
-const TEXT = { item_type: 50, hsn_code: 20, manufacturer: 150, generic_name: 150, brand_name: 150, category: 100, unit: 30 };
+  'schedule_h', 'schedule_h1', 'cgst_percent', 'sgst_percent', 'pack', 'rack', 'box'];
+const TEXT = { item_type: 50, hsn_code: 20, manufacturer: 150, generic_name: 150, brand_name: 150, category: 100, unit: 30, pack: 50, rack: 50, box: 50 };
 
 async function clean(body, clinicId, userId) {
   const data = pick(body, FIELDS);
-  for (const f of ['price', 'gst_percent', 'reorder_level', 'purchase_rate', 'mrp', 'discount_percent']) if (f in data) data[f] = toAmount(data[f], f);
+  for (const f of ['price', 'reorder_level', 'purchase_rate', 'mrp', 'discount_percent', 'cgst_percent', 'sgst_percent']) if (f in data) data[f] = toAmount(data[f], f);
   for (const [f, max] of Object.entries(TEXT)) {
     if (f in data) data[f] = data[f] == null || String(data[f]).trim() === '' ? null : String(data[f]).trim().slice(0, max);
   }
   if (data.unit === null) delete data.unit;
   for (const f of ['schedule_h', 'schedule_h1']) if (f in data) data[f] = data[f] ? 1 : 0;
+  // gst_percent is always the sum of the two – never sent/edited directly, so billing / dispense
+  // (which still read i.gst_percent as one number) keep working without any change on their side.
+  if ('cgst_percent' in data || 'sgst_percent' in data) {
+    data.gst_percent = (data.cgst_percent || 0) + (data.sgst_percent || 0);
+  }
   if (data.gst_percent > 28) throw badRequest('GST % looks wrong', 'VALIDATION');
   if (data.discount_percent > 100) throw badRequest('Discount % must be 0–100', 'VALIDATION');
   if (data.mrp > 0 && data.price > data.mrp) throw badRequest('Sell price cannot be more than MRP', 'VALIDATION');
@@ -111,13 +117,17 @@ router.get('/:id', requirePermission('item.view'), async (req, res) => {
   res.json(item);
 });
 
-// POST /api/items  { name, category, unit, price, gst_percent, reorder_level, opening_stock, pharmacy_id }
+// POST /api/items  { name, category, unit, price, cgst_percent, sgst_percent, reorder_level, opening_stock, pharmacy_id }
 router.post('/', requirePermission('item.manage'), async (req, res) => {
   const data = await clean(req.body, req.clinicId, req.user.id);
   requireFields(data, ['name']);
   const opening = toAmount(req.body?.opening_stock, 'opening_stock');
   const id = await tx(async (q) => {
-    const itemId = await insertRow(q, 'items', { unit: 'nos', ...data, stock_qty: opening, clinic_id: req.clinicId, created_by: req.user.id });
+    const [clinic] = await q('SELECT code FROM clinics WHERE id = ?', [req.clinicId]);
+    const n = await nextSequence(q, req.clinicId, 'item');
+    const itemId = await insertRow(q, 'items', {
+      unit: 'nos', ...data, item_code: formatItemCode(clinic.code, n), stock_qty: opening, clinic_id: req.clinicId, created_by: req.user.id,
+    });
     if (opening > 0) {
       await insertRow(q, 'stock_movements', {
         clinic_id: req.clinicId, item_id: itemId, qty_change: opening, balance_after: opening,

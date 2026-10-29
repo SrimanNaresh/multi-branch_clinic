@@ -22,5 +22,6 @@ const pad = (n, width) => String(n).padStart(width, '0');
 export const formatPatientCode = (clinicCode, n) => `${clinicCode}-${pad(n, 4)}`;     // CLA-0001
 export const formatBillNo = (clinicCode, n) => `${clinicCode}-B${pad(n, 4)}`;         // CLA-B0001
 export const formatEmployeeCode = (clinicCode, n) => `${clinicCode}-E${pad(n, 3)}`;   // CLA-E001
+export const formatItemCode = (clinicCode, n) => `${clinicCode}-I${pad(n, 4)}`;       // CLA-I0001
 export const formatAdminCode = (n) => `ADM-${pad(n, 3)}`;                            // ADM-001
 export const tokenKey = (isoDate) => `token:${isoDate}`;

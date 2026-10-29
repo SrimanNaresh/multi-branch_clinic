@@ -13,9 +13,9 @@ const ITEM_TYPES = ['Medicine', 'Consumable', 'Equipment', 'Other'];
 
 const EMPTY = {
   name: '', item_type: '', category: '', hsn_code: '',
-  manufacturer: '', supplier_name: '', generic_name: '', brand_name: '', unit: '',
-  purchase_rate: '', gst_percent: '', mrp: '', price: '', discount_percent: '',
-  schedule_h: false, schedule_h1: false, status: 'active',
+  manufacturer: '', supplier_name: '', generic_name: '', brand_name: '', unit: '', pack: '',
+  purchase_rate: '', cgst_percent: '', sgst_percent: '', mrp: '', price: '', discount_percent: '',
+  schedule_h: false, schedule_h1: false, status: 'active', rack: '', box: '',
 };
 const uniq = (...lists) => [...new Set(lists.flat().filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
@@ -37,6 +37,7 @@ export default function ItemForm({ params }) {
   const f = useForm(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [openingStock, setOpeningStock] = useState('');
   const existing = useAsync(() => (id ? api(`/items/${id}`) : Promise.resolve(null)), [id]);
   const opts = useAsync(() => api('/items/options'), []);
 
@@ -59,16 +60,16 @@ export default function ItemForm({ params }) {
     const body = {
       ...v,
       unit: v.unit || 'nos',
-      purchase_rate: num(v.purchase_rate), gst_percent: num(v.gst_percent), mrp: num(v.mrp),
-      price: num(v.price), discount_percent: num(v.discount_percent),
+      purchase_rate: num(v.purchase_rate), cgst_percent: num(v.cgst_percent), sgst_percent: num(v.sgst_percent),
+      mrp: num(v.mrp), price: num(v.price), discount_percent: num(v.discount_percent),
     };
-    if (!id) delete body.status;
+    if (!id) { delete body.status; body.opening_stock = num(openingStock); }
     try {
       const item = id ? await api(`/items/${id}`, { method: 'PUT', body }) : await api('/items', { method: 'POST', body });
       toast(t('items.saved', { name: item.name }));
       opts.reload();
       if (id) navigate('/items');
-      else f.setValues(EMPTY);   // ready for the next item
+      else { f.setValues(EMPTY); setOpeningStock(''); }   // ready for the next item
     } catch (err) {
       setError(err.message);
     } finally {
@@ -90,7 +91,9 @@ export default function ItemForm({ params }) {
             <span className="compact-head-icon"><Icon name="box" size={16} /></span>
             <div>
               <h1>{id ? `${t('common.edit')} – ${existing.data?.name}` : t('items.addItem')}</h1>
-              <p className="muted">{id ? existing.data?.category || t('items.subtitle') : t('items.registerHint')}</p>
+              <p className="muted">
+                {id ? [existing.data?.item_code, existing.data?.category].filter(Boolean).join(' · ') || t('items.subtitle') : t('items.registerHint')}
+              </p>
             </div>
             <div className="compact-head-actions">
               {!id && <ItemImportButtons onImported={opts.reload} />}
@@ -115,9 +118,19 @@ export default function ItemForm({ params }) {
             <Input label={t('items.brand')} placeholder={t('items.brandPh')} {...f.bind('brand_name')} />
             <ComboField id="item-units" label={t('items.unit')} placeholder={t('items.unitPh')}
               options={uniq(UNITS, o.units || [])} {...f.bind('unit')} />
+            <Input label={t('items.pack')} placeholder={t('items.packPh')} {...f.bind('pack')} />
+            {id ? (
+              <Input label={t('items.stock')} value={`${existing.data?.stock_qty ?? 0} ${f.values.unit || ''}`} disabled hint={t('items.stockHint')} />
+            ) : (
+              <Input label={t('items.openingStock')} type="number" min="0" step="0.01" placeholder="0" value={openingStock} onChange={(e) => setOpeningStock(e.target.value)} />
+            )}
+            <Input label={t('items.rack')} placeholder={t('items.rackPh')} {...f.bind('rack')} />
+            <Input label={t('items.box')} placeholder={t('items.boxPh')} {...f.bind('box')} />
+            <span className="grid-break" aria-hidden />
 
             <Input label={t('items.purchaseRate')} {...money} {...f.bind('purchase_rate')} />
-            <Input label={t('items.gst')} {...money} max="28" {...f.bind('gst_percent')} />
+            <Input label={t('items.cgst')} {...money} max="14" {...f.bind('cgst_percent')} />
+            <Input label={t('items.sgst')} {...money} max="14" {...f.bind('sgst_percent')} />
             <Input label={t('items.mrp')} {...money} {...f.bind('mrp')} />
             <Input label={t('items.sellPrice')} {...money} {...f.bind('price')} />
             <Input label={t('items.discount')} {...money} max="100" {...f.bind('discount_percent')} />

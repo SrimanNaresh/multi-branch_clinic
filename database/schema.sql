@@ -382,6 +382,55 @@ IF COL_LENGTH(N'dbo.items', N'schedule_h1') IS NULL
   ALTER TABLE dbo.items ADD schedule_h1 BIT NOT NULL CONSTRAINT df_items_schedule_h1 DEFAULT 0;
 GO
 
+/* Item Code (CLA-I0001, same per-clinic sequence as patients/bills), storage location
+   (Rack / Box), Pack description, and GST split into CGST / SGST (gst_percent stays the
+   sum of the two, so billing / dispense keep reading one number as before). */
+IF COL_LENGTH(N'dbo.items', N'item_code') IS NULL
+  ALTER TABLE dbo.items ADD item_code NVARCHAR(20) NULL;
+GO
+IF COL_LENGTH(N'dbo.items', N'pack') IS NULL
+  ALTER TABLE dbo.items ADD pack NVARCHAR(50) NULL;
+GO
+IF COL_LENGTH(N'dbo.items', N'rack') IS NULL
+  ALTER TABLE dbo.items ADD rack NVARCHAR(50) NULL;
+GO
+IF COL_LENGTH(N'dbo.items', N'box') IS NULL
+  ALTER TABLE dbo.items ADD box NVARCHAR(50) NULL;
+GO
+IF COL_LENGTH(N'dbo.items', N'cgst_percent') IS NULL
+  ALTER TABLE dbo.items ADD cgst_percent DECIMAL(5,2) NOT NULL CONSTRAINT df_items_cgst DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.items', N'sgst_percent') IS NULL
+  ALTER TABLE dbo.items ADD sgst_percent DECIMAL(5,2) NOT NULL CONSTRAINT df_items_sgst DEFAULT 0;
+GO
+
+-- One-time: split any pre-existing single GST % evenly into CGST / SGST, so re-saving an
+-- old item (which now always sends both) does not silently zero its tax out.
+UPDATE dbo.items SET cgst_percent = gst_percent / 2, sgst_percent = gst_percent / 2
+  WHERE cgst_percent = 0 AND sgst_percent = 0 AND gst_percent > 0;
+GO
+
+-- One-time: give pre-existing items (added before Item Code existed) a code, numbered by id
+-- within their clinic, then move each clinic's "item" sequence past what was just assigned
+-- so the next new item continues cleanly from there. Only touches rows with no code yet.
+IF EXISTS (SELECT 1 FROM dbo.items WHERE item_code IS NULL)
+BEGIN
+  ;WITH numbered AS (
+    SELECT i.id, c.code AS clinic_code, ROW_NUMBER() OVER (PARTITION BY i.clinic_id ORDER BY i.id) AS rn
+      FROM dbo.items i JOIN dbo.clinics c ON c.id = i.clinic_id
+     WHERE i.item_code IS NULL
+  )
+  UPDATE i SET i.item_code = n.clinic_code + N'-I' + RIGHT(N'0000' + CAST(n.rn AS NVARCHAR(4)), 4)
+    FROM dbo.items i JOIN numbered n ON n.id = i.id;
+
+  MERGE dbo.code_sequences AS tgt
+  USING (SELECT clinic_id, COUNT(*) AS n FROM dbo.items WHERE item_code IS NOT NULL GROUP BY clinic_id) AS src
+    ON tgt.clinic_id = src.clinic_id AND tgt.seq_key = N'item'
+  WHEN MATCHED AND tgt.last_value < src.n THEN UPDATE SET last_value = src.n
+  WHEN NOT MATCHED THEN INSERT (clinic_id, seq_key, last_value) VALUES (src.clinic_id, N'item', src.n);
+END
+GO
+
 /* ---------- 6b. DOCTOR: prescription lines ---------- */
 IF OBJECT_ID(N'dbo.prescriptions', N'U') IS NULL
 CREATE TABLE dbo.prescriptions (

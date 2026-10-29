@@ -64,6 +64,7 @@ export default function ItemList() {
   const cats = useAsync(() => api('/items/categories'), []);
 
   const columns = [
+    { key: 'item_code', label: t('items.code'), render: (r) => <span className="muted">{r.item_code}</span> },
     { key: 'name', label: t('items.name'), render: (r) => <b>{r.name}</b> },
     { key: 'category', label: t('items.category') },
     { key: 'unit', label: t('items.unit') },
