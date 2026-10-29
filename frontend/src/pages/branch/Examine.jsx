@@ -4,7 +4,7 @@ import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate, useLocation } from '../../lib/router.jsx';
-import { ageLabel, fmtDate, fmtTime12, genderLabel, queueStatus } from '../../lib/format.js';
+import { ageLabel, fmtDate, fmtTime12, genderLabel, queueStatus, todayLocal } from '../../lib/format.js';
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Input, Loading, PageHeader, StatusBadge, TextArea, useAsync, useToast } from '../../components/ui.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
 import { RX_LIST_DEFAULTS } from '../../../../shared/dosage.js';
@@ -12,9 +12,11 @@ import DosDontList, { DosDontSummary } from '../../components/DosDontList.jsx';
 import PastHistoryList, { PastHistorySummary } from '../../components/PastHistoryList.jsx';
 import RxListPicker from '../../components/RxListPicker.jsx';
 import Icon from '../../components/Icon.jsx';
-import { VitalsForm, vitalsSummary } from '../../components/VitalSigns.jsx';
+import { VitalsForm, VitalsHistory, vitalsSummary } from '../../components/VitalSigns.jsx';
 import Attachments from '../../components/Attachments.jsx';
 import ComparativeStudy from '../../components/ComparativeStudy.jsx';
+import DayBookChart from '../../components/DayBookChart.jsx';
+import { cleanChartDays, defaultChartDays, MAX_CHART_DAYS } from '../../../../shared/daybook.js';
 
 const emptyLine = () => ({ key: Math.random().toString(36).slice(2), medicine_name: '', item_id: null, potency: '', dosage: '', frequency: '', duration: '', quantity: 1, instructions: '' });
 
@@ -135,17 +137,18 @@ function PastVisitDetails({ v }) {
         <PastHistorySummary value={v.past_history} />
       </section>
     ),
-    (filled(v.advice) || filled(v.follow_up_date) || dosDonts.length > 0) && (
+    (filled(v.advice) || v.advice_unwilling || filled(v.follow_up_date) || dosDonts.length > 0) && (
       <section key="advice" className="pv-sec">
         <h4>{t('examine.advice')}</h4>
         <dl className="pv-fields">
           {filled(v.advice) && <div><dt>{t('examine.advice')}</dt><dd>{v.advice}</dd></div>}
+          {v.advice_unwilling && <div><dt>{t('examine.unwilling')}</dt><dd>✓</dd></div>}
           {filled(v.follow_up_date) && <div><dt>{t('examine.followUp')}</dt><dd>{fmtDate(v.follow_up_date)}</dd></div>}
           {dosDonts.length > 0 && <DosDontSummary marks={dosDonts} />}
         </dl>
       </section>
     ),
-    rx.length > 0 && (
+    (rx.length > 0 || v.rx_unwilling) && (
       <section key="rx" className="pv-sec wide">
         <h4>{t('examine.prescription')}</h4>
         <div className="table-wrap">
@@ -156,6 +159,13 @@ function PastVisitDetails({ v }) {
             </tbody>
           </table>
         </div>
+        {v.rx_unwilling && <p className="pv-line">{t('examine.unwilling')} ✓</p>}
+      </section>
+    ),
+    (v.daybook_routine?.length > 0 || filled(v.daybook_duration) || filled(v.daybook_frequency)) && (
+      <section key="daybook" className="pv-sec">
+        <h4>{t('daybook.title')}</h4>
+        <Fields rows={[[t('examine.dbdate'), v.daybook_date && fmtDate(v.daybook_date)], [t('examine.dbroutine'), (v.daybook_routine || []).join(', ')], [t('examine.dbduration'), v.daybook_duration], [t('examine.dbfrequency'), v.daybook_frequency]]} />
       </section>
     ),
   ].filter(Boolean);
@@ -189,7 +199,6 @@ function PastVisits({ patientId, excludeId, footer }) {
 // Vital signs recorded at reception (after Confirm); the doctor can correct them here.
 // Lab Reports & Scans uploaded with the vitals are listed here too (files only – no upload here).
 function QueueVitals({ queueId, patientName, readOnly, footer }) {
-  const { t } = useT();
   const v = useAsync(() => api(`/queue/${queueId}/vitals`), [queueId]);
   return (
     <Card>
@@ -206,10 +215,17 @@ function QueueVitals({ queueId, patientName, readOnly, footer }) {
 // Complaints & diagnosis: its sections as tabs down the left side, in this order: [key, label]
 const CLINICAL_TABS = [
   ['complaints', 'examine.complaints'],
+  ['vitalsHistory', 'vitals.history'],
   ['medical', 'examine.medicalHistory'],
   ['exam', 'examine.pastHistory'],
   ['diagnosis', 'examine.diagnosis'],
   ['compare', 'cs.title'],
+];
+
+// Prescription: its sections as tabs down the left side: [key, label]
+const RX_TABS = [
+  ['medicines', 'examine.prescription'],
+  ['daybook', 'daybook.title'],
 ];
 
 // Patient details tabs, in this order: [key, label]
@@ -231,6 +247,9 @@ function VisitForm({ visitId, backPath }) {
   const [dosDontList, setDosDontList] = useRxList('dosdont');
   const [pastList, setPastList] = useRxList('pasthistory');
   const [medList, setMedList] = useRxList('medhistory');
+  const [routineList, setRoutineList] = useRxList('dbroutine');
+  const [dbDurationList, setDbDurationList] = useRxList('dbduration');
+  const [dbFrequencyList, setDbFrequencyList] = useRxList('dbfrequency');
   const [f, setF] = useState(null);
   const [lines, setLines] = useState([emptyLine()]);
   const [focusLine, setFocusLine] = useState(null);   // line whose Medicine box gets the cursor after render
@@ -238,6 +257,8 @@ function VisitForm({ visitId, backPath }) {
   const [tab, setTab] = useState('history');
   const [subTab, setSubTab] = useState('complaints');   // Complaints & diagnosis section
   const [csCount, setCsCount] = useState(0);             // Comparative Study rows (for the tab mark)
+  const [rxTab, setRxTab] = useState('medicines');       // Prescription section
+  const [chartDaysText, setChartDaysText] = useState('');  // Day Book chart: days typed ('' = default)
   const tabIndex = EXAMINE_TABS.findIndex(([key]) => key === tab);
   const prevTab = EXAMINE_TABS[tabIndex - 1];
   const nextTab = EXAMINE_TABS[tabIndex + 1];
@@ -268,7 +289,8 @@ function VisitForm({ visitId, backPath }) {
     if (!visit) return;
     setF({
       complaints: visit.complaints || '', examination_notes: visit.examination_notes || '', diagnosis: visit.diagnosis || '',
-      advice: visit.advice || '', follow_up_date: visit.follow_up_date || '', consultation_fee: visit.consultation_fee ?? 0,
+      advice: visit.advice || '', advice_unwilling: !!visit.advice_unwilling, rx_unwilling: !!visit.rx_unwilling,
+      daybook_date: visit.daybook_date || todayLocal(), daybook_routine: visit.daybook_routine || [], daybook_chart: visit.daybook_chart || {}, daybook_duration: visit.daybook_duration || '', daybook_frequency: visit.daybook_frequency || '', follow_up_date: visit.follow_up_date || '', consultation_fee: visit.consultation_fee ?? 0,
       dos_donts: visit.dos_donts || [], past_history: visit.past_history || [], medical_history: visit.medical_history || [],
     });
     setLines(visit.prescriptions.length ? visit.prescriptions.map((p) => ({ ...p, key: String(p.id) })) : [emptyLine()]);
@@ -286,22 +308,29 @@ function VisitForm({ visitId, backPath }) {
   if (!f) return null;
 
   const locked = visit.issue_count > 0;
+  // Day Book chart: the Frequency's number of days, else up to the follow-up date, else 7 – unless Days is typed
+  const chartDayCount = cleanChartDays(chartDaysText, defaultChartDays(f.daybook_date, f.follow_up_date, f.daybook_frequency));
   const rxCount = lines.filter((l) => l.medicine_name.trim()).length;
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
-  async function save(complete, { print = false } = {}) {
-    setSaving(print ? 'print' : complete ? 'complete' : 'draft');
+  async function save(complete, { print = false, busy } = {}) {
+    setSaving(busy || (print ? 'print' : complete ? 'complete' : 'draft'));
     try {
       const body = {
-        complaints: f.complaints, examination_notes: f.examination_notes, diagnosis: f.diagnosis, advice: f.advice,
+        complaints: f.complaints, examination_notes: f.examination_notes, diagnosis: f.diagnosis, advice: f.advice, advice_unwilling: f.advice_unwilling, rx_unwilling: f.rx_unwilling,
+        daybook_routine: f.daybook_routine, daybook_duration: f.daybook_duration, daybook_frequency: f.daybook_frequency,
+        daybook_chart: f.daybook_chart,
+        // the date is kept only with a Day Book entry (it is filled in by default)
+        daybook_date: (f.daybook_routine.length || f.daybook_duration || f.daybook_frequency) ? f.daybook_date || todayLocal() : null,
         follow_up_date: f.follow_up_date || null, consultation_fee: f.consultation_fee, dos_donts: f.dos_donts,
         past_history: f.past_history, medical_history: f.medical_history,
         complete,
       };
       if (!locked) body.prescriptions = lines.filter((l) => l.medicine_name.trim()).map(({ key, ...l }) => l);
       await api(`/visits/${visitId}`, { method: 'PUT', body });
-      if (print) { navigate(`/doctor/prescription/${visitId}`); return; }   // printout shows what was just saved
+      // printout shows what was just saved; print = true (prescription) or the page to open (Day Book chart)
+      if (print) { navigate(print === true ? `/doctor/prescription/${visitId}` : print); return; }
       toast(complete ? t('examine.completed') : t('common.saved'));
       if (complete) navigate(backPath);
       else reload();
@@ -392,6 +421,10 @@ function VisitForm({ visitId, backPath }) {
             <section role="tabpanel" id="subpanel-compare" aria-labelledby="sub-compare" hidden={subTab !== 'compare'}>
               <ComparativeStudy patientId={visit.patient_id} visitId={visit.id} onCount={setCsCount} />
             </section>
+            {/* last 10 visits' vital signs */}
+            <section role="tabpanel" id="subpanel-vitalsHistory" aria-labelledby="sub-vitalsHistory" hidden={subTab !== 'vitalsHistory'}>
+              <VitalsHistory patientId={visit.patient_id} excludeVisitId={visit.id} />
+            </section>
           </div>
         </div>
         {tabNav}
@@ -407,40 +440,105 @@ function VisitForm({ visitId, backPath }) {
           </Button>
         </span>
       )}>
-        <div className="rx-table">
-          <div className="rx-row rx-head">
-            <span>{t('examine.medicine')}</span><span>{t('examine.potency')}</span><span>{t('examine.dosage')}</span><span>{t('examine.repetition')}</span>
-            <span>{t('examine.duration')}</span><span>{t('examine.instructions')}</span><span />
-          </div>
-          {lines.map((l) => (
-            <div key={l.key} className="rx-row" data-line={l.key}>
-              {locked ? <span className="rx-locked">{l.medicine_name}</span> : (
-                <ItemPicker value={l.medicine_name} ariaLabel={t('examine.medicine')} placeholder={t('examine.medicineHint')}
-                  onPick={(p) => setLine(l.key, { medicine_name: p.medicine_name, item_id: p.item_id })} />
-              )}
-              <RxListPicker kind="potency" value={l.potency || ''} disabled={locked} list={potencyList}
-                onChange={(v) => setLine(l.key, { potency: v })} onListChange={setPotencyList} />
-              <RxListPicker kind="dosage" value={l.dosage || ''} disabled={locked} list={dosageList}
-                onChange={(v) => setLine(l.key, { dosage: v })} onListChange={setDosageList} />
-              <RxListPicker kind="repetition" value={l.frequency || ''} disabled={locked} list={repetitionList}
-                onChange={(v) => setLine(l.key, { frequency: v })} onListChange={setRepetitionList} />
-              <input aria-label={t('examine.duration')} placeholder="7 days" value={l.duration || ''} disabled={locked} onChange={(e) => setLine(l.key, { duration: e.target.value })} />
-              <input aria-label={t('examine.instructions')} placeholder={t('examine.instructionsHint')} value={l.instructions || ''} disabled={locked} onChange={(e) => setLine(l.key, { instructions: e.target.value })} />
-              {!locked && (
-                <button type="button" className="icon-btn" aria-label={t('common.remove')}
-                  onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [emptyLine()]))}>
-                  <Icon name="trash" size={16} />
+        {/* sections as tabs on the left: the medicines, then the Day Book */}
+        <div className="subtabs subtabs-narrow">
+          <div className="subtab-list" role="tablist" aria-orientation="vertical">
+            {RX_TABS.map(([key, label], i) => {
+              const mark = { medicines: rxCount || null, daybook: (f.daybook_routine.length || f.daybook_duration || f.daybook_frequency) ? '✓' : null }[key];
+              return (
+                <button key={key} type="button" role="tab" id={`rxsub-${key}`} aria-selected={rxTab === key} aria-controls={`rxpanel-${key}`}
+                  className={rxTab === key ? 'on' : ''} onClick={() => setRxTab(key)}>
+                  <span className="subtab-no">{i + 1}</span>
+                  <span className="subtab-label">{t(label)}</span>
+                  {mark && <span className="subtab-mark">{mark}</span>}
                 </button>
-              )}
-              {l.item_id ? <small className="rx-stock muted">{t('examine.inStock')}</small> : l.medicine_name ? <small className="rx-stock warn">{t('examine.notInStock')}</small> : null}
-            </div>
-          ))}
+              );
+            })}
+          </div>
+          <div className="subtab-panels">
+            <section role="tabpanel" id="rxpanel-medicines" aria-labelledby="rxsub-medicines" hidden={rxTab !== 'medicines'}>
+              <div className="rx-table">
+                <div className="rx-row rx-head">
+                  <span>{t('examine.medicine')}</span><span>{t('examine.potency')}</span><span>{t('examine.dosage')}</span><span>{t('examine.repetition')}</span>
+                  <span>{t('examine.duration')}</span><span>{t('examine.instructions')}</span><span /><span />
+                </div>
+                {lines.map((l) => (
+                  <div key={l.key} className="rx-row" data-line={l.key}>
+                    {locked ? <span className="rx-locked">{l.medicine_name}</span> : (
+                      <ItemPicker value={l.medicine_name} ariaLabel={t('examine.medicine')} placeholder={t('examine.medicineHint')}
+                        onPick={(p) => setLine(l.key, { medicine_name: p.medicine_name, item_id: p.item_id })} />
+                    )}
+                    <RxListPicker kind="potency" value={l.potency || ''} disabled={locked} list={potencyList}
+                      onChange={(v) => setLine(l.key, { potency: v })} onListChange={setPotencyList} />
+                    <RxListPicker kind="dosage" value={l.dosage || ''} disabled={locked} list={dosageList}
+                      onChange={(v) => setLine(l.key, { dosage: v })} onListChange={setDosageList} />
+                    <RxListPicker kind="repetition" value={l.frequency || ''} disabled={locked} list={repetitionList}
+                      onChange={(v) => setLine(l.key, { frequency: v })} onListChange={setRepetitionList} />
+                    <input aria-label={t('examine.duration')} placeholder="7 days" value={l.duration || ''} disabled={locked} onChange={(e) => setLine(l.key, { duration: e.target.value })} />
+                    <input aria-label={t('examine.instructions')} placeholder={t('examine.instructionsHint')} value={l.instructions || ''} disabled={locked} onChange={(e) => setLine(l.key, { instructions: e.target.value })} />
+                    {!locked && (
+                      <>
+                        {/* + adds a new medicine line just below this one */}
+                        <button type="button" className="icon-btn rx-add" aria-label={t('examine.addMedicine')} title={t('examine.addMedicine')}
+                          onClick={() => { const line = emptyLine(); setLines((ls) => ls.flatMap((x) => (x.key === l.key ? [x, line] : [x]))); setFocusLine(line.key); }}>
+                          <Icon name="plus" size={16} />
+                        </button>
+                        <button type="button" className="icon-btn" aria-label={t('common.remove')} title={t('common.remove')}
+                          onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [emptyLine()]))}>
+                          <Icon name="trash" size={16} />
+                        </button>
+                      </>
+                    )}
+                    {l.item_id ? <small className="rx-stock muted">{t('examine.inStock')}</small> : l.medicine_name ? <small className="rx-stock warn">{t('examine.notInStock')}</small> : null}
+                  </div>
+                ))}
+              </div>
+              <div className="rx-foot">
+                <label className="check-line rx-unwilling">
+                  <input type="checkbox" checked={f.rx_unwilling} onChange={(e) => setF({ ...f, rx_unwilling: e.target.checked })} />
+                  {t('examine.unwilling')}
+                </label>
+              </div>
+            </section>
+            <section role="tabpanel" id="rxpanel-daybook" aria-labelledby="rxsub-daybook" hidden={rxTab !== 'daybook'}>
+              {/* one row: Routine, Duration, Frequency – each from its own list (+ New / Edit / Delete); saved with the visit */}
+              <div className="rx-table">
+                <div className="db-row rx-head">
+                  <span>{t('examine.dbdate')}</span><span>{t('examine.dbroutine')}</span><span>{t('examine.dbduration')}</span><span>{t('examine.dbfrequency')}</span>
+                </div>
+                <div className="db-row">
+                  <input type="date" aria-label={t('examine.dbdate')} value={f.daybook_date}
+                    onChange={(e) => setF((cur) => ({ ...cur, daybook_date: e.target.value }))} />
+                  <RxListPicker kind="dbroutine" multiple value={f.daybook_routine} list={routineList}
+                    onChange={(v) => setF((cur) => ({ ...cur, daybook_routine: v }))} onListChange={setRoutineList} />
+                  <RxListPicker kind="dbduration" value={f.daybook_duration} list={dbDurationList}
+                    onChange={(v) => setF((cur) => ({ ...cur, daybook_duration: v }))} onListChange={setDbDurationList} />
+                  <RxListPicker kind="dbfrequency" value={f.daybook_frequency} list={dbFrequencyList}
+                    onChange={(v) => setF((cur) => ({ ...cur, daybook_frequency: v }))} onListChange={setDbFrequencyList} />
+                </div>
+              </div>
+              {/* day-wise chart for the patient: from the Date, by Frequency, one column per Routine */}
+              <div className="dosdont-head daybook-chart-head">
+                <h3>{t('daybook.chartTitle')}</h3>
+                <span className="row-actions">
+                  <label className="daybook-days">
+                    {t('daybook.days')}
+                    <input type="number" min="1" max={MAX_CHART_DAYS} step="1" inputMode="numeric" value={chartDaysText || chartDayCount}
+                      onChange={(e) => setChartDaysText(e.target.value)} />
+                  </label>
+                  <Button variant="ghost" size="sm" disabled={!f.daybook_routine.length} loading={saving === 'chart'}
+                    onClick={() => save(false, { print: `/doctor/daybook/${visitId}?days=${chartDayCount}`, busy: 'chart' })}>
+                    <Icon name="print" size={15} /> {t('daybook.printChart')}
+                  </Button>
+                </span>
+              </div>
+              <div className="table-wrap">
+                <DayBookChart date={f.daybook_date} routines={f.daybook_routine} frequency={`${f.daybook_duration} ${f.daybook_frequency}`} days={chartDayCount}
+                  values={f.daybook_chart} onChange={(key, text) => setF((cur) => ({ ...cur, daybook_chart: { ...cur.daybook_chart, [key]: text } }))} />
+              </div>
+            </section>
+          </div>
         </div>
-        {!locked && (
-          <Button variant="ghost" size="sm" onClick={() => { const line = emptyLine(); setLines((ls) => [...ls, line]); setFocusLine(line.key); }}>
-            <Icon name="plus" size={15} /> {t('examine.addMedicine')}
-          </Button>
-        )}
         {tabNav}
       </Card>
       </section>
@@ -451,6 +549,10 @@ function VisitForm({ visitId, backPath }) {
         <div className="tab-split">
           <div className="tab-split-left">
             <TextArea label={t('examine.advice')} rows={4} value={f.advice} onChange={set('advice')} />
+            <label className="check-line">
+              <input type="checkbox" checked={f.advice_unwilling} onChange={(e) => setF({ ...f, advice_unwilling: e.target.checked })} />
+              {t('examine.unwilling')}
+            </label>
             <Input label={t('examine.followUp')} type="date" value={f.follow_up_date} onChange={set('follow_up_date')} />
             <Input label={t('field.consultationFee')} type="number" min="0" step="0.01" value={f.consultation_fee} onChange={set('consultation_fee')} disabled={!!visit.bill_id} />
           </div>
