@@ -3,6 +3,7 @@ import cancelIconUrl from '../assets/cancel-icon.png';
 import doctorIconUrl from '../assets/doctor-icon.png';
 import confirmIconUrl from '../assets/confirm-icon.png';
 import patientCardIconUrl from '../assets/patient-card-icon.png';
+import uploadIconUrl from '../assets/upload-icon.png';
 
 // Small stroke icons (24×24, currentColor)
 const PATHS = {
@@ -78,4 +79,9 @@ export default function Icon({ name, size = 18, className = '' }) {
       <path d={PATHS[name] || PATHS.list} />
     </svg>
   );
+}
+
+// Blue upload picture (used for "Upload lab reports & scans" on Patient Bill)
+export function UploadIcon({ size = 30 }) {
+  return <img className="upload-icon" src={uploadIconUrl} width={size} height={size} alt="" aria-hidden />;
 }

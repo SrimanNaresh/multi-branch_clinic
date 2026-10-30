@@ -379,6 +379,9 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .slot-swatch { width: 14px; height: 14px; border-radius: 3px; background: var(--warning-50); box-shadow: inset 3px 0 0 var(--warning); border: 1px solid var(--line); }
 .table tr.clickable:hover td { background: var(--surface-2); }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.table .col-center { text-align: center; }
+/* Patient Bill → Reports: upload picture button (green tick badge once a file is there) */
+.attach-btn { position: relative; }
 .table .col-actions { text-align: right; white-space: nowrap; }
 .table .col-icon { text-align: center; white-space: nowrap; width: 1%; }
 .table-compact td, .table-compact th { padding: 6px 8px; }
