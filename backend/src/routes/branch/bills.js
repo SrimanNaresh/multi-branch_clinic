@@ -54,11 +54,12 @@ const q0 = (sql, params) => query(sql, params);
 router.get('/pending', requirePermission('bill.create'), async (req, res) => {
   const day = isISODate(req.query.date) ? req.query.date : todayISO();
   const rows = await query(
-    `SELECT v.id AS visit_id, v.visit_date, v.status AS visit_status, v.consultation_fee, q.token_no,
+    `SELECT v.id AS visit_id, v.visit_date, v.status AS visit_status, v.consultation_fee, v.queue_id, q.token_no,
             p.id AS patient_id, p.patient_code, p.name AS patient_name, p.mobile,
             (SELECT COALESCE(SUM(pi.items_total), 0) FROM pharmacy_issues pi
               WHERE pi.visit_id = v.id AND pi.status = 'issued' AND pi.bill_id IS NULL) AS unbilled_items,
-            (SELECT COUNT(*) FROM bills b WHERE b.visit_id = v.id AND b.status <> 'cancelled') AS bill_count
+            (SELECT COUNT(*) FROM bills b WHERE b.visit_id = v.id AND b.status <> 'cancelled') AS bill_count,
+            (SELECT COUNT(*) FROM patient_attachments a WHERE a.queue_id = v.queue_id) AS attach_count
        FROM visits v JOIN patients p ON p.id = v.patient_id LEFT JOIN queue_entries q ON q.id = v.queue_id
       WHERE v.clinic_id = ? AND v.visit_date >= ? AND v.visit_date < ?
       ORDER BY q.token_no, v.id`,

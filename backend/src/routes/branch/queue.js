@@ -328,7 +328,8 @@ router.get('/:id/attachments', requirePermission('queue.view', 'vitals.record'),
 });
 
 // POST /api/queue/:id/attachments?type=photo|pdf&category=&name=  (body: the file itself, Content-Type: its mime type)
-router.post('/:id/attachments', requirePermission('vitals.record'), async (req, res) => {
+// billing can add reports too (Patient Bill → upload)
+router.post('/:id/attachments', requirePermission('vitals.record', 'bill.create'), async (req, res) => {
   const id = toId(req.params.id);
   const type = String(req.query.type || '');
   const category = String(req.query.category || '').trim() || null;
@@ -368,7 +369,7 @@ router.get('/attachments/:attId/file', requirePermission('queue.view', 'vitals.r
 });
 
 // DELETE /api/queue/attachments/:attId
-router.delete('/attachments/:attId', requirePermission('vitals.record'), async (req, res) => {
+router.delete('/attachments/:attId', requirePermission('vitals.record', 'bill.create'), async (req, res) => {
   const attId = toId(req.params.attId);
   const result = await query('DELETE FROM patient_attachments WHERE id = ? AND clinic_id = ?', [attId, req.clinicId]);
   if (!result.affectedRows) throw notFound('File');

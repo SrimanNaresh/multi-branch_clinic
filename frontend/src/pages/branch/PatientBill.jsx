@@ -4,13 +4,15 @@ import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { money, todayLocal } from '../../lib/format.js';
-import { Badge, Button, Card, DataTable, Empty, ErrorBox, Input, Loading, PageHeader, Select, useAsync, useToast } from '../../components/ui.jsx';
-import Icon from '../../components/Icon.jsx';
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Input, Loading, Modal, PageHeader, Select, useAsync, useToast } from '../../components/ui.jsx';
+import Icon, { UploadIcon } from '../../components/Icon.jsx';
+import Attachments from '../../components/Attachments.jsx';
 
 function Pending() {
   const { t } = useT();
   const [date, setDate] = useState(todayLocal());
   const list = useAsync(() => api('/bills/pending', { query: { date } }), [date]);
+  const [attachFor, setAttachFor] = useState(null);   // row whose Lab Reports & Scans pop-up is open
   const columns = [
     { key: 'token_no', label: t('queue.token'), render: (r) => <span className="token-chip">#{r.token_no ?? '—'}</span> },
     { key: 'patient_name', label: t('field.name'), render: (r) => <><b>{r.patient_name}</b><br /><span className="muted small">{r.patient_code}</span></> },
@@ -18,6 +20,15 @@ function Pending() {
     { key: 'consultation_fee', label: t('field.consultationFee'), render: (r) => money(r.consultation_fee), className: 'num' },
     { key: 'unbilled_items', label: t('billing.medicines'), render: (r) => money(r.unbilled_items), className: 'num' },
     { key: 'bill_count', label: '', render: (r) => (r.bill_count > 0 ? <Badge tone="info">{t('billing.partBilled')}</Badge> : null) },
+    { key: 'reports', label: t('billing.reports'), className: 'col-center', render: (r) => r.queue_id && (
+      // same Lab Reports & Scans upload as in the Vital signs pop-up; green tick once a file is there
+      <button type="button" className="icon-btn img-btn attach-btn"
+        title={r.attach_count > 0 ? t('billing.viewReports', { n: r.attach_count }) : t('billing.uploadReports')}
+        aria-label={t('billing.uploadReports')} onClick={() => setAttachFor(r)}>
+        <UploadIcon />
+        {r.attach_count > 0 && <span className="vitals-badge done"><Icon name="check" size={11} /></span>}
+      </button>
+    ) },
     { key: '_a', label: '', className: 'col-actions', render: (r) => <Button size="sm" onClick={() => navigate(`/billing/${r.visit_id}`)}>{t('billing.makeBill')}</Button> },
   ];
   return (
@@ -33,6 +44,12 @@ function Pending() {
         {list.loading && !list.data ? <Loading /> : <ErrorBox error={list.error} onRetry={list.reload} />}
         {list.data && <DataTable columns={columns} rows={list.data.rows} rowKey="visit_id" empty={t('billing.nonePending')} />}
       </Card>
+      {attachFor && (
+        <Modal title={`${t('attach.title')} – #${attachFor.token_no ?? '—'} ${attachFor.patient_name}`} wide
+          onClose={() => { setAttachFor(null); list.reload(); }}>
+          <Attachments entry={{ id: attachFor.queue_id, patient_name: attachFor.patient_name }} />
+        </Modal>
+      )}
     </>
   );
 }
