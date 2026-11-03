@@ -1,23 +1,22 @@
 // Pharmacy → Stock In → List, in two tabs: Item wise (a heading row per item with its totals, then each batch
 // received) and Date wise (a heading row per Stock In date, then each item and batch received that day).
 // Every row has its Buy, Sale, Discount and Net Sale amounts; the bar above totals everything the search matches.
+// An Admin also gets Edit / Delete (per batch Item wise, per Stock In Date wise).
 import { useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
+import { useAuth } from '../../lib/auth.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money } from '../../lib/format.js';
-import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced } from '../../components/ui.jsx';
+import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 
 const month = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—');
 const qtyText = (n) => String(Number(n || 0));
 const r2 = (n) => Math.round(n * 100) / 100;
 
-/** Amounts for a single quantity: Buy = Cur.Rate, Sale = Cur.Rate + Sales %, Net = Sel.Amount, Discount = Sale − Net */
-const perUnit = (r) => {
-  const sale = r2(Number(r.rate) * (1 + Number(r.sales_percent) / 100));
-  return { buy: Number(r.rate), sale, net: Number(r.sel_amount), disc: r2(sale - Number(r.sel_amount)) };
-};
+/** Amounts for a single quantity: Buy = Rate, Sale = MRP, Net = Sel.Amount, Discount = Sale − Net */
+const perUnit = (r) => ({ buy: Number(r.rate), sale: Number(r.mrp), net: Number(r.sel_amount), disc: r2(Number(r.mrp) - Number(r.sel_amount)) });
 /** The line's total with the single-quantity amount under it */
 const Amount = ({ total, unit, strong, label }) => (
   <span className="si-amt">
@@ -54,6 +53,8 @@ function groupByStockIn(rows) {
 
 export default function StockInList() {
   const { t } = useT();
+  const { isGlobal: isAdmin } = useAuth();
+  const toast = useToast();
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState('item');       // 'item' (Item wise) | 'date' (Date wise)
@@ -61,6 +62,23 @@ export default function StockInList() {
   const dq = useDebounced(q);
   const list = useAsync(() => api('/stock-in/lines', { query: { q: dq, group: tab, page, limit: 50 } }), [dq, tab, page]);
   const tot = list.data?.totals;
+
+  async function remove(r) {
+    if (!window.confirm(t('stockin.deleteConfirm', { no: r.si_no }))) return;
+    try {
+      await api(`/stock-in/${r.stock_in_id}`, { method: 'DELETE' });
+      toast(t('stockin.deleted', { no: r.si_no }));
+      list.reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+  const actions = (r) => (
+    <span className="row-actions">
+      <Button size="sm" variant="ghost" onClick={() => navigate(`/stock-in/${r.stock_in_id}/edit`)}><Icon name="edit" size={15} /> {t('common.edit')}</Button>
+      <Button size="sm" variant="ghost" className="btn-danger-ghost" onClick={() => remove(r)}><Icon name="trash" size={15} /> {t('common.delete')}</Button>
+    </span>
+  );
 
   // Item wise: the item name is shown once, in its heading row. Date wise: the date is in the heading row, and
   // each Stock In's rows are kept together – its Stock In No (with the vendor) and Edit are one merged cell.
@@ -70,7 +88,7 @@ export default function StockInList() {
       ? [
         {
           key: 'si_no', label: t('stockin.no'), merged: true, className: 'si-merged',
-          render: (r) => <><b>{r.si_no}</b><small className="muted si-vendor">{r.supplier_name}</small></>,
+          render: (r) => <><b>{r.si_no}</b><small className="muted si-vendor">{r.supplier_name} · {r.po_no}</small></>,
         },
         { key: 'item_name', label: t('items.name'), render: (r) => <b>{r.item_name}</b> },
       ]
@@ -81,18 +99,18 @@ export default function StockInList() {
       { key: 'si_no', label: t('stockin.no'), render: (r) => <span className="muted" title={fmtDate(r.si_date)}>{r.si_no}</span> },
       { key: 'supplier_name', label: t('purchase.vendor') },
     ]),
-    { key: 'qty', label: t('items.quantity'), className: 'num', render: (r) => qtyText(r.qty) },
+    {
+      key: 'qty', label: t('items.quantity'), className: 'num',
+      render: (r) => <span className="si-amt">{qtyText(r.qty)}{Number(r.free_qty) > 0 && <small>{t('stockin.inclFree', { n: qtyText(r.free_qty) })}</small>}</span>,
+    },
     { key: 'buy_amount', label: t('stockin.buyAmount'), className: 'num', render: (r) => <Amount total={r.buy_amount} unit={perUnit(r).buy} label={t('stockin.perUnit')} /> },
     { key: 'sale_amount', label: t('stockin.saleAmount'), className: 'num', render: (r) => <Amount total={r.sale_amount} unit={perUnit(r).sale} label={t('stockin.perUnit')} /> },
     { key: 'disc_amount', label: t('stockin.discAmount'), className: 'num', render: (r) => <Amount total={r.disc_amount} unit={perUnit(r).disc} label={t('stockin.perUnit')} /> },
     { key: 'net_amount', label: t('stockin.netAmount'), className: 'num', render: (r) => <Amount strong total={r.net_amount} unit={perUnit(r).net} label={t('stockin.perUnit')} /> },
-    // Edit only in Date wise: one per Stock In, merged down its block (Item wise has none)
-    ...(byDate ? [{
-      key: '_a', label: '', className: 'col-actions si-merged', merged: true,
-      render: (r) => <Button size="sm" variant="ghost" onClick={() => navigate(`/stock-in/${r.stock_in_id}/edit`)}><Icon name="edit" size={15} /> {t('common.edit')}</Button>,
-    }] : []),
+    // Admin only: Edit / Delete – Date wise one per Stock In, merged down its block; Item wise on each batch
+    ...(isAdmin ? [{ key: '_a', label: '', className: `col-actions${byDate ? ' si-merged' : ''}`, merged: byDate, render: actions }] : []),
   ];
-  const amountCols = byDate ? 6 : 5;   // Quantity, the four amounts (and Edit): the heading row's own cells
+  const amountCols = isAdmin ? 6 : 5;   // Quantity, the four amounts (and Edit / Delete): the heading row's own cells
 
   return (
     <>
@@ -154,7 +172,7 @@ export default function StockInList() {
                           <td className="num">{money(g.sale_amount)}</td>
                           <td className="num">{money(g.disc_amount)}</td>
                           <td className="num"><b>{money(g.net_amount)}</b></td>
-                          {byDate && <td />}
+                          {isAdmin && <td />}
                         </tr>,
                         // Date wise: one block per Stock In (rows come sorted by Stock In); merged cells on its first row
                         ...(!open ? [] : byDate ? groupByStockIn(rows) : [rows]).flatMap((block) => block.map((r, i) => (
@@ -181,7 +199,7 @@ export default function StockInList() {
                       <td className="num"><b>{money(tot.sale_amount)}</b></td>
                       <td className="num"><b>{money(tot.disc_amount)}</b></td>
                       <td className="num"><b>{money(tot.net_amount)}</b></td>
-                      {byDate && <td />}
+                      {isAdmin && <td />}
                     </tr>
                   </tfoot>
                 </table>

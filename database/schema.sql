@@ -1089,3 +1089,83 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_salei_batch' AND object_id = OBJECT_ID(N'dbo.sale_items'))
   CREATE INDEX ix_salei_batch ON dbo.sale_items(stock_in_item_id);
 GO
+
+/* ---------- 13. PHARMACY: P.Rate, free units, unit-wise sales, bill discount ----------
+   Purchase / Order: Rate = P.Rate less Disc %; Free units come with the rest but are not charged.
+   Stock In: qty = paid units (R.Order), free_qty = free units (R.Free); stock goes up by both.
+   Sales: a line sells packs or single units (sale_unit); qty is always in packs (5 of a 15's pack = 0.3333),
+   so stock quantities keep 4 decimals. Amount = Qty × Rate less Disc %; the bill total is less Bill Discount %. */
+IF COL_LENGTH(N'dbo.purchase_order_items', N'unit') IS NULL
+  ALTER TABLE dbo.purchase_order_items ADD unit NVARCHAR(30) NULL;
+GO
+IF COL_LENGTH(N'dbo.purchase_order_items', N'p_rate') IS NULL
+  ALTER TABLE dbo.purchase_order_items ADD p_rate DECIMAL(10,2) NULL;
+GO
+-- orders saved before P.Rate worked out their rate from the MRP, so that was their P.Rate
+UPDATE dbo.purchase_order_items SET p_rate = mrp WHERE p_rate IS NULL;
+GO
+IF COL_LENGTH(N'dbo.purchase_order_items', N'free_qty') IS NULL
+  ALTER TABLE dbo.purchase_order_items ADD free_qty DECIMAL(10,2) NOT NULL CONSTRAINT df_poi_free DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.stock_in_items', N'free_qty') IS NULL
+  ALTER TABLE dbo.stock_in_items ADD free_qty DECIMAL(10,2) NOT NULL CONSTRAINT df_sii_free DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.sales', N'sub_total') IS NULL
+  ALTER TABLE dbo.sales ADD sub_total DECIMAL(12,2) NULL;
+GO
+UPDATE dbo.sales SET sub_total = total_amount WHERE sub_total IS NULL;
+GO
+IF COL_LENGTH(N'dbo.sales', N'disc_percent') IS NULL
+  ALTER TABLE dbo.sales ADD disc_percent DECIMAL(5,2) NOT NULL CONSTRAINT df_sale_disc DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.sales', N'discount_amount') IS NULL
+  ALTER TABLE dbo.sales ADD discount_amount DECIMAL(12,2) NOT NULL CONSTRAINT df_sale_discamt DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.sale_items', N'sale_unit') IS NULL
+  ALTER TABLE dbo.sale_items ADD sale_unit NVARCHAR(4) NOT NULL CONSTRAINT df_salei_unit DEFAULT N'pack'
+    CONSTRAINT chk_salei_unit CHECK (sale_unit IN (N'pack', N'unit'));
+GO
+IF COL_LENGTH(N'dbo.sale_items', N'unit_qty') IS NULL
+  ALTER TABLE dbo.sale_items ADD unit_qty DECIMAL(10,2) NULL;   -- the quantity as typed (packs or units)
+GO
+UPDATE dbo.sale_items SET unit_qty = qty WHERE unit_qty IS NULL;
+GO
+IF COL_LENGTH(N'dbo.sale_items', N'pack_size') IS NULL
+  ALTER TABLE dbo.sale_items ADD pack_size DECIMAL(10,2) NOT NULL CONSTRAINT df_salei_pack DEFAULT 1;
+GO
+IF COL_LENGTH(N'dbo.sale_items', N'disc_percent') IS NULL
+  ALTER TABLE dbo.sale_items ADD disc_percent DECIMAL(5,2) NOT NULL CONSTRAINT df_salei_disc DEFAULT 0;
+GO
+-- quantities in packs keep 4 decimals (a unit sale takes a part of a pack)
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.sale_items') AND name = N'qty' AND scale < 4)
+  ALTER TABLE dbo.sale_items ALTER COLUMN qty DECIMAL(12,4) NOT NULL;
+GO
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.stock_movements') AND name = N'qty_change' AND scale < 4)
+  ALTER TABLE dbo.stock_movements ALTER COLUMN qty_change DECIMAL(12,4) NOT NULL;
+GO
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.stock_movements') AND name = N'balance_after' AND scale < 4)
+  ALTER TABLE dbo.stock_movements ALTER COLUMN balance_after DECIMAL(12,4) NOT NULL;
+GO
+-- items.stock_qty: its default and check have to come off while the column changes
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.items') AND name = N'stock_qty' AND scale < 4)
+BEGIN
+  DECLARE @df SYSNAME = (SELECT d.name FROM sys.default_constraints d JOIN sys.columns c
+                           ON c.object_id = d.parent_object_id AND c.column_id = d.parent_column_id
+                          WHERE d.parent_object_id = OBJECT_ID(N'dbo.items') AND c.name = N'stock_qty');
+  IF @df IS NOT NULL EXEC (N'ALTER TABLE dbo.items DROP CONSTRAINT ' + @df);
+  IF OBJECT_ID(N'dbo.chk_items_stock', N'C') IS NOT NULL ALTER TABLE dbo.items DROP CONSTRAINT chk_items_stock;
+  ALTER TABLE dbo.items ALTER COLUMN stock_qty DECIMAL(12,4) NOT NULL;
+  ALTER TABLE dbo.items ADD CONSTRAINT df_items_stock DEFAULT 0 FOR stock_qty;
+  ALTER TABLE dbo.items ADD CONSTRAINT chk_items_stock CHECK (stock_qty >= 0);
+END
+GO
+-- batch stock lookups (Sales) go by item
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_sii_item' AND object_id = OBJECT_ID(N'dbo.stock_in_items'))
+  CREATE INDEX ix_sii_item ON dbo.stock_in_items(item_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_pri_item' AND object_id = OBJECT_ID(N'dbo.purchase_return_items'))
+  CREATE INDEX ix_pri_item ON dbo.purchase_return_items(item_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_salei_item' AND object_id = OBJECT_ID(N'dbo.sale_items'))
+  CREATE INDEX ix_salei_item ON dbo.sale_items(item_id);
+GO

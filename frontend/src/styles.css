@@ -127,7 +127,7 @@ input.invalid { border-color: var(--danger); }
 .item-grid .grid-break { display: none; }
 @media (min-width: 1200px) {
   .item-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; }
-  .item-grid > :nth-child(-n+2) { grid-column: span 2; }
+  .item-grid > :nth-child(1), .item-grid > :nth-child(3) { grid-column: span 2; }   /* Item Name, Type / Unit */
   .item-grid .field-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .item-grid .grid-break { display: block; grid-column: 1 / -1; height: 0; margin: -5px 0; }
   .item-grid .grid-break ~ .field { grid-column: span 2; }
@@ -277,8 +277,17 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .topnav-sub-title { display: flex; align-items: center; gap: 8px; padding: 4px 10px 1px; font-size: 12px; font-weight: 700; color: var(--muted); }
 .topnav-sub-title .icon { color: var(--brand); }
 .topnav-child { padding: 3px 10px 3px 32px; font-size: 13px; }
-/* Pharmacy drop-down: one column per sub-menu (Item, Vendor, …), centred on the window */
-.topnav-mega { display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; row-gap: 10px; width: max-content; padding: 10px 6px; }
+/* drop-downs open top to bottom under their own button */
+.topnav-menu { overflow-y: auto; transform-origin: top; animation: topnav-drop .16s ease-out; }
+@keyframes topnav-drop { from { opacity: 0; transform: translateY(-6px) scaleY(.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .topnav-menu { animation: none; } }
+/* Pharmacy drop-down: a search box, then one card per sub-menu (Item, Vendor, …) side by side, wrapping */
+.topnav-mega { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: stretch; row-gap: 10px; width: max-content; padding: 8px 6px 10px; }
+.topnav-search { flex: 0 0 100%; display: flex; align-items: center; gap: 6px; margin: 0 6px 4px; padding: 0 10px; height: 32px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg, #f6f8fb); color: var(--muted); box-sizing: border-box; max-width: calc(100% - 12px); }
+.topnav-search:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-50); }
+.topnav-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13px; color: var(--text); }
+.topnav-mega .topnav-child.first:not(.active) { background: var(--brand-50); }
+.topnav-none { margin: 4px 12px; color: var(--muted); font-size: 13px; }
 .topnav-mega .topnav-sub { min-width: 120px; margin: 0; padding: 0 10px; border-top: 0; border-left: 1px solid var(--line); }
 .topnav-mega .topnav-sub:first-child { border-left: 0; }
 /* sub-menu heading: icon in a tinted square, brand colour, a line under it */
@@ -1080,3 +1089,72 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .table th.col-center { text-align: center; }
 .table td.col-center > .cell { display: flex; justify-content: center; }
 @media (max-width: 640px) { .patient-card { grid-template-columns: 1fr; } .patient-card dl + dl { border-left: 0; border-top: 1px solid var(--line); } }
+
+/* ---------- Pharmacy (03-11-2026): screens that fit, plain grid boxes, column groups, unit sales, receipt ---------- */
+.alert-info { background: var(--brand-50); color: var(--brand); }
+.plain-fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+.btn-danger-ghost { color: var(--danger); }
+.btn-danger-ghost:hover:not(:disabled) { background: var(--danger-50); border-color: #e6b8b3; }
+/* fixed column shares (colgroup) that add up to 100 %: no sideways scroll from 1280px up, below that it scrolls */
+.po-lines.po-fit { overflow-x: auto; }
+.po-lines.po-fit .table { table-layout: fixed; width: 100%; min-width: 1180px; }
+.po-lines.po-fit .table td input, .po-lines.po-fit .table td select { width: 100%; min-width: 0; }
+.po-lines.po-fit .table th { white-space: normal; overflow-wrap: anywhere; }
+.po-lines.po-fit .table td { overflow: hidden; text-overflow: ellipsis; }
+.po-lines.po-fit .table td.po-item { overflow: visible; }      /* the item suggestions drop out of the cell */
+.po-lines.po-fit .table td.po-wrap { white-space: normal; max-width: none; overflow-wrap: anywhere; }
+@media (min-width: 1280px) { .po-lines.po-fit { overflow-x: visible; } .po-lines.po-fit .table { min-width: 0; } }
+/* boxes inside grids look like plain text until hovered or focused */
+.po-lines .table td input:not([type=checkbox]), .po-lines .table td select { border: 1px solid transparent; background: transparent; border-radius: 5px; transition: border-color .12s, box-shadow .12s, background .12s; }
+.po-lines .table td input:not([type=checkbox]):hover, .po-lines .table td select:hover { border-color: var(--line-strong); background: var(--surface); }
+.po-lines .table td input:not([type=checkbox]):focus, .po-lines .table td select:focus { border-color: var(--brand); background: var(--surface); box-shadow: 0 0 0 3px var(--brand-50); outline: 0; }
+.po-lines .table td input:disabled, .po-lines .table td select:disabled { color: var(--muted); }
+.po-lines .table tbody tr:hover td { background: #f1f6fb; }
+.po-lines .table tbody td { height: 28px; }
+.po-lines input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+.po-lines input[type=number]::-webkit-inner-spin-button, .po-lines input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* a box or cell that is wrong: red */
+.po-lines .table td.cell-bad, .po-lines .table td.cell-bad input { color: var(--danger); font-weight: 700; }
+.po-lines .table td.cell-bad input, .po-lines .table td.cell-bad select { border-color: var(--danger); background: #fdf1ee; }
+.po-lines .table tfoot td.cell-bad { background: #fdf1ee; }
+/* Stock In column groups: P.Rate | Disc% (sky), GST% | CGST% | SGST% (amber), Unit Price (emerald) */
+.si-lines .table thead th.si-sky { background: #e3f2fc; color: #0b5d8f; border-bottom-color: #3a9ad9; }
+.si-lines .table tbody td.si-sky { background: #f3f9fe; }
+.si-lines .table thead th.si-amber { background: #fdf0d9; color: #8a5a00; border-bottom-color: #d99a1e; }
+.si-lines .table tbody td.si-amber { background: #fffaf0; }
+.si-lines .table thead th.si-emerald { background: #ddf5ea; color: #0d6b45; border-bottom-color: #2ba36f; }
+.si-lines .table tbody td.si-emerald { background: #f2fbf6; }
+.po-more-rate.open { background: #3a9ad9; border-color: #3a9ad9; }
+.po-more-gst.open { background: #d99a1e; border-color: #d99a1e; }
+.po-more-unit.open { background: #2ba36f; border-color: #2ba36f; }
+.si-lines .po-more { width: 18px; height: 18px; flex-shrink: 0; }
+.si-lines .po-item { min-width: 0; }
+.si-earlier { display: block; color: var(--muted); font-size: 10.5px; font-weight: 400; line-height: 1.1; }
+.si-lines .table td input.si-month { text-align: center; }
+.si-lines .table td input.si-batch { width: 100%; }
+/* Sales */
+.loc-tag { display: inline-block; padding: 1px 6px; border-radius: 4px; background: #e3f2fc; color: #0b5d8f; font-size: 11.5px; font-weight: 600; }
+.sale-lines .po-item { min-width: 0; }
+.sale-lines .table td .sale-over-msg { display: block; white-space: normal; font-size: 10.5px; line-height: 1.15; }
+.sale-lines tfoot tr.sale-total-row td { background: var(--brand); color: #fff; font-size: 14px; }
+.sale-lines tfoot tr.sale-total-row td.po-sum { color: #fff; }
+.sale-keys-hint { margin: 2px 0 8px; font-size: 12px; }
+.sale-saved-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 6px 10px; border-radius: 8px; background: #e6f6ee; color: #0d6b45; font-size: 13px; }
+.sale-saved-bar > span { flex: 1; display: inline-flex; align-items: center; gap: 6px; }
+/* Sales receipt: hidden on screen; when printing, only the receipt is printed */
+.receipt-print { display: none; }
+@media print {
+  @page { margin: 8mm; }
+  body * { visibility: hidden; }
+  .receipt-print, .receipt-print * { visibility: visible; }
+  .receipt-print { display: block; position: absolute; left: 0; top: 0; width: 100%; max-width: 80mm; color: #000; font: 11px/1.35 Arial, sans-serif; }
+  .receipt-head { text-align: center; margin-bottom: 6px; }
+  .receipt-clinic { display: block; font-size: 14px; }
+  .receipt-meta { display: grid; gap: 1px; padding: 4px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; }
+  .receipt-lines { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .receipt-lines th, .receipt-lines td { padding: 2px 2px; text-align: left; vertical-align: top; }
+  .receipt-lines th { border-bottom: 1px solid #000; }
+  .receipt-lines .num { text-align: right; }
+  .receipt-lines tfoot td { border-top: 1px dashed #000; }
+  .receipt-lines tr.receipt-total td { font-size: 13px; font-weight: 700; border-top: 1px solid #000; }
+}

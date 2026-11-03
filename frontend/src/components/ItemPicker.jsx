@@ -3,7 +3,7 @@
 // Free text is allowed (item_id stays empty).
 // browse (Purchase / Order): the list opens on click with no typing – the Item List A–Z, narrowed as you type –
 // and shows the item name (not the Tablet Name).
-// Keyboard: ↑ / ↓ move through the suggestions, Enter picks, Esc closes.
+// Keyboard: ↑ / ↓ move through the suggestions, Enter picks (browse: the first match if none is highlighted), Esc closes.
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { useDebounced } from './ui.jsx';
@@ -58,9 +58,10 @@ export default function ItemPicker({ value, onPick, placeholder, ariaLabel, brow
       if (!showMenu) { setOpen(true); return; }
       const step = e.key === 'ArrowDown' ? 1 : -1;
       setActive((a) => (a < 0 && step < 0 ? items.length - 1 : (a + step + items.length) % items.length));
-    } else if (e.key === 'Enter' && showMenu && active >= 0) {
+    } else if (e.key === 'Enter' && showMenu && (active >= 0 || (browse && text.trim()))) {
+      // browse: typing then Enter picks the first match (names starting with the text come first)
       e.preventDefault();
-      pick(items[active]);
+      pick(items[Math.max(active, 0)]);
     } else if (e.key === 'Escape' && showMenu) {
       e.preventDefault();
       setOpen(false);

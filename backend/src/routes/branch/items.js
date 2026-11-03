@@ -5,6 +5,7 @@ import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, notFound, oneOf, paging, pick, requireFields, setClause, toAmount, toId, like } from '../../utils/http.js';
 import { checkItemRows, IMPORT_ERRORS, MAX_IMPORT_ROWS } from '../../../../shared/itemImport.js';
 import { nextSequence, formatItemCode } from '../../utils/codes.js';
+import { r4 } from '../../utils/stock.js';
 
 const router = Router();
 router.use(clinicScope());
@@ -89,8 +90,8 @@ router.get('/', requirePermission('item.view'), async (req, res) => {
   const [{ total }] = await query(`SELECT COUNT(*) AS total FROM items i WHERE ${w}`, params);
   const rows = await query(
     `SELECT i.*, ph.name AS pharmacy_name FROM items i LEFT JOIN pharmacies ph ON ph.id = i.pharmacy_id
-      WHERE ${w} ORDER BY i.name ${pageSql}`,
-    [...params, offset, limit],
+      WHERE ${w} ORDER BY ${req.query.q ? 'CASE WHEN i.name LIKE ? THEN 0 ELSE 1 END, ' : ''}i.name ${pageSql}`,
+    [...params, ...(req.query.q ? [like(req.query.q).slice(1)] : []), offset, limit],   // names starting with q first
   );
   res.json({ rows, total, page, limit });
 });
@@ -303,7 +304,7 @@ router.put('/:id', requirePermission('item.manage'), async (req, res) => {
     const [item] = await q('SELECT stock_qty FROM items WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
     if (!item) throw notFound('Item');
     if (sql) await q(`UPDATE items SET ${sql}, updated_at = NOW() WHERE id = ? AND clinic_id = ?`, [...params, id, req.clinicId]);
-    const change = newQty === null ? 0 : Math.round((newQty - Number(item.stock_qty)) * 100) / 100;
+    const change = newQty === null ? 0 : r4(newQty - Number(item.stock_qty));
     if (change !== 0) {
       await q('UPDATE items SET stock_qty = ? WHERE id = ?', [newQty, id]);
       await insertRow(q, 'stock_movements', {
@@ -333,7 +334,7 @@ router.post('/:id/stock', requirePermission('stock.manage'), async (req, res) =>
       const [s] = await q('SELECT id FROM suppliers WHERE id = ? AND clinic_id = ?', [supplierId, req.clinicId]);
       if (!s) throw badRequest('Supplier not found in this clinic', 'VALIDATION');
     }
-    const balance = Math.round((Number(item.stock_qty) + qty) * 100) / 100;
+    const balance = r4(Number(item.stock_qty) + qty);
     if (balance < 0) throw badRequest(`Stock cannot go below zero (current ${item.stock_qty})`, 'VALIDATION');
     await q('UPDATE items SET stock_qty = ?, updated_at = NOW() WHERE id = ?', [balance, id]);
     await insertRow(q, 'stock_movements', {

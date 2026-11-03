@@ -99,13 +99,13 @@ export default function ItemForm({ params }) {
           </div>
           <div className="form-grid item-grid">
             <Input label={t('items.name')} required placeholder={t('items.namePh')} autoFocus {...f.bind('name')} />
+            <Input label={t('items.pack')} placeholder={t('items.packPh')} {...f.bind('pack')} />
             <div className="field">
               <span className="field-label">{t('items.typeUnit')}</span>
               <RxListPicker kind="unit" label={t('items.typeUnit')} value={f.values.unit} list={unitList}
                 onChange={(v) => f.set('unit', v)} onListChange={setUnitList} />
             </div>
             <Input label={t('items.hsn')} placeholder={t('items.hsnPh')} maxLength={20} {...f.bind('hsn_code')} />
-            <Input label={t('items.pack')} placeholder={t('items.packPh')} {...f.bind('pack')} />
             <Input label={t('items.quantity')} type="number" min="0" step="0.01" placeholder="0" value={qty} onChange={(e) => setQty(e.target.value)} />
             <Input label={t('items.mrp')} {...money} {...f.bind('mrp')} />
             <Input label={t('items.cgst')} {...money} max="14" {...f.bind('cgst_percent')} />

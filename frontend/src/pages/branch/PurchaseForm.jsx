@@ -1,5 +1,6 @@
 // Pharmacy → Purchase / Order → Master: an order to a vendor. Picking an item fills its details, MRP and GST;
-// Cur.Rate, Amount, GST Amount and Total are worked out as you type (shared/purchase.js, same as the server).
+// Rate (P.Rate less Disc %), Amount, GST Amount and Total are worked out as you type (shared/purchase.js, same
+// as the server). Old Price is this vendor's last net rate for the item; Free units are not charged.
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
@@ -10,19 +11,21 @@ import Icon from '../../components/Icon.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
 import ItemBulkPicker from '../../components/ItemBulkPicker.jsx';
 import VendorPicker from '../../components/VendorPicker.jsx';
-import { calcLine, orderTotal } from '../../../../shared/purchase.js';
-import { arrowMove } from '../../lib/tableKeys.js';
+import { calcLine, orderTotal, splitGst } from '../../../../shared/purchase.js';
+import { arrowMove, focusNewRow } from '../../lib/tableKeys.js';
 
 const newLine = () => ({
   key: Math.random().toString(36).slice(2), item_id: null, item_name: '',
-  generic_name: '', hsn_code: '', manufacturer: '', category: '', pack: '',
-  mrp: '', disc_percent: '', qty: '', cgst_percent: '', sgst_percent: '',
+  generic_name: '', hsn_code: '', manufacturer: '', category: '', pack: '', unit: '',
+  mrp: '', p_rate: '', free_qty: '', disc_percent: '', qty: '', gst: undefined, cgst_percent: '', sgst_percent: '',
 });
 const fromItem = (i) => ({
   item_id: i.id, item_name: i.name, generic_name: i.generic_name || '', hsn_code: i.hsn_code || '',
-  manufacturer: i.manufacturer || '', category: i.category || '', pack: i.pack || '',
-  mrp: Number(i.mrp) || '', cgst_percent: Number(i.cgst_percent) || '', sgst_percent: Number(i.sgst_percent) || '',
+  manufacturer: i.manufacturer || '', category: i.category || '', pack: i.pack || '', unit: i.unit || '',
+  mrp: Number(i.mrp) || '', p_rate: Number(i.purchase_rate) || '', gst: undefined,
+  cgst_percent: Number(i.cgst_percent) || '', sgst_percent: Number(i.sgst_percent) || '',
 });
+const overMrp = (l) => Number(l.mrp) > 0 && Number(l.p_rate) > Number(l.mrp);
 const two = (n) => Number(n || 0).toFixed(2);
 
 /** The vendor's details for the Details box: address, then State – Pin code, phones, e-mail, GSTIN, DL numbers. */
@@ -49,7 +52,7 @@ export default function PurchaseForm({ params }) {
   const [error, setError] = useState('');
   const [showDetails, setShowDetails] = useState(false); // Details box: hidden until the arrow beside Vendor Name is clicked
   const [bulkOpen, setBulkOpen] = useState(false);   // "Bulk add" panel: tick many items at once
-  const [showMore, setShowMore] = useState(false);   // Generic Name, Manufacturer, HSN Code, Category: hidden until the arrow is clicked
+  const [showMore, setShowMore] = useState(false);   // Generic Name, Manufacturer, HSN in place of the GST columns
   const existing = useAsync(() => (id ? api(`/purchases/${id}`) : Promise.resolve(null)), [id]);
   const vendors = useAsync(() => api('/suppliers', { query: { status: 'active' } }), []);
   const [added, setAdded] = useState([]);           // vendors added here, until the list is loaded again
@@ -82,8 +85,18 @@ export default function PurchaseForm({ params }) {
     if (!po) return;
     setHead({ supplier_id: String(po.supplier_id), po_date: String(po.po_date).slice(0, 10), details: po.details || '' });
     setLines(po.lines.map((l) => ({ ...newLine(), ...l, key: String(l.id), mrp: Number(l.mrp), disc_percent: Number(l.disc_percent) || '',
+      p_rate: Number(l.p_rate ?? l.mrp) || '', free_qty: Number(l.free_qty) || '',
       qty: Number(l.qty), cgst_percent: Number(l.cgst_percent) || '', sgst_percent: Number(l.sgst_percent) || '' })));
   }, [existing.data]);
+
+  // Old Price: this vendor's last net rate for each item on the order (0 when never ordered from them)
+  const itemIds = [...new Set(lines.filter((l) => l.item_id).map((l) => l.item_id))].sort((a, b) => a - b).join(',');
+  const oldPrices = useAsync(
+    () => (head.supplier_id && itemIds
+      ? api('/purchases/old-prices', { query: { supplier_id: head.supplier_id, item_ids: itemIds, except: id || '' } })
+      : Promise.resolve({})),
+    [head.supplier_id, itemIds],
+  );
 
   const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   // + on a row adds a new empty line right under it
@@ -93,12 +106,14 @@ export default function PurchaseForm({ params }) {
   async function submit(e) {
     e.preventDefault();
     if (!head.supplier_id) { setError(t('purchase.chooseVendor')); return; }
+    const bad = lines.find((l) => l.item_id && overMrp(l));
+    if (bad) { setError(t('purchase.rateOverMrp', { name: bad.item_name })); return; }
     setSaving(true);
     setError('');
     const body = {
       ...head,
-      lines: lines.filter((l) => l.item_id).map(({ item_id, mrp, disc_percent, qty, cgst_percent, sgst_percent }) =>
-        ({ item_id, mrp, disc_percent, qty, cgst_percent, sgst_percent })),
+      lines: lines.filter((l) => l.item_id).map(({ item_id, mrp, p_rate, free_qty, disc_percent, qty, cgst_percent, sgst_percent }) =>
+        ({ item_id, mrp, p_rate, free_qty, disc_percent, qty, cgst_percent, sgst_percent })),
     };
     try {
       const po = id ? await api(`/purchases/${id}`, { method: 'PUT', body }) : await api('/purchases', { method: 'POST', body });
@@ -183,8 +198,18 @@ export default function PurchaseForm({ params }) {
             }} />
         )}
 
-        <div className="table-wrap po-lines">
+        <div className="table-wrap po-lines po-fit">
           <table className="table">
+            <colgroup>
+              <col style={{ width: '2.5%' }} /><col style={{ width: '13.5%' }} /><col style={{ width: '6.5%' }} />
+              <col style={{ width: '5%' }} /><col style={{ width: '4.5%' }} /><col style={{ width: '6%' }} />
+              <col style={{ width: '5.5%' }} /><col style={{ width: '6%' }} /><col style={{ width: '4.5%' }} />
+              <col style={{ width: '4.5%' }} /><col style={{ width: '5%' }} /><col style={{ width: '6.5%' }} />
+              {showMore
+                ? <><col style={{ width: '7.5%' }} /><col style={{ width: '7.5%' }} /><col style={{ width: '4%' }} /></>
+                : <><col style={{ width: '4.5%' }} /><col style={{ width: '4.5%' }} /><col style={{ width: '4.5%' }} /><col style={{ width: '5.5%' }} /></>}
+              <col style={{ width: '6.5%' }} /><col style={{ width: '4.5%' }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>#</th>
@@ -199,24 +224,30 @@ export default function PurchaseForm({ params }) {
                     </button>
                   </span>
                 </th>
-                {showMore && (
+                <th>{t('items.category')}</th>
+                <th>{t('items.pack')}</th>
+                <th>{t('purchase.unit')}</th>
+                <th className="num">{t('items.mrp')}</th>
+                <th className="num">{t('purchase.oldPrice')}</th>
+                <th className="num">{t('purchase.pRate')}</th>
+                <th className="num">{t('purchase.free')}</th>
+                <th className="num">{t('purchase.disc')}</th>
+                <th className="num">{t('items.quantity')}</th>
+                <th className="num">{t('purchase.amount')}</th>
+                {showMore ? (
                   <>
                     <th className="po-extra">{t('items.generic')}</th>
                     <th className="po-extra">{t('items.manufacturer')}</th>
                     <th className="po-extra">{t('items.hsn')}</th>
-                    <th className="po-extra">{t('items.category')}</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="num">{t('purchase.gst')}</th>
+                    <th className="num">{t('items.cgst')}</th>
+                    <th className="num">{t('items.sgst')}</th>
+                    <th className="num">{t('purchase.gstAmount')}</th>
                   </>
                 )}
-                <th>{t('items.pack')}</th>
-                <th className="num">{t('items.mrp')}</th>
-                <th className="num">{t('purchase.disc')}</th>
-                <th className="num">{t('purchase.rate')}</th>
-                <th className="num">{t('items.quantity')}</th>
-                <th className="num">{t('purchase.amount')}</th>
-                <th className="num">{t('purchase.gst')}</th>
-                <th className="num">{t('items.cgst')}</th>
-                <th className="num">{t('items.sgst')}</th>
-                <th className="num">{t('purchase.gstAmount')}</th>
                 <th className="num">{t('purchase.total')}</th>
                 <th aria-label={t('common.delete')} />
               </tr>
@@ -224,6 +255,7 @@ export default function PurchaseForm({ params }) {
             <tbody onKeyDown={arrowMove}>
               {lines.map((l, n) => {
                 const c = calcLine(l);
+                const old = l.item_id && head.supplier_id ? Number(oldPrices.data?.[l.item_id] || 0) : null;
                 return (
                   <tr key={l.key}>
                     <td className="muted">{n + 1}</td>
@@ -231,28 +263,40 @@ export default function PurchaseForm({ params }) {
                       <ItemPicker browse value={l.item_name} ariaLabel={t('items.name')} placeholder={t('purchase.itemHint')}
                         onPick={({ item, medicine_name: typed }) => setLine(l.key, item ? fromItem(item) : { ...newLine(), key: l.key, item_name: typed })} />
                     </td>
-                    {showMore && (
+                    <td className="po-wrap">{l.category || '—'}</td>
+                    <td className="po-wrap">{l.pack || '—'}</td>
+                    <td className="po-wrap">{l.unit || '—'}</td>
+                    <td><input {...num} aria-label={t('items.mrp')} value={l.mrp} onChange={(e) => setLine(l.key, { mrp: e.target.value })} /></td>
+                    <td className="num muted">{old == null ? '—' : two(old)}</td>
+                    <td className={overMrp(l) ? 'cell-bad' : undefined} title={overMrp(l) ? t('purchase.rateOverMrp', { name: l.item_name }) : undefined}>
+                      <input {...num} aria-label={t('purchase.pRate')} value={l.p_rate} onChange={(e) => setLine(l.key, { p_rate: e.target.value })} />
+                    </td>
+                    <td><input {...num} aria-label={t('purchase.free')} value={l.free_qty} onChange={(e) => setLine(l.key, { free_qty: e.target.value })} /></td>
+                    <td><input {...num} max="100" aria-label={t('purchase.disc')} value={l.disc_percent} onChange={(e) => setLine(l.key, { disc_percent: e.target.value })} /></td>
+                    <td><input {...num} aria-label={t('items.quantity')} value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} /></td>
+                    <td className="num">{two(c.amount)}</td>
+                    {showMore ? (
                       <>
                         <td className="po-extra po-wrap">{l.generic_name || '—'}</td>
                         <td className="po-extra po-wrap">{l.manufacturer || '—'}</td>
-                        <td className="po-extra">{l.hsn_code || '—'}</td>
-                        <td className="po-extra">{l.category || '—'}</td>
+                        <td className="po-extra po-wrap">{l.hsn_code || '—'}</td>
+                      </>
+                    ) : (
+                      <>
+                        {/* GST % splits itself evenly into CGST % and SGST % */}
+                        <td><input {...num} max="28" aria-label={t('purchase.gst')} value={l.gst ?? (c.gst_percent || '')}
+                          onChange={(e) => setLine(l.key, { gst: e.target.value, ...splitGst(e.target.value) })} /></td>
+                        <td><input {...num} max="14" aria-label={t('items.cgst')} value={l.cgst_percent}
+                          onChange={(e) => setLine(l.key, { cgst_percent: e.target.value, gst: undefined })} /></td>
+                        <td><input {...num} max="14" aria-label={t('items.sgst')} value={l.sgst_percent}
+                          onChange={(e) => setLine(l.key, { sgst_percent: e.target.value, gst: undefined })} /></td>
+                        <td className="num">{two(c.gst_amount)}</td>
                       </>
                     )}
-                    <td>{l.pack || '—'}</td>
-                    <td><input {...num} aria-label={t('items.mrp')} value={l.mrp} onChange={(e) => setLine(l.key, { mrp: e.target.value })} /></td>
-                    <td><input {...num} max="100" aria-label={t('purchase.disc')} value={l.disc_percent} onChange={(e) => setLine(l.key, { disc_percent: e.target.value })} /></td>
-                    <td className="num">{two(c.rate)}</td>
-                    <td><input {...num} aria-label={t('items.quantity')} value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} /></td>
-                    <td className="num">{two(c.amount)}</td>
-                    <td className="num">{two(c.gst_percent)}</td>
-                    <td><input {...num} max="14" aria-label={t('items.cgst')} value={l.cgst_percent} onChange={(e) => setLine(l.key, { cgst_percent: e.target.value })} /></td>
-                    <td><input {...num} max="14" aria-label={t('items.sgst')} value={l.sgst_percent} onChange={(e) => setLine(l.key, { sgst_percent: e.target.value })} /></td>
-                    <td className="num">{two(c.gst_amount)}</td>
                     <td className="num"><b>{two(c.total)}</b></td>
                     <td>
                       <span className="po-row-actions">
-                        <button type="button" className="icon-btn rx-add" title={t('purchase.addLine')} aria-label={t('purchase.addLine')} onClick={() => addLineAfter(l.key)}>
+                        <button type="button" className="icon-btn rx-add" title={t('purchase.addLine')} aria-label={t('purchase.addLine')} onClick={(e) => { addLineAfter(l.key); focusNewRow(e.currentTarget); }}>
                           <Icon name="plus" size={16} />
                         </button>
                         <button type="button" className="icon-btn" title={t('common.delete')} aria-label={t('common.delete')} onClick={() => removeLine(l.key)}>
@@ -266,7 +310,7 @@ export default function PurchaseForm({ params }) {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={showMore ? 16 : 12} className="num"><b>{t('purchase.sumTotal')}</b></td>
+                <td colSpan={showMore ? 15 : 16} className="num"><b>{t('purchase.sumTotal')}</b></td>
                 <td className="num po-sum">{money(orderTotal(picked))}</td>
                 <td />
               </tr>

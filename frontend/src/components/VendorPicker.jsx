@@ -28,7 +28,10 @@ export default function VendorPicker({ vendors, value, onPick, onAdd, label, req
 
   const q = text.trim().toLowerCase();
   const typing = q && q !== (picked?.name || '').toLowerCase();
-  const shown = typing ? vendors.filter((v) => v.name.toLowerCase().includes(q)) : vendors;
+  // names starting with the typed text first, then names containing it
+  const shown = typing
+    ? [...vendors.filter((v) => v.name.toLowerCase().startsWith(q)), ...vendors.filter((v) => !v.name.toLowerCase().startsWith(q) && v.name.toLowerCase().includes(q))]
+    : vendors;
   useEffect(() => setActive(-1), [q, open]);
 
   const pick = (v) => { onPick(v); setText(v.name); setOpen(false); };

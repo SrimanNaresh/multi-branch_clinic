@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAuth } from '../lib/auth.jsx';
 import { useT } from '../lib/i18n.jsx';
 import { Link, navigate } from '../lib/router.jsx';
@@ -131,16 +131,78 @@ function Sidebar({ path, open, onClose }) {
 }
 
 /**
- * A wide drop-down (Pharmacy) is centred on the window, as wide as it needs up to the window width
- * less 16px each side; its columns wrap onto a second row only when even that is too narrow.
+ * Keeps an open drop-down on the screen: under its own button, as wide as its cards need but never wider than
+ * the window (the cards wrap), 8px inside both edges, and never taller than the window below it (it scrolls).
  */
 const fitToScreen = (el) => {
   if (!el) return;
   const vw = document.documentElement.clientWidth;
-  el.style.maxWidth = `${vw - 32}px`;
-  const parentLeft = el.parentElement.getBoundingClientRect().left;
-  el.style.left = `${(vw - el.getBoundingClientRect().width) / 2 - parentLeft}px`;
+  el.style.maxWidth = `${vw - 16}px`;
+  // twice: a drop-down sticking out of the window can itself move the menu bar, so measure again once it fits
+  for (let pass = 0; pass < 2; pass += 1) {
+    const parentLeft = el.parentElement.getBoundingClientRect().left;
+    const left = Math.max(8, Math.min(parentLeft, vw - 8 - el.offsetWidth));   // under the button, 8px inside both edges
+    el.style.left = `${left - parentLeft}px`;
+  }
+  el.style.maxHeight = `${window.innerHeight - el.parentElement.getBoundingClientRect().bottom - 14}px`;
 };
+
+/** A drop-down with sub-menus (Pharmacy): a search box, then one card per sub-menu (Item, Vendor, …) */
+function MegaMenu({ items, isActive, onClose }) {
+  const { t } = useT();
+  const [q, setQ] = useState('');
+  const box = useRef(null);
+  const search = useRef(null);
+  // fitted before it is drawn, then the search box takes the cursor without scrolling the page sideways
+  useLayoutEffect(() => {
+    const refit = () => fitToScreen(box.current);
+    refit();
+    search.current?.focus({ preventScroll: true });
+    const frame = requestAnimationFrame(refit);   // again once the cards have their final size
+    window.addEventListener('resize', refit);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', refit); };
+  }, []);
+  useLayoutEffect(() => fitToScreen(box.current), [q]);
+  const words = q.trim().toLowerCase();
+  // a card stays when its heading or one of its pages matches; a matching heading keeps all its pages
+  const shown = items.map((i) => {
+    if (!words) return i;
+    const own = t(i.label).toLowerCase().includes(words);
+    const children = i.children?.filter((c) => own || `${t(i.label)} ${t(c.label)}`.toLowerCase().includes(words));
+    return i.children ? (children.length ? { ...i, children } : null) : (own ? i : null);
+  }).filter(Boolean);
+  const first = shown.flatMap((i) => (i.children ? i.children : [i]))[0];
+
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter' && first) { e.preventDefault(); navigate(first.path); onClose(); }
+    if (e.key === 'Escape' && q) { e.stopPropagation(); setQ(''); }   // Esc clears first, then closes
+  };
+
+  return (
+    <div className="topnav-menu topnav-mega" ref={box} onAnimationEnd={() => fitToScreen(box.current)}>
+      <div className="topnav-search">
+        <Icon name="search" size={15} />
+        <input ref={search} value={q} placeholder={t('topbar.menuSearch')} aria-label={t('topbar.menuSearch')}
+          onChange={(e) => setQ(e.target.value)} onKeyDown={onKeyDown} />
+      </div>
+      {shown.map((i) => (i.children ? (
+        <div key={i.id} className="topnav-sub">
+          <div className="topnav-sub-title"><span className="topnav-sub-icon"><Icon name={i.icon} size={14} /></span> <span>{t(i.label)}</span></div>
+          {i.children.map((c) => (
+            <Link key={c.path} to={c.path} className={`topnav-item topnav-child ${isActive(c.path) ? 'active' : ''} ${words && c === first ? 'first' : ''}`} onClick={onClose}>
+              <span>{t(c.label)}</span>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <Link key={i.path} to={i.path} className={`topnav-item ${isActive(i.path) ? 'active' : ''}`} onClick={onClose}>
+          <Icon name={i.icon} size={16} /> <span>{t(i.label)}</span>
+        </Link>
+      )))}
+      {!shown.length && <p className="topnav-none">{t('common.noRecords')}</p>}
+    </div>
+  );
+}
 
 // Horizontal menu bar under the header: one button per group, its pages open in a drop-down.
 // While one drop-down is open, moving the mouse to another group opens that one instead.
@@ -172,24 +234,14 @@ function TopNav({ path }) {
               aria-expanded={isOpen} aria-haspopup="true" onClick={() => setOpenId(isOpen ? null : g.id)}>
               {t(g.label)} <Icon name="chevronDown" size={14} />
             </button>
-            {isOpen && (
-              <div className={`topnav-menu ${mega ? 'topnav-mega' : ''}`} ref={mega ? fitToScreen : undefined}>
-                {/* sub-menus sit side by side, one column each, their pages listed under the heading */}
-                {g.items.map((i) => (i.children ? (
-                  // a sub-menu shows as a small heading with its pages under it
-                  <div key={i.id} className="topnav-sub">
-                    <div className="topnav-sub-title"><span className="topnav-sub-icon"><Icon name={i.icon} size={14} /></span> <span>{t(i.label)}</span></div>
-                    {i.children.map((c) => (
-                      <Link key={c.path} to={c.path} className={`topnav-item topnav-child ${isActive(c.path) ? 'active' : ''}`} onClick={() => setOpenId(null)}>
-                        <span>{t(c.label)}</span>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
+            {isOpen && mega && <MegaMenu items={g.items} isActive={isActive} onClose={() => setOpenId(null)} />}
+            {isOpen && !mega && (
+              <div className="topnav-menu" ref={fitToScreen}>
+                {g.items.map((i) => (
                   <Link key={i.path} to={i.path} className={`topnav-item ${isActive(i.path) ? 'active' : ''}`} onClick={() => setOpenId(null)}>
                     <Icon name={i.icon} size={16} /> <span>{t(i.label)}</span>
                   </Link>
-                )))}
+                ))}
               </div>
             )}
           </div>

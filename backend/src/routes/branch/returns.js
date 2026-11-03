@@ -8,6 +8,7 @@ import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, notFound, paging, toAmount, toId, like } from '../../utils/http.js';
 import { isISODate, todayISO } from '../../utils/dates.js';
 import { nextSequence, formatReturnNo } from '../../utils/codes.js';
+import { lockStock, r4 } from '../../utils/stock.js';
 
 const router = Router();
 router.use(clinicScope(), requirePermission('stock.manage'));
@@ -18,7 +19,7 @@ const r2 = (n) => Math.round(n * 100) / 100;
 /** The Stock In's lines with what earlier Returns (other than `exceptId`) already took back. */
 async function stockInLines(clinicId, siId, exceptId = 0) {
   return query(
-    `SELECT l.id AS stock_in_item_id, l.item_id, l.item_name, l.batch_no, l.mfg_date, l.exp_date, l.rate, l.qty AS received,
+    `SELECT l.id AS stock_in_item_id, l.item_id, l.item_name, l.batch_no, l.mfg_date, l.exp_date, l.rate, l.qty + l.free_qty AS received,
             COALESCE((SELECT SUM(r.qty) FROM purchase_return_items r WHERE r.stock_in_item_id = l.id AND r.return_id <> ?), 0) AS returned
        FROM stock_in_items l WHERE l.stock_in_id = ? AND l.clinic_id = ? ORDER BY l.id`,
     [exceptId, siId, clinicId],
@@ -59,18 +60,19 @@ async function clean(body, clinicId, exceptId = 0) {
 
 /** Saves the lines of a Return: stock goes down by (new − old) quantity per item, never below zero. */
 async function applyLines(q, clinicId, userId, retId, retNo, supplierId, oldLines, lines) {
+  await lockStock(q, clinicId);
   const change = new Map();
   for (const l of oldLines) change.set(l.item_id, (change.get(l.item_id) || 0) + Number(l.qty));
   for (const l of lines) change.set(l.item_id, (change.get(l.item_id) || 0) - l.qty);
   const isEdit = oldLines.length > 0;
   for (const [itemId, diff] of change) {
-    if (!r2(diff)) continue;
+    if (!r4(diff)) continue;
     const [item] = await q('SELECT name, stock_qty FROM items WITH (UPDLOCK, ROWLOCK) WHERE id = ? AND clinic_id = ?', [itemId, clinicId]);
-    const balance = r2(Number(item.stock_qty) + diff);
-    if (balance < 0) throw badRequest(`${item.name}: only ${item.stock_qty} in stock – cannot return that many`, 'VALIDATION');
+    const balance = r4(Number(item.stock_qty) + diff);
+    if (balance < 0) throw badRequest(`${item.name}: only ${Number(item.stock_qty)} in stock – cannot return that many`, 'VALIDATION');
     await q('UPDATE items SET stock_qty = ?, updated_at = NOW() WHERE id = ?', [balance, itemId]);
     await insertRow(q, 'stock_movements', {
-      clinic_id: clinicId, item_id: itemId, qty_change: r2(diff), balance_after: balance,
+      clinic_id: clinicId, item_id: itemId, qty_change: r4(diff), balance_after: balance,
       reason: isEdit ? 'adjustment' : 'return', ref_type: 'purchase_return', ref_id: retId, supplier_id: supplierId,
       note: isEdit ? `Return ${retNo} changed` : `Return ${retNo} to vendor`, created_by: userId,
     });

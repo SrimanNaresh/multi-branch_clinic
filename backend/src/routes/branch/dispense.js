@@ -103,7 +103,7 @@ router.post('/visit/:visitId', async (req, res) => {
         clinic_id: req.clinicId, issue_id: newIssueId, prescription_id: rxId, item_id: it.id,
         qty, rate: it.price, gst_percent: it.gst_percent, amount,
       });
-      it.stock_qty = round2(Number(it.stock_qty) - qty);
+      it.stock_qty = Math.round((Number(it.stock_qty) - qty) * 10000) / 10000;   // stock keeps 4 decimals
       await q('UPDATE items SET stock_qty = ?, updated_at = NOW() WHERE id = ?', [it.stock_qty, it.id]);
       await insertRow(q, 'stock_movements', {
         clinic_id: req.clinicId, item_id: it.id, qty_change: -qty, balance_after: it.stock_qty,

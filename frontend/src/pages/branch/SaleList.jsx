@@ -1,11 +1,13 @@
-// Pharmacy → Sales → List: every counter sale, newest first, with its items and the total of all matching sales
+// Pharmacy → Sales → List: every counter sale, newest first, with its items and the total of all matching sales;
+// Print reprints a sale's receipt.
 import { useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money } from '../../lib/format.js';
-import { Button, Card, DataTable, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced } from '../../components/ui.jsx';
+import { Button, Card, DataTable, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import { useReceiptPrinter } from '../../components/SaleReceipt.jsx';
 
 export default function SaleList() {
   const { t } = useT();
@@ -13,6 +15,9 @@ export default function SaleList() {
   const [page, setPage] = useState(1);
   const dq = useDebounced(q);
   const list = useAsync(() => api('/sales', { query: { q: dq, page, limit: 50 } }), [dq, page]);
+  const printer = useReceiptPrinter();
+  const toast = useToast();
+  const reprint = (r) => api(`/sales/${r.id}`).then((sale) => printer.print(sale)).catch((err) => toast(err.message, 'error'));
 
   const columns = [
     { key: 'sale_no', label: t('sale.no'), render: (r) => <b>{r.sale_no}</b> },
@@ -24,12 +29,18 @@ export default function SaleList() {
     { key: 'total_amount', label: t('purchase.amount'), className: 'num', render: (r) => <b>{money(r.total_amount)}</b> },
     {
       key: '_a', label: '', className: 'col-actions',
-      render: (r) => <Button size="sm" variant="ghost" onClick={() => navigate(`/sales/${r.id}/edit`)}><Icon name="edit" size={15} /> {t('common.edit')}</Button>,
+      render: (r) => (
+        <span className="row-actions">
+          <Button size="sm" variant="ghost" onClick={() => navigate(`/sales/${r.id}/edit`)}><Icon name="edit" size={15} /> {t('common.edit')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => reprint(r)}><Icon name="print" size={15} /> {t('sale.print')}</Button>
+        </span>
+      ),
     },
   ];
 
   return (
     <>
+      {printer.node}
       <PageHeader compact title={t('menu.sales')}
         subtitle={list.data ? t('sale.count', { n: list.data.total, amount: money(list.data.amount) }) : ''}
         actions={<Button size="sm" onClick={() => navigate('/sales/new')}><Icon name="plus" size={16} /> {t('sale.new')}</Button>} />
