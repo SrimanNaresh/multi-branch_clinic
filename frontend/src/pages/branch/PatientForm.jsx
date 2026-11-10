@@ -5,7 +5,9 @@ import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { Button, Card, ErrorBox, Input, Loading, PageHeader, Select, TextArea, useAsync, useForm, useToast } from '../../components/ui.jsx';
 
-const BLOOD = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+import PatientImportButtons, { PatientDownloadButton } from '../../components/PatientImport.jsx';
+
+const BLOOD =['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 export default function PatientForm({ params }) {
   const { t } = useT();
@@ -53,6 +55,12 @@ export default function PatientForm({ params }) {
       <PageHeader
         title={id ? `${t('common.edit')} – ${existing.data?.name}` : t('menu.patientRegistration')}
         subtitle={id ? existing.data?.patient_code : t('patients.idHint', { code: `${auth.activeClinic?.code}-0001` })}
+        actions={!id && auth.user?.role === 'super_admin' && (   /* Template / Import / Download: Super Admin only */
+          <span className="row-actions">
+            <PatientImportButtons onImported={() => navigate('/patients')} />
+            <PatientDownloadButton clinicCode={auth.activeClinic?.code} />
+          </span>
+        )}
       />
       <form onSubmit={(e) => { e.preventDefault(); save(false); }}>
         <Card>

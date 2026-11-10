@@ -4,8 +4,9 @@ import { useAuth } from '../../lib/auth.jsx';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { ageLabel, fmtDate, genderLabel } from '../../lib/format.js';
-import { Button, Card, DataTable, ErrorBox, Loading, Modal, PageHeader, Pagination, SearchBox, StatusBadge, useAsync, useDebounced } from '../../components/ui.jsx';
+import { Button, Card, DataTable, ErrorBox, Loading, Modal, PageHeader, Pagination, SearchBox, StatusBadge, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon, { PatientCardIcon } from '../../components/Icon.jsx';
+import PatientImportButtons, { PatientDownloadButton } from '../../components/PatientImport.jsx';
 
 export default function PatientList({ query }) {
   const { t } = useT();
@@ -15,6 +16,19 @@ export default function PatientList({ query }) {
   const [card, setCard] = useState(null);
   const dq = useDebounced(q);
   const list = useAsync(() => api('/patients', { query: { q: dq, page } }), [dq, page]);
+  const toast = useToast();
+  const isSuperAdmin = auth.user?.role === 'super_admin';
+
+  async function remove(r) {
+    if (!window.confirm(t('patients.deleteConfirm', { code: r.patient_code, name: r.name }))) return;
+    try {
+      await api(`/patients/${r.id}`, { method: 'DELETE' });
+      toast(t('patients.deleted', { code: r.patient_code }));
+      list.reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
 
   // Print only the open Patient card (styles: body.printing-card in styles.css)
   function printCard() {
@@ -48,6 +62,9 @@ export default function PatientList({ query }) {
           {auth.can('patient.edit') && (
             <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); navigate(`/patients/${r.id}/edit`); }}><Icon name="edit" size={15} /> {t('common.edit')}</Button>
           )}
+          {isSuperAdmin && (
+            <Button size="sm" variant="ghost" className="btn-danger-ghost" onClick={(e) => { e.stopPropagation(); remove(r); }}><Icon name="trash" size={15} /> {t('common.delete')}</Button>
+          )}
         </span>
       ),
     },
@@ -58,7 +75,13 @@ export default function PatientList({ query }) {
       <PageHeader
         title={t('menu.patientList')}
         subtitle={list.data ? t('patients.count', { n: list.data.total }) : auth.activeClinic?.name}
-        actions={auth.can('patient.create') && <Button onClick={() => navigate('/patients/new')}><Icon name="plus" size={16} /> {t('menu.patientRegistration')}</Button>}
+        actions={(
+          <span className="row-actions">
+            {isSuperAdmin && <PatientImportButtons onImported={list.reload} />}
+            {isSuperAdmin && <PatientDownloadButton clinicCode={auth.activeClinic?.code} />}
+            {auth.can('patient.create') && <Button onClick={() => navigate('/patients/new')}><Icon name="plus" size={16} /> {t('menu.patientRegistration')}</Button>}
+          </span>
+        )}
       />
       <Card>
         <div className="toolbar">

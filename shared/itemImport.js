@@ -77,30 +77,30 @@ export function parseCsv(text, delimiter = detectDelimiter(text)) {
 // header text → comparable form: ignores BOM / zero-width / non-breaking spaces, "*", "%", "_" and case
 const norm = (h) => String(h).replace(/[\uFEFF\u200B-\u200D\u00A0]/g, ' ').toLowerCase()
   .replace(/[*%_]/g, ' ').replace(/\s+/g, ' ').trim();
-const matchColumn = (h) => ITEM_COLUMNS.find((c) => norm(c.header) === norm(h) || norm(c.key) === norm(h));
+const matchColumn = (h, columns = ITEM_COLUMNS) => columns.find((c) => norm(c.header) === norm(h) || norm(c.key) === norm(h));
 
 /**
  * CSV text → { rows: [{ line, data }], missing: [headers], unknown: [headers], found: [headers] }.
  * Columns are matched by header name (any order, case-insensitive, "*" ignored). The header row is the
  * first of the top 10 rows that has an "Item Name" column, so a title row above it is fine.
  */
-export function rowsFromCsv(text) {
+export function rowsFromCsv(text, columns = ITEM_COLUMNS) {
   const table = parseCsv(text);
-  const required = ITEM_COLUMNS.filter((c) => c.required);
+  const required = columns.filter((c) => c.required);
   if (!table.length) return { rows: [], missing: required.map((c) => c.header), unknown: [], found: [] };
-  let headAt = table.slice(0, 10).findIndex((r) => required.every((c) => r.some((h) => matchColumn(h)?.key === c.key)));
+  let headAt = table.slice(0, 10).findIndex((r) => required.every((c) => r.some((h) => matchColumn(h, columns)?.key === c.key)));
   if (headAt < 0) headAt = 0;
   const head = table[headAt];
   const index = {};
   const unknown = [];
   head.forEach((h, i) => {
-    const col = matchColumn(h);
+    const col = matchColumn(h, columns);
     if (col && index[col.key] === undefined) index[col.key] = i; else if (!col && h.trim()) unknown.push(h.trim());
   });
   const missing = required.filter((c) => index[c.key] === undefined).map((c) => c.header);
   const rows = table.slice(headAt + 1).map((cells, n) => ({
     line: headAt + n + 2,                          // row number as Excel shows it (blank rows aside)
-    data: Object.fromEntries(ITEM_COLUMNS.filter((c) => index[c.key] !== undefined).map((c) => [c.key, (cells[index[c.key]] ?? '').trim()])),
+    data: Object.fromEntries(columns.filter((c) => index[c.key] !== undefined).map((c) => [c.key, (cells[index[c.key]] ?? '').trim()])),
   }));
   return { rows, missing, unknown, found: head.map((h) => h.trim()).filter(Boolean) };
 }
