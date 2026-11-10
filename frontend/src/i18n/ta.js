@@ -367,6 +367,7 @@ export default {
 
   // patients
   'patients.idHint': 'நோயாளி எண் தானாக உருவாகும், உ.தா. {code}',
+  'patients.nextId': 'புதிய நோயாளி எண்: {code} (கடைசி எண் + 1)',
   'patients.register': 'நோயாளியைப் பதிவு செய்',
   'patients.registered': 'நோயாளி பதிவு செய்யப்பட்டார் – {code}',
   'patients.possibleDuplicate': 'இதே பெயர் மற்றும் கைபேசியுடன் ஏற்கனவே ஒரு நோயாளி உள்ளார்:',

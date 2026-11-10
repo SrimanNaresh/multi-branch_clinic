@@ -1,7 +1,7 @@
 import { Router } from '../../lib/mini-express.js';
 import { query, tx, insertRow, pageSql } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
-import { nextSequence, formatPatientCode } from '../../utils/codes.js';
+import { formatPatientCode } from '../../utils/codes.js';
 import { badRequest, conflict, forbidden, notFound, oneOf, paging, pick, requireFields, setClause, toId, like } from '../../utils/http.js';
 import { isISODate } from '../../utils/dates.js';
 import { lockStock, r4 } from '../../utils/stock.js';
@@ -84,16 +84,31 @@ router.get('/export', superAdminOnly, async (req, res) => {
   res.json({ rows });
 });
 
-/** Moves a running number up to at least `value` (never down), inside the transaction `q`. */
-async function raiseSequence(q, clinicId, key, value) {
-  await q(
-    `UPDATE code_sequences WITH (UPDLOCK, HOLDLOCK) SET last_value = ?, updated_at = NOW()
-      WHERE clinic_id = ? AND seq_key = ? AND last_value < ?;
-     IF NOT EXISTS (SELECT 1 FROM code_sequences WHERE clinic_id = ? AND seq_key = ?)
-       INSERT INTO code_sequences (clinic_id, seq_key, last_value) VALUES (?, ?, ?);`,
-    [value, clinicId, key, value, clinicId, key, clinicId, key, value],
+/**
+ * New Patient ID = the clinic's last Patient ID + 1 (CLA-0120 → CLA-0121), counting only IDs in the
+ * clinic's own format. `floor` lets an import skip past IDs that are still to come in its file.
+ * Must run inside the transaction `q`: the app lock makes two registrations wait for each other,
+ * so they can never get the same ID.
+ */
+async function nextPatientCode(q, clinicId, clinicCode, floor = 0) {
+  await q(`EXEC sp_getapplock @Resource = ?, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000`,
+    [`patient-code-${clinicId}`]);
+  const [{ n }] = await q(
+    `SELECT MAX(TRY_CAST(SUBSTRING(patient_code, LEN(?) + 2, 20) AS INT)) AS n
+       FROM patients WHERE clinic_id = ? AND patient_code LIKE ?`,
+    [clinicCode, clinicId, `${clinicCode}-%`],
   );
+  return formatPatientCode(clinicCode, Math.max(Number(n) || 0, floor) + 1);
 }
+
+// GET /api/patients/next-id – the Patient ID the next registration will get (shown on Patient Registration)
+router.get('/next-id', requirePermission('patient.create'), async (req, res) => {
+  const code = await tx(async (q) => {
+    const [clinic] = await q('SELECT code FROM clinics WHERE id = ?', [req.clinicId]);
+    return nextPatientCode(q, req.clinicId, clinic.code);
+  });
+  res.json({ patient_code: code });
+});
 
 // POST /api/patients/import { rows: [{ line, data }] } – from the CSV template (Patient Registration → Import).
 // Every row is checked first; if any row is wrong nothing is saved and the problems come back per line.
@@ -113,11 +128,10 @@ router.post('/import', superAdminOnly, async (req, res) => {
 
   const result = await tx(async (q) => {
     const [clinic] = await q('SELECT code FROM clinics WHERE id = ?', [req.clinicId]);
-    // Patient IDs in the file like CLA-0120 move the running number up to 120 first, so IDs made for blank
-    // rows (and later registrations) never repeat one from the file.
+    // Blank-ID rows get last ID + 1, counted past any CLA-0120 style IDs in the file, so they never take one
+    // that a later row of the file brings.
     const own = new RegExp(`^${clinic.code.replace(/[^A-Za-z0-9]/g, '\\$&')}-(\\d+)$`, 'i');
     const maxInFile = Math.max(0, ...checked.map((r) => Number(own.exec(r.data.patient_code || '')?.[1] || 0)));
-    if (maxInFile > 0) await raiseSequence(q, req.clinicId, 'patient', maxInFile);
 
     const created = [];
     const skipped = [];
@@ -130,12 +144,7 @@ router.post('/import', superAdminOnly, async (req, res) => {
         const [taken] = await q('SELECT TOP 1 name FROM patients WITH (UPDLOCK, HOLDLOCK) WHERE clinic_id = ? AND patient_code = ?', [req.clinicId, code]);
         if (taken) { skipped.push({ line, name: data.name, patient_code: code, reason: 'idUsed', other: taken.name }); continue; }
       } else {
-        // next free running number (skips any ID already used)
-        for (;;) {
-          code = formatPatientCode(clinic.code, await nextSequence(q, req.clinicId, 'patient'));
-          const [taken] = await q('SELECT TOP 1 id FROM patients WITH (UPDLOCK, HOLDLOCK) WHERE clinic_id = ? AND patient_code = ?', [req.clinicId, code]);
-          if (!taken) break;
-        }
+        code = await nextPatientCode(q, req.clinicId, clinic.code, maxInFile);   // last ID + 1
       }
       const { created_at: createdAt, ...fields } = data;
       await insertRow(q, 'patients', {
@@ -175,9 +184,9 @@ router.post('/', requirePermission('patient.create'), async (req, res) => {
 
   const id = await tx(async (q) => {
     const [clinic] = await q('SELECT code FROM clinics WHERE id = ?', [req.clinicId]);
-    const n = await nextSequence(q, req.clinicId, 'patient');
+    const code = await nextPatientCode(q, req.clinicId, clinic.code);   // last Patient ID + 1
     return insertRow(q, 'patients', {
-      ...data, clinic_id: req.clinicId, patient_code: formatPatientCode(clinic.code, n), created_by: req.user.id,
+      ...data, clinic_id: req.clinicId, patient_code: code, created_by: req.user.id,
     });
   });
   res.status(201).json(await getPatient(req.clinicId, id));

@@ -22,6 +22,8 @@ export default function PatientForm({ params }) {
   const [error, setError] = useState('');
   const [duplicate, setDuplicate] = useState(null);
   const existing = useAsync(() => (id ? api(`/patients/${id}`) : Promise.resolve(null)), [id]);
+  // New patients get the clinic's last Patient ID + 1 – show which one (refreshed after an import)
+  const nextId = useAsync(() => (id ? Promise.resolve(null) : api('/patients/next-id').catch(() => null)), [id, auth.activeClinic?.id]);
 
   useEffect(() => {
     if (!existing.data) return;
@@ -54,7 +56,9 @@ export default function PatientForm({ params }) {
     <>
       <PageHeader
         title={id ? `${t('common.edit')} – ${existing.data?.name}` : t('menu.patientRegistration')}
-        subtitle={id ? existing.data?.patient_code : t('patients.idHint', { code: `${auth.activeClinic?.code}-0001` })}
+        subtitle={id ? existing.data?.patient_code
+          : nextId.data?.patient_code ? t('patients.nextId', { code: nextId.data.patient_code })
+            : t('patients.idHint', { code: `${auth.activeClinic?.code}-0001` })}
         actions={!id && auth.user?.role === 'super_admin' && (   /* Template / Import / Download: Super Admin only */
           <span className="row-actions">
             <PatientImportButtons onImported={() => navigate('/patients')} />

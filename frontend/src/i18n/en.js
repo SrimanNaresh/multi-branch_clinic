@@ -366,6 +366,7 @@ export default {
 
   // patients
   'patients.idHint': 'Patient ID is created automatically, e.g. {code}',
+  'patients.nextId': 'New Patient ID: {code} (last Patient ID + 1)',
   'patients.register': 'Register patient',
   'patients.registered': 'Patient registered – {code}',
   'patients.possibleDuplicate': 'A patient with the same name and mobile already exists:',
