@@ -38,6 +38,7 @@ ap.add_argument("--ssh-port", type=int, default=22)
 ap.add_argument("--domain", default="abihomoeoclinic.thangaminfotech.com")
 ap.add_argument("--name", default="abihomoeoclinic", help="service / folder name on the server")
 ap.add_argument("--port", type=int, default=5180, help="preferred local port for the app on the server")
+ap.add_argument("--key", help="SSH private key file (default: ~/.ssh/smartclinic_deploy if it exists)")
 ap.add_argument("--yes", action="store_true", help="do not ask before making changes")
 ap.add_argument("--replace", action="store_true",
                 help="take over the domain from an existing nginx site (backs up /etc/nginx and disables that site)")
@@ -139,13 +140,20 @@ def build_bundle():
 
 
 # ---------------------------------------------------------------- connect
-password = os.environ.get("SSH_PASSWORD") or getpass.getpass(f"SSH password for {args.user}@{args.host}: ")
+# SSH key first (--key, or ~/.ssh/smartclinic_deploy when it exists), otherwise the password
+key_file = args.key or os.path.expanduser("~/.ssh/smartclinic_deploy")
 ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 say(f"Connecting to {args.user}@{args.host}:{args.ssh_port}")
-ssh.connect(args.host, port=args.ssh_port, username=args.user, password=password, timeout=20,
-            look_for_keys=False, allow_agent=False)
-del password
+if os.path.isfile(key_file) and not os.environ.get("SSH_PASSWORD"):
+    print(f"  using SSH key {key_file}")
+    ssh.connect(args.host, port=args.ssh_port, username=args.user, key_filename=key_file, timeout=20,
+                look_for_keys=False, allow_agent=False)
+else:
+    password = os.environ.get("SSH_PASSWORD") or getpass.getpass(f"SSH password for {args.user}@{args.host}: ")
+    ssh.connect(args.host, port=args.ssh_port, username=args.user, password=password, timeout=20,
+                look_for_keys=False, allow_agent=False)
+    del password
 sftp = ssh.open_sftp()
 
 # ---------------------------------------------------------------- look around (read-only)
