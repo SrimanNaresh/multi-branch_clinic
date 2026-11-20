@@ -78,7 +78,9 @@ function valueFor(key, text) {
   if (key === 'hsnCode') return t.replace(/[oO]/g, '0').replace(/\D/g, '').slice(0, 20);
   if (key === 'category' || key === 'batch') return t.replace(/ /g, '').toUpperCase().slice(0, key === 'batch' ? 50 : 100);
   const max = { name: 200, manufacturer: 150, generic: 150, pack: 50, unit: 30, rack: 50 }[key] || 100;
-  return t.toUpperCase().slice(0, max);
+  // a serial number read into the MFR cell ("1 SBL") is not part of the manufacturer
+  const v = key === 'manufacturer' ? t.replace(/^\d{1,3}[.)]?\s+(?=\D)/, '') : t;
+  return v.toUpperCase().slice(0, max);
 }
 /** The bill's Disc as a % of MRP: printed as a % or as an amount (per unit or for the line) */
 function discPercent(text, o) {

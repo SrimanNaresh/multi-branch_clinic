@@ -1285,3 +1285,16 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .aio-filters { margin-bottom: 10px; }
 .aio-filter select[multiple] { min-height: 86px; }
 .export-buttons { margin-left: auto; }
+
+/* Three in One: the grid fits the screen – fixed column shares (colgroup), boxes fill their cell */
+.ips-lines .table { table-layout: fixed; width: 100%; }
+.ips-lines .table th, .ips-lines .table td { padding-left: 2px; padding-right: 2px; overflow: hidden; text-overflow: ellipsis; }
+.ips-lines .table thead th { white-space: normal; overflow-wrap: break-word; font-size: 11px; padding-left: 1px; padding-right: 1px; }
+.ips-lines .table td input.si-month { padding: 0 2px; text-align: center; }
+.ips-lines .table td input, .ips-lines .table td.po-item input { width: 100%; min-width: 0; box-sizing: border-box; }
+.ips-lines .po-item { min-width: 0; }
+.ips-lines .table td.po-item { overflow: visible; }
+.ips-lines .po-row-actions { display: inline-flex; gap: 0; }
+.ips-lines .po-row-actions .icon-btn { width: 22px; height: 22px; padding: 0; }
+.ips-lines .table td input { font-size: 12px; padding: 0 3px; }
+.ips-lines .table td input:not([type=number]):not(.si-month) { text-align: left; }

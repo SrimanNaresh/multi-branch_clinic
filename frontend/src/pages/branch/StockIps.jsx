@@ -242,6 +242,14 @@ export default function StockIps() {
 
         <div className="table-wrap po-lines ips-lines">
           <table className="table">
+            {/* fixed column shares (adding up to 100 %), so the table fits the screen with or without the Item details */}
+            <colgroup>
+              {(() => {
+                const w = [2.5, 12, ...(showItem ? [6.5, 8.5, 6, 6, 5] : []), 4, 5, 5, 4.5, 5.5, 4, 4.5, 5, 6, 6.5, 5.5, 5.5, 5, 6.5, 4];
+                const sum = w.reduce((a, x) => a + x, 0);
+                return w.map((x, i) => <col key={i} style={{ width: `${(x / sum) * 100}%` }} />);
+              })()}
+            </colgroup>
             <thead>
               <tr className="ips-groups">
                 <th />
