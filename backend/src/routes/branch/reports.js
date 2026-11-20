@@ -1,4 +1,5 @@
-// Pharmacy → Report → Vendor Payments: what is owed to each vendor, from Stock Ins less Returns.
+// Pharmacy → Report → Vendor Payments: what is owed to each vendor, from Stock Ins less Returns, and what is
+// paid (Vendor → Payments): Balance = Net Payable − Paid.
 // Amounts are at the purchase Cur.Rate plus the GST % of the purchase order line:
 //   Stock In = Σ qty × rate (+ GST); Return = Σ returned qty × rate (+ GST); Net Payable = Stock In − Return.
 // from / to (optional, YYYY-MM-DD) limit by the Stock In / Return date.
@@ -51,7 +52,13 @@ router.get('/vendor-payments', async (req, res) => {
        ${RETURN} WHERE r.clinic_id = ?${rtDates.sql} GROUP BY r.supplier_id`,
     [req.clinicId, ...rtDates.params],
   );
-  const ids = [...new Set([...stockIn, ...returned].map((x) => x.supplier_id))];
+  const vpDates = dateRange(req, 'vp.pay_date');
+  const paid = await query(
+    `SELECT vp.supplier_id, COUNT(*) AS entries, SUM(vp.amount) AS amount FROM vendor_payments vp
+      WHERE vp.clinic_id = ?${vpDates.sql} GROUP BY vp.supplier_id`,
+    [req.clinicId, ...vpDates.params],
+  );
+  const ids = [...new Set([...stockIn, ...returned, ...paid].map((x) => x.supplier_id))];
   const vendors = ids.length
     ? await query(`SELECT id, name, mobile FROM suppliers WHERE clinic_id = ? AND id IN (${ids.map(() => '?').join(', ')})`, [req.clinicId, ...ids])
     : [];
@@ -60,10 +67,12 @@ router.get('/vendor-payments', async (req, res) => {
     const rt = returned.find((x) => x.supplier_id === v.id);
     const a = totals(si);
     const b = totals(rt);
+    const pd = r2(paid.find((x) => x.supplier_id === v.id)?.amount);
+    const payable = r2(a.total - b.total);
     return {
       supplier_id: v.id, supplier_name: v.name, mobile: v.mobile,
       stock_in_count: si?.entries || 0, stock_in: a, return_count: rt?.entries || 0, returned: b,
-      payable: r2(a.total - b.total),
+      payable, paid: pd, balance: r2(payable - pd),
     };
   }).sort((x, y) => x.supplier_name.localeCompare(y.supplier_name));
   const sum = (f) => r2(rows.reduce((s, r) => s + f(r), 0));
@@ -73,7 +82,7 @@ router.get('/vendor-payments', async (req, res) => {
       stock_in_count: rows.reduce((s, r) => s + r.stock_in_count, 0), return_count: rows.reduce((s, r) => s + r.return_count, 0),
       stock_in: { taxable: sum((r) => r.stock_in.taxable), gst: sum((r) => r.stock_in.gst), total: sum((r) => r.stock_in.total) },
       returned: { taxable: sum((r) => r.returned.taxable), gst: sum((r) => r.returned.gst), total: sum((r) => r.returned.total) },
-      payable: sum((r) => r.payable),
+      payable: sum((r) => r.payable), paid: sum((r) => r.paid), balance: sum((r) => r.balance),
     },
   });
 });
@@ -102,9 +111,18 @@ router.get('/vendor-payments/:supplierId', async (req, res) => {
       GROUP BY r.id, r.return_no, r.return_date, s2.si_no`,
     [req.clinicId, supplierId, ...rtDates.params],
   );
+  const vpDates = dateRange(req, 'vp.pay_date');
+  const payments = await query(
+    `SELECT vp.id, vp.payment_no AS doc_no, vp.pay_date AS doc_date, si.si_no AS ref_no, vp.pay_mode, vp.reference_no,
+            vp.amount AS total
+       FROM vendor_payments vp JOIN stock_ins si ON si.id = vp.stock_in_id
+      WHERE vp.clinic_id = ? AND vp.supplier_id = ?${vpDates.sql}`,
+    [req.clinicId, supplierId, ...vpDates.params],
+  );
   const rows = [
     ...stockIns.map((x) => ({ ...x, type: 'stock_in', ...totals(x) })),
     ...returns.map((x) => ({ ...x, type: 'return', ...totals(x) })),
+    ...payments.map((x) => ({ ...x, type: 'payment', total: r2(x.total), item_names: [x.pay_mode.toUpperCase(), x.reference_no].filter(Boolean).join(' · ') })),
   ].sort((a, b) => String(b.doc_date).localeCompare(String(a.doc_date)) || String(b.doc_no).localeCompare(String(a.doc_no)));
   res.json({ rows });
 });

@@ -58,6 +58,7 @@ export const MENU = [
       sub('vendor', 'menu.vendor', 'truck', [
         { path: '/suppliers/new', label: 'menu.itemMaster', perm: 'supplier.manage' },
         { path: '/suppliers', label: 'menu.pharmacyList', perm: 'supplier.manage' },
+        { path: '/vendor-payments', label: 'menu.payments', perm: 'vendor.pay' },
       ]),
       sub('purchase', 'menu.purchase', 'receipt', [
         { path: '/purchase/new', label: 'menu.itemMaster', perm: 'stock.manage' },
@@ -68,8 +69,10 @@ export const MENU = [
         { path: '/stock-in', label: 'menu.pharmacyList', perm: 'stock.manage' },
       ]),
       sub('return', 'menu.return', 'upload', [
-        { path: '/returns/new', label: 'menu.itemMaster', perm: 'stock.manage' },
-        { path: '/returns', label: 'menu.pharmacyList', perm: 'stock.manage' },
+        { path: '/returns/new', label: 'menu.purchaseReturn', perm: 'stock.manage' },
+        { path: '/returns', label: 'menu.purchaseReturnList', perm: 'stock.manage' },
+        { path: '/sales-returns/new', label: 'menu.salesReturn', perm: 'sales.return' },
+        { path: '/sales-returns', label: 'menu.salesReturnList', perm: 'sales.return' },
       ]),
       sub('sales', 'menu.sales', 'pill', [
         { path: '/sales/new', label: 'menu.itemMaster', perm: 'dispense' },

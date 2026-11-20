@@ -26,6 +26,8 @@ import reportRoutes from './routes/branch/reports.js';
 import saleRoutes from './routes/branch/sales.js';
 import dispenseRoutes from './routes/branch/dispense.js';
 import billRoutes from './routes/branch/bills.js';
+import vendorPaymentRoutes from './routes/branch/vendorPayments.js';
+import salesReturnRoutes from './routes/branch/salesReturns.js';
 
 export function createApp() {
   const app = express();
@@ -68,6 +70,8 @@ export function createApp() {
   app.use('/api/sales', saleRoutes);
   app.use('/api/dispense', dispenseRoutes);
   app.use('/api/bills', billRoutes);
+  app.use('/api/vendor-payments', vendorPaymentRoutes);
+  app.use('/api/sales-returns', salesReturnRoutes);
 
   app.use('/api', notFoundHandler);
 

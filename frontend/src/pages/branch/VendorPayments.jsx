@@ -5,7 +5,7 @@ import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money } from '../../lib/format.js';
-import { Card, Empty, ErrorBox, Input, Loading, PageHeader, useAsync } from '../../components/ui.jsx';
+import { Button, Card, Empty, ErrorBox, Input, Loading, PageHeader, useAsync } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 
 /** One vendor's Stock Ins and Returns, shown under its row */
@@ -33,19 +33,22 @@ function VendorDetails({ supplierId, range }) {
       <tbody>
         {d.data.rows.map((r) => {
           const isReturn = r.type === 'return';
+          const isPay = r.type === 'payment';
+          const less = isReturn || isPay;
+          const go = isPay ? '/vendor-payments' : isReturn ? `/returns/${r.id}/edit` : `/stock-in/${r.id}/edit`;
           return (
-            <tr key={`${r.type}-${r.id}`} className="vp-doc" title={t('vp.open')}
-              onClick={() => navigate(isReturn ? `/returns/${r.id}/edit` : `/stock-in/${r.id}/edit`)}>
+            <tr key={`${r.type}-${r.id}`} className="vp-doc" title={t('vp.open')} onClick={() => navigate(go)}>
               <td>{fmtDate(r.doc_date)}</td>
-              <td><span className={`sr-kind ${isReturn ? 'sr-kind-returned' : 'sr-kind-stock_in'}`}>{t(isReturn ? 'menu.return' : 'menu.stockIn')}</span></td>
+              <td><span className={`sr-kind ${isPay ? 'sr-kind-adjusted' : isReturn ? 'sr-kind-returned' : 'sr-kind-stock_in'}`}>
+                {t(isPay ? 'vpay.payment' : isReturn ? 'menu.return' : 'menu.stockIn')}</span></td>
               <td><b>{r.doc_no}</b></td>
               <td className="muted">{r.ref_no}</td>
               <td className="vp-items">{r.item_names}</td>
-              <td className="num">{r.items}</td>
-              <td className="num">{Number(r.qty)}</td>
-              <td className="num">{money(r.taxable)}</td>
-              <td className="num">{money(r.gst)}</td>
-              <td className={`num ${isReturn ? 'sr-out' : 'sr-in'}`}><b>{isReturn ? '− ' : ''}{money(r.total)}</b></td>
+              <td className="num">{isPay ? '' : r.items}</td>
+              <td className="num">{isPay ? '' : Number(r.qty)}</td>
+              <td className="num">{isPay ? '' : money(r.taxable)}</td>
+              <td className="num">{isPay ? '' : money(r.gst)}</td>
+              <td className={`num ${less ? 'sr-out' : 'sr-in'}`}><b>{less ? '− ' : ''}{money(r.total)}</b></td>
             </tr>
           );
         })}
@@ -63,7 +66,8 @@ export default function VendorPayments() {
 
   return (
     <>
-      <PageHeader compact title={t('menu.vendorPayments')} subtitle={t('vp.subtitle')} />
+      <PageHeader compact title={t('menu.vendorPayments')} subtitle={t('vp.subtitle')}
+        actions={<Button size="sm" onClick={() => navigate('/vendor-payments')}><Icon name="plus" size={16} /> {t('vpay.new')}</Button>} />
       <Card className="crud-compact sr-card">
         <div className="toolbar vp-toolbar">
           <Input label={t('vp.from')} type="date" value={range.from} max={range.to || undefined}
@@ -85,7 +89,9 @@ export default function VendorPayments() {
                   <th className="num sr-in">{t('vp.stockInTotal')}</th>
                   <th className="num">{t('menu.return')}</th>
                   <th className="num sr-out">{t('vp.returnTotal')}</th>
-                  <th className="num sr-now">{t('vp.payable')}</th>
+                  <th className="num">{t('vp.payable')}</th>
+                  <th className="num sr-out">{t('vpay.paid')}</th>
+                  <th className="num sr-now">{t('vpay.balance')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,11 +112,13 @@ export default function VendorPayments() {
                       <td className="num sr-in"><b>{money(r.stock_in.total)}</b></td>
                       <td className="num">{r.return_count}</td>
                       <td className="num sr-out"><b>{money(r.returned.total)}</b></td>
-                      <td className="num sr-now"><b>{money(r.payable)}</b></td>
+                      <td className="num"><b>{money(r.payable)}</b></td>
+                      <td className="num sr-out">{money(r.paid)}</td>
+                      <td className="num sr-now"><b>{money(r.balance)}</b></td>
                     </tr>,
                     open && (
                       <tr key={`d-${r.supplier_id}`} className="sr-history-row">
-                        <td colSpan={8}><VendorDetails supplierId={r.supplier_id} range={range} /></td>
+                        <td colSpan={10}><VendorDetails supplierId={r.supplier_id} range={range} /></td>
                       </tr>
                     ),
                   ];
@@ -126,6 +134,8 @@ export default function VendorPayments() {
                   <td className="num">{tot.return_count}</td>
                   <td className="num"><b>{money(tot.returned.total)}</b></td>
                   <td className="num"><b>{money(tot.payable)}</b></td>
+                  <td className="num">{money(tot.paid)}</td>
+                  <td className="num"><b>{money(tot.balance)}</b></td>
                 </tr>
               </tfoot>
             </table>

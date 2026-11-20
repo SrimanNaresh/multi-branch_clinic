@@ -28,7 +28,7 @@ export const ROLE_PERMISSIONS = {
   pharmacist: [
     'patient.view',
     'item.view', 'item.manage', 'stock.manage', 'supplier.manage',
-    'dispense',
+    'dispense', 'vendor.pay', 'sales.return', 'stock.adjust',
     'ticket.view',
   ],
   billing: [
@@ -62,7 +62,7 @@ export const PERMISSION_GROUPS = [
   { id: 'registration', label: 'menu.registration', perms: ['patient.create', 'patient.view', 'patient.edit', 'employee.view'] },
   { id: 'queue', label: 'menu.patientQueue', perms: ['queue.confirm', 'queue.view', 'queue.update', 'vitals.record'] },
   { id: 'doctor', label: 'menu.doctor', perms: ['visit.examine', 'patient.history'] },
-  { id: 'pharmacy', label: 'menu.pharmacy', perms: ['item.manage', 'item.view', 'stock.manage', 'supplier.manage', 'dispense'] },
+  { id: 'pharmacy', label: 'menu.pharmacy', perms: ['item.manage', 'item.view', 'stock.manage', 'supplier.manage', 'dispense', 'vendor.pay', 'sales.return', 'stock.adjust'] },
   { id: 'billing', label: 'menu.billing', perms: ['bill.create', 'bill.view', 'bill.cancel'] },
   { id: 'communication', label: 'menu.communication', perms: ['ticket.view'] },
 ];

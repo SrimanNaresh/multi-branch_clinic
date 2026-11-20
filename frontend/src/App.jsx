@@ -42,6 +42,9 @@ import ReturnForm from './pages/branch/ReturnForm.jsx';
 import ReturnList from './pages/branch/ReturnList.jsx';
 import StockReport from './pages/branch/StockReport.jsx';
 import VendorPayments from './pages/branch/VendorPayments.jsx';
+import VendorPaymentEntry from './pages/branch/VendorPaymentEntry.jsx';
+import SalesReturnForm from './pages/branch/SalesReturnForm.jsx';
+import SalesReturnList from './pages/branch/SalesReturnList.jsx';
 import PatientBill from './pages/branch/PatientBill.jsx';
 import BillList from './pages/branch/BillList.jsx';
 import BillView from './pages/branch/BillView.jsx';
@@ -102,6 +105,10 @@ const ROUTES = [
   { path: '/sales', perm: 'dispense', el: SaleList, branch: true },
   { path: '/reports/stock', perm: 'item.view', el: StockReport, branch: true },
   { path: '/reports/vendor-payments', perm: 'stock.manage', el: VendorPayments, branch: true },
+  { path: '/vendor-payments', perm: 'vendor.pay', el: VendorPaymentEntry, branch: true },
+  { path: '/sales-returns/new', perm: 'sales.return', el: SalesReturnForm, branch: true },
+  { path: '/sales-returns/:id/edit', perm: 'sales.return', el: SalesReturnForm, branch: true },
+  { path: '/sales-returns', perm: 'sales.return', el: SalesReturnList, branch: true },
 
   { path: '/billing', perm: 'bill.create', el: PatientBill, branch: true },
   { path: '/billing/:visitId', perm: 'bill.create', el: PatientBill, branch: true },
