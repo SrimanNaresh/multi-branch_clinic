@@ -1247,29 +1247,27 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .scan-tiles-head { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .scan-tiles-now { text-transform: none; letter-spacing: 0; color: var(--brand); }
 .scan-tiles { display: flex; flex-wrap: wrap; gap: 6px; }
-.scan-tile { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 8px; border: 1px solid #c9dceb; background: var(--surface); color: var(--brand); font: inherit; font-size: 12px; font-weight: 600; cursor: grab; }
+.scan-tiles { gap: 8px; }
+.scan-tile { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 9px; border: 1px solid var(--brand-100); background: var(--surface); color: var(--brand); font: inherit; font-size: 13px; font-weight: 600; cursor: grab; box-shadow: 0 1px 2px rgba(15, 23, 42, .06); }
+.scan-tile:hover:not(:disabled) { background: var(--brand-50); }
 .scan-tile .icon:first-child { opacity: .45; }
-.scan-tile-po { border-color: #efd9a8; color: var(--warning); }
-.scan-tile-si { border-color: #bfe2c9; color: #1f7a3d; }
-.scan-tile.placed { opacity: .5; }
-.scan-tile.picked { background: var(--brand); color: #fff; border-color: var(--brand); opacity: 1; }
+.scan-tile.placed { background: var(--brand-50); border-color: var(--brand-100); color: #7b98ae; box-shadow: none; }
+.scan-tile.picked { background: var(--brand); color: #fff; border-color: var(--brand); }
 .scan-note { margin: 0; font-size: 12px; }
 .scan-table-wrap { max-height: 40vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
-.scan-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
-.scan-table th, .scan-table td { border: 1px solid var(--line); padding: 4px 6px; vertical-align: middle; word-break: break-word; }
+.scan-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+.scan-table th, .scan-table td { border: 1px solid var(--line); padding: 5px 8px; vertical-align: middle; word-break: break-word; }
 .scan-table thead th { background: var(--surface-2); }
 .scan-table thead { position: sticky; top: 0; z-index: 1; }
-.scan-table tr.scan-remove-row th { padding: 2px 6px; text-align: center; }
-.scan-no { width: 48px; text-align: center; color: var(--muted); white-space: nowrap; }
+.scan-table tr.scan-remove-row th { padding: 3px 6px; text-align: center; font-weight: 400; }
+.scan-no { width: 60px; text-align: center; color: var(--muted); white-space: nowrap; }
 .scan-table .scan-slot { cursor: pointer; padding: 4px; }
 .scan-table .scan-slot.active { background: var(--brand-50); }
 .scan-slot.waiting { box-shadow: inset 0 0 0 1px var(--brand-100); }
-.scan-slot-tile { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 4px 6px; border-radius: 6px; background: var(--brand); color: #fff; font-size: 11.5px; font-weight: 700; cursor: grab; }
-.scan-slot-tile.scan-tile-po { background: var(--warning); color: #fff; }
-.scan-slot-tile.scan-tile-si { background: #1f7a3d; color: #fff; }
+.scan-slot-tile { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 6px 9px; border-radius: 7px; background: var(--brand); color: #fff; font-size: 12.5px; font-weight: 700; cursor: grab; box-shadow: 0 1px 2px rgba(15, 23, 42, .12); }
 .scan-slot-tile span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scan-slot-tile button { border: 0; background: transparent; color: rgba(255, 255, 255, .8); padding: 0; cursor: pointer; display: grid; }
-.scan-slot-empty { display: block; padding: 4px 6px; border: 1px dashed var(--line-strong); border-radius: 6px; color: var(--muted); font-size: 11.5px; font-weight: 500; text-align: center; }
+.scan-slot-empty { display: block; padding: 6px 8px; border: 1px dashed var(--line-strong); border-radius: 6px; color: var(--muted); font-size: 11.5px; font-weight: 500; text-align: center; }
 .scan-bill-head { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
 .scan-remove { display: inline-flex; align-items: center; gap: 3px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 10.5px; padding: 1px 4px; border-radius: 4px; cursor: pointer; }
 .scan-remove:hover:not(:disabled) { background: var(--danger-50); color: var(--danger); }

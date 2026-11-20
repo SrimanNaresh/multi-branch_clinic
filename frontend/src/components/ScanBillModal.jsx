@@ -15,14 +15,12 @@ import Icon from './Icon.jsx';
 // The Three in One columns as tiles: [key, heading], grouped Item · Purchase / Order · Stock In.
 const TARGETS = [
   ['name', 'Item Name'], ['generic', 'Generic'], ['manufacturer', 'Manufacturer'], ['hsnCode', 'HSN'],
-  ['category', 'Category'], ['pack', 'Pack'], ['unit', 'Unit'],
+  ['category', 'Category'], ['pack', 'Pack'], ['unit', 'Unit'], ['rack', 'Rack'],
   ['mrp', 'MRP'], ['oldPrice', 'Old Price'], ['disc', 'Disc%'], ['pRate', 'P.Rate'],
   ['qty', 'Qty'], ['free', 'Free'], ['amount', 'Amount'],
   ['gst', 'GST%'], ['cgst', 'CGST%'], ['sgst', 'SGST%'], ['gstAmt', 'GST Amt'], ['total', 'Total'],
   ['batch', 'Batch No'], ['mfg', 'Mf.Date'], ['exp', 'Exp.Date'], ['sDisc', 'S.Disc%'], ['sel', 'Sel.Amount'],
 ];
-const GROUP_OF = (k) => (['name', 'generic', 'manufacturer', 'hsnCode', 'category', 'pack', 'unit'].includes(k) ? 'item'
-  : ['batch', 'mfg', 'exp', 'sDisc', 'sel'].includes(k) ? 'si' : 'po');
 const NUMERIC = new Set(['mrp', 'pRate', 'free', 'disc', 'qty', 'gst', 'sDisc', 'sel']);
 const DERIVE_ONLY = ['oldPrice', 'amount', 'gstAmt', 'total', 'cgst', 'sgst'];
 const MIN_BOX = 0.02;
@@ -79,7 +77,7 @@ function valueFor(key, text) {
   if (NUMERIC.has(key) || DERIVE_ONLY.includes(key)) return numIn(t);
   if (key === 'hsnCode') return t.replace(/[oO]/g, '0').replace(/\D/g, '').slice(0, 20);
   if (key === 'category' || key === 'batch') return t.replace(/ /g, '').toUpperCase().slice(0, key === 'batch' ? 50 : 100);
-  const max = { name: 200, manufacturer: 150, generic: 150, pack: 50, unit: 30 }[key] || 100;
+  const max = { name: 200, manufacturer: 150, generic: 150, pack: 50, unit: 30, rack: 50 }[key] || 100;
   return t.toUpperCase().slice(0, max);
 }
 /** The bill's Disc as a % of MRP: printed as a % or as an amount (per unit or for the line) */
@@ -271,7 +269,7 @@ function ColumnMatch({ table, map, setMap, onRemoveCol, onRemoveRow, disabled, t
           const on = map[key] != null;
           return (
             <button key={key} type="button" disabled={disabled} draggable={!disabled} onDragStart={dragTile(key)} onClick={() => tapTile(key)}
-              className={`scan-tile scan-tile-${GROUP_OF(key)} ${picked?.tile === key ? 'picked' : on ? 'placed' : ''}`}
+              className={`scan-tile ${picked?.tile === key ? 'picked' : on ? 'placed' : ''}`}
               title={on ? t('scan.tilePlaced') : t('scan.tileFree')}>
               <Icon name="grip" size={12} /> {name}{on && <Icon name="check" size={12} />}
             </button>
@@ -282,7 +280,7 @@ function ColumnMatch({ table, map, setMap, onRemoveCol, onRemoveRow, disabled, t
 
       <div className="scan-tiles-head">{t('scan.readLines', { n: table.rows.length })}</div>
       <div className="scan-table-wrap">
-        <table className="scan-table" style={{ minWidth: 48 + table.heads.reduce((s, _, i) => s + (i === map.name || table.heads[i].field === 'name' ? 200 : 100), 0) }}>
+        <table className="scan-table" style={{ minWidth: 48 + table.heads.reduce((s, _, i) => s + (i === map.name || table.heads[i].field === 'name' ? 260 : 130), 0) }}>
           <thead>
             <tr>
               <th className="scan-no">#</th>
@@ -290,11 +288,11 @@ function ColumnMatch({ table, map, setMap, onRemoveCol, onRemoveRow, disabled, t
                 const key = tileOn(i);
                 const active = over === i || picked?.col === i;
                 return (
-                  <th key={i} style={{ width: i === map.name || h.field === 'name' ? 200 : 100 }}
+                  <th key={i} style={{ width: i === map.name || h.field === 'name' ? 260 : 130 }}
                     className={`scan-slot ${active ? 'active' : ''} ${picked?.tile && !key ? 'waiting' : ''}`}
                     title={h.label || ''} onClick={() => tapCol(i)} {...dropProps(i)}>
                     {key ? (
-                      <span className={`scan-slot-tile scan-tile-${GROUP_OF(key)}`} draggable={!disabled} onDragStart={dragTile(key)}>
+                      <span className="scan-slot-tile" draggable={!disabled} onDragStart={dragTile(key)}>
                         <span>{label[key]}</span>
                         <button type="button" disabled={disabled} title={t('common.delete')} onClick={(e) => { e.stopPropagation(); clear(key); }}><Icon name="x" size={11} /></button>
                       </span>
@@ -306,8 +304,7 @@ function ColumnMatch({ table, map, setMap, onRemoveCol, onRemoveRow, disabled, t
             <tr className="scan-remove-row">
               <th />
               {table.heads.map((h, i) => (
-                <th key={i}>
-                  <small className="muted scan-bill-head">{h.label || '—'}</small>
+                <th key={i} title={h.label || ''}>
                   <button type="button" className="scan-remove" disabled={disabled || table.heads.length <= 1}
                     onClick={() => { setPicked(null); setOver(null); onRemoveCol(i); }}><Icon name="trash" size={11} /> {t('scan.remove')}</button>
                 </th>

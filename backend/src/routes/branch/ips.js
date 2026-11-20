@@ -86,7 +86,7 @@ async function clean(body, clinicId) {
     const sDisc = toAmount(r.s_disc, 'S.Disc %');
     if (sDisc > 100) throw badRequest(`${name}: S.Disc % must be 0–100`, 'VALIDATION');
     rows.push({
-      item_id: item?.id || null, name, unit,
+      item_id: item?.id || null, name, unit, rack: text(r.rack, 50),
       details: {
         generic_name: text(r.generic_name, 150), manufacturer: text(r.manufacturer, 150), hsn_code: text(r.hsn_code, 20),
         category: text(r.category, 100), pack: text(r.pack, 50),
@@ -124,7 +124,7 @@ router.post('/save', async (req, res) => {
       if (!added.has(key)) {
         const n = await nextSequence(q, req.clinicId, 'item');
         added.set(key, await insertRow(q, 'items', {
-          clinic_id: req.clinicId, item_code: formatItemCode(clinic.code, n), name: r.name, unit: r.unit, ...r.details,
+          clinic_id: req.clinicId, item_code: formatItemCode(clinic.code, n), name: r.name, unit: r.unit, rack: r.rack, ...r.details,
           mrp: r.mrp, purchase_rate: r.rate, price: selAmount({ mrp: r.mrp, disc_percent: r.s_disc }),
           cgst_percent: r.cgst_percent, sgst_percent: r.sgst_percent, gst_percent: r.gst_percent, stock_qty: 0, created_by: req.user.id,
         }));
@@ -166,7 +166,7 @@ router.post('/save', async (req, res) => {
 // GET /api/ips/items – every active item (light), for matching the names read from a scanned bill
 router.get('/items', async (req, res) => {
   const rows = await query(
-    `SELECT id, name, unit, generic_name, manufacturer, hsn_code, category, pack, mrp, purchase_rate, gst_percent, cgst_percent, sgst_percent
+    `SELECT id, name, unit, rack, generic_name, manufacturer, hsn_code, category, pack, mrp, purchase_rate, gst_percent, cgst_percent, sgst_percent
        FROM items WHERE clinic_id = ? AND status = N'active' ORDER BY name`, [req.clinicId],
   );
   res.json({ rows });

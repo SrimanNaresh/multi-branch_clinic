@@ -1189,7 +1189,7 @@ export default {
   'scan.nowTapColumn': 'now tap the column for "{name}"',
   'scan.tilePlaced': 'Placed on a column – drag it to another to move it',
   'scan.tileFree': 'Drag onto a bill column, or tap it then the column',
-  'scan.matchNote': 'The lines fill the Three in One table. Existing items are matched by name. P.Rate is the bill\'s rate (else MRP less Disc %); Amount or Old Price give the rate, GST Amt or Total the GST %, when missing. Category is used as the Batch No when there is no Batch No column. Dates are read as MM/YY.',
+  'scan.matchNote': 'The lines fill the Three in One table: Item Master columns (new items are added on save), Purchase / Order columns (P.Rate = MRP less Disc %; Amount or Old Price give the rate, GST Amt or Total the GST %, when missing) and Stock In columns (Batch No, dates as MM/YY, S.Disc %, Sel.Amount). Category is used as the Batch No when there is no Batch No column.',
   'scan.readLines': 'Read from the bill · {n} lines',
   'scan.nowTapTile': 'Now tap a tile',
   'scan.dropTile': 'Drop a tile',

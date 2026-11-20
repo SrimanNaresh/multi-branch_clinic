@@ -21,12 +21,12 @@ import { selAmount } from '../../../../shared/stockin.js';
 
 let seq = 0;
 const emptyRow = () => ({
-  key: `r${++seq}`, item_id: null, name: '', generic_name: '', manufacturer: '', hsn_code: '', category: '', pack: '', unit: '',
+  key: `r${++seq}`, item_id: null, name: '', generic_name: '', manufacturer: '', hsn_code: '', category: '', pack: '', unit: '', rack: '',
   mrp: '', p_rate: '', disc_percent: '', qty: '', free_qty: '', gst: '', batch_no: '', mfg: '', exp: '', s_disc: '',
 });
 const fromItem = (i) => ({
   item_id: i.id, name: i.name, generic_name: i.generic_name || '', manufacturer: i.manufacturer || '', hsn_code: i.hsn_code || '',
-  category: i.category || '', pack: i.pack || '', unit: i.unit || '', mrp: Number(i.mrp) || '', p_rate: Number(i.purchase_rate) || '',
+  category: i.category || '', pack: i.pack || '', unit: i.unit || '', rack: i.rack || '', mrp: Number(i.mrp) || '', p_rate: Number(i.purchase_rate) || '',
   gst: Number(i.gst_percent) || (Number(i.cgst_percent) + Number(i.sgst_percent)) || '',
 });
 const EMPTY_HEAD = () => ({ supplier_id: '', date: todayLocal(), bill_no: '', round_off: false });
@@ -103,7 +103,7 @@ export default function StockIps() {
       const sDisc = num(l.sDisc) !== '' ? num(l.sDisc) : (mrp && num(l.sel) ? r2((1 - Number(l.sel) / mrp) * 100) : '');
       const base = item ? fromItem(item) : {
         name: l.name, generic_name: l.generic || '', manufacturer: l.manufacturer || '', hsn_code: l.hsnCode || '',
-        category: l.batch ? (l.category || '') : '', pack: l.pack || '', unit: l.unit || '',
+        category: l.batch ? (l.category || '') : '', pack: l.pack || '', unit: l.unit || '', rack: l.rack || '',
       };
       return {
         ...emptyRow(), ...base,
@@ -185,7 +185,7 @@ export default function StockIps() {
         ...head, draft_id: draftId,
         rows: used.map((r) => ({
           item_id: r.item_id, name: r.name, unit: r.unit, generic_name: r.generic_name, manufacturer: r.manufacturer,
-          hsn_code: r.hsn_code, category: r.category, pack: r.pack, mrp: r.mrp, p_rate: r.p_rate, disc_percent: r.disc_percent,
+          hsn_code: r.hsn_code, category: r.category, pack: r.pack, rack: r.rack, mrp: r.mrp, p_rate: r.p_rate, disc_percent: r.disc_percent,
           qty: r.qty, free_qty: r.free_qty, gst: r.gst, batch_no: r.batch_no, mfg: mmyyToMonth(r.mfg), exp: mmyyToMonth(r.exp), s_disc: r.s_disc,
         })),
       } });
