@@ -9,7 +9,8 @@ import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money, todayLocal } from '../../lib/format.js';
 import { arrowMove, focusNewRow } from '../../lib/tableKeys.js';
-import { mmyyToMonth, typeMMYY } from '../../lib/months.js';
+import { mmyyToMonth, monthToMMYY, typeMMYY } from '../../lib/months.js';
+import { buildIndex, matchName } from '../../lib/billScan.js';
 import { Button, Card, Empty, Input, Modal, useAsync, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
@@ -82,16 +83,40 @@ export default function StockIps() {
 
   useEffect(() => { setDone(null); }, [head.supplier_id]);
 
-  /** Rows read from a scanned bill go under the rows already typed; the bill date / supplier GSTIN fill the head */
-  function addScanned(list, header) {
-    const scanned = list.map((s) => ({
-      ...emptyRow(), ...(s.item ? fromItem(s.item) : { name: s.name, hsn_code: s.hsn_code, manufacturer: s.manufacturer, pack: s.pack }),
-      batch_no: s.batch_no || '', mrp: s.mrp || (s.item ? Number(s.item.mrp) || '' : ''), qty: s.qty || '',
-    }));
+  /**
+   * Lines read from a scanned bill (Scan Bill → Fill the table) go under the rows already typed. A line whose name
+   * is an item (same name, or very probably the same) uses that item; the bill's figures fill the rest:
+   * P.Rate = the bill's rate (else MRP less its Disc %), GST % (else CGST + SGST), Batch No (else its Category),
+   * Mf / Exp as MM/YY, S.Disc % (else from Sel.Amount). The bill date and supplier GSTIN fill the head.
+   */
+  async function addScanned(lines, header) {
+    let index = [];
+    try { index = buildIndex((await api('/ips/items')).rows); } catch { /* matched by hand then */ }
+    const num = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? '' : Number(v));
+    const r2 = (n) => Math.round(n * 100) / 100;
+    const scanned = lines.map((l) => {
+      const m = matchName(l.name, index);
+      const item = m.exact || m.likely;
+      const mrp = num(l.mrp);
+      const pRate = num(l.pRate) || (mrp && num(l.disc) ? r2(mrp * (1 - Number(l.disc) / 100)) : '');
+      const gst = num(l.gst) || (num(l.cgst) || num(l.sgst) ? r2(Number(l.cgst || 0) + Number(l.sgst || 0)) : '');
+      const sDisc = num(l.sDisc) !== '' ? num(l.sDisc) : (mrp && num(l.sel) ? r2((1 - Number(l.sel) / mrp) * 100) : '');
+      const base = item ? fromItem(item) : {
+        name: l.name, generic_name: l.generic || '', manufacturer: l.manufacturer || '', hsn_code: l.hsnCode || '',
+        category: l.batch ? (l.category || '') : '', pack: l.pack || '', unit: l.unit || '',
+      };
+      return {
+        ...emptyRow(), ...base,
+        mrp: mrp || base.mrp || '', p_rate: pRate || base.p_rate || '', gst: gst || base.gst || '',
+        qty: num(l.qty), free_qty: num(l.free),
+        batch_no: l.batch || l.category || '', mfg: monthToMMYY(l.mfg), exp: monthToMMYY(l.exp),
+        s_disc: sDisc > 0 && sDisc <= 100 ? sDisc : '',
+      };
+    });
     setRows((rs) => [...rs.filter(filled), ...scanned, emptyRow()]);
     if (scanned.some((r) => !r.item_id)) setShowItem(true);
-    const gst = String(header?.gstNo || '').toUpperCase();
-    const v = gst && (vendors.data?.rows || []).find((x) => String(x.gstin || '').toUpperCase() === gst);
+    const gstNo = String(header?.gstNo || '').toUpperCase();
+    const v = gstNo && (vendors.data?.rows || []).find((x) => String(x.gstin || '').toUpperCase() === gstNo);
     setHead((h) => ({
       ...h,
       supplier_id: h.supplier_id || (v ? String(v.id) : ''),
@@ -194,7 +219,7 @@ export default function StockIps() {
             <p className="muted">{t('ips.hint')}</p>
           </div>
           <div className="compact-head-actions">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setShowScan(true)}><Icon name="upload" size={15} /> {t('scan.title')}</Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setShowScan(true)}><Icon name="scan" size={15} /> {t('scan.title')}</Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => setShowDrafts(true)}><Icon name="file" size={15} /> {t('ips.drafts', { n: draftRows.length })}</Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/stock-in')}><Icon name="list" size={15} /> {t('stockin.viewList')}</Button>
           </div>
@@ -332,7 +357,7 @@ export default function StockIps() {
         </div>
       </Card>
 
-      {showScan && <ScanBillModal onClose={() => setShowScan(false)} onAdd={addScanned} />}
+      {showScan && <ScanBillModal onClose={() => setShowScan(false)} onLines={addScanned} />}
       {showDrafts && (
         <Modal title={t('ips.drafts', { n: draftRows.length })} onClose={() => setShowDrafts(false)} wide>
           {draftRows.length ? (
