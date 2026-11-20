@@ -988,4 +988,10 @@ export default {
   'billing.to': 'வரை',
   'billing.billsCount': '{n} பில்கள்',
   'billing.collected': 'வசூல்',
+  'pharma.roundOff': 'முழுமையாக்கல்',
+  'pharma.netAmount': 'நிகர தொகை',
+  'pharma.billNo': 'பில் எண்',
+  'pharma.billNoHint': 'விற்பனையாளர் பில் எண்',
+  'pharma.deleteConfirm': '{no} ஐ நீக்கவா? அதன் இருப்பு மாற்றம் திரும்பப் பெறப்படும். இதை மீட்க முடியாது.',
+  'pharma.deleted': '{no} நீக்கப்பட்டது',
 };

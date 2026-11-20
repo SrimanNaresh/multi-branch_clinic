@@ -23,3 +23,6 @@ export const splitGst = (gst) => {
 
 /** Sum of Total over the lines */
 export const orderTotal = (lines) => r2(lines.reduce((s, l) => s + calcLine(l).total, 0));
+
+/** Round Off: what takes the total to the nearest rupee (102.40 → −0.40, 102.50 → +0.50) */
+export const roundOffOf = (total) => r2(Math.round(r2(total)) - r2(total));

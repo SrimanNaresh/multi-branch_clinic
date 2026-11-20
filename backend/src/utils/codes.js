@@ -29,3 +29,6 @@ export const formatReturnNo = (clinicCode, n) => `${clinicCode}-RT${pad(n, 4)}`;
 export const formatSaleNo = (clinicCode, n) => `${clinicCode}-S${pad(n, 4)}`;         // CLA-S0001
 export const formatAdminCode = (n) => `ADM-${pad(n, 3)}`;                            // ADM-001
 export const tokenKey = (isoDate) => `token:${isoDate}`;
+export const formatVendorPaymentNo = (clinicCode, n) => `${clinicCode}-VP${pad(n, 4)}`;  // CLA-VP0001
+export const formatSalesReturnNo = (clinicCode, n) => `${clinicCode}-SR${pad(n, 4)}`;    // CLA-SR0001
+export const formatAdjustmentNo = (clinicCode, n) => `${clinicCode}-AD${pad(n, 4)}`;     // CLA-AD0001

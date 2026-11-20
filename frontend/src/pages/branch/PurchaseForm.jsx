@@ -11,7 +11,7 @@ import Icon from '../../components/Icon.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
 import ItemBulkPicker from '../../components/ItemBulkPicker.jsx';
 import VendorPicker from '../../components/VendorPicker.jsx';
-import { calcLine, orderTotal, splitGst } from '../../../../shared/purchase.js';
+import { calcLine, orderTotal, roundOffOf, splitGst } from '../../../../shared/purchase.js';
 import { arrowMove, focusNewRow } from '../../lib/tableKeys.js';
 
 const newLine = () => ({
@@ -46,7 +46,7 @@ export default function PurchaseForm({ params }) {
   const { t } = useT();
   const toast = useToast();
   const id = params.id;
-  const [head, setHead] = useState({ supplier_id: '', po_date: todayLocal(), details: '' });
+  const [head, setHead] = useState({ supplier_id: '', po_date: todayLocal(), details: '', round_off: false });
   const [lines, setLines] = useState([newLine()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -83,7 +83,7 @@ export default function PurchaseForm({ params }) {
   useEffect(() => {
     const po = existing.data;
     if (!po) return;
-    setHead({ supplier_id: String(po.supplier_id), po_date: String(po.po_date).slice(0, 10), details: po.details || '' });
+    setHead({ supplier_id: String(po.supplier_id), po_date: String(po.po_date).slice(0, 10), details: po.details || '', round_off: Number(po.round_off) !== 0 });
     setLines(po.lines.map((l) => ({ ...newLine(), ...l, key: String(l.id), mrp: Number(l.mrp), disc_percent: Number(l.disc_percent) || '',
       p_rate: Number(l.p_rate ?? l.mrp) || '', free_qty: Number(l.free_qty) || '',
       qty: Number(l.qty), cgst_percent: Number(l.cgst_percent) || '', sgst_percent: Number(l.sgst_percent) || '' })));
@@ -119,7 +119,7 @@ export default function PurchaseForm({ params }) {
       const po = id ? await api(`/purchases/${id}`, { method: 'PUT', body }) : await api('/purchases', { method: 'POST', body });
       toast(t('purchase.saved', { no: po.po_no }));
       if (id) navigate('/purchase');
-      else { setHead({ supplier_id: '', po_date: todayLocal(), details: '' }); setLines([newLine()]); }
+      else { setHead({ supplier_id: '', po_date: todayLocal(), details: '', round_off: false }); setLines([newLine()]); }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -131,6 +131,8 @@ export default function PurchaseForm({ params }) {
   if (existing.error) return <ErrorBox error={existing.error} />;
   const num = { type: 'number', min: '0', step: '0.01', inputMode: 'decimal' };
   const picked = lines.filter((l) => l.item_id);
+  const sumTotal = orderTotal(picked);
+  const roundOff = head.round_off ? roundOffOf(sumTotal) : 0;
 
   return (
     <form onSubmit={submit}>
@@ -311,7 +313,20 @@ export default function PurchaseForm({ params }) {
             <tfoot>
               <tr>
                 <td colSpan={showMore ? 15 : 16} className="num"><b>{t('purchase.sumTotal')}</b></td>
-                <td className="num po-sum">{money(orderTotal(picked))}</td>
+                <td className="num"><b>{money(sumTotal)}</b></td>
+                <td />
+              </tr>
+              <tr>
+                <td colSpan={showMore ? 15 : 16} className="num">
+                  <label className="round-off"><input type="checkbox" checked={head.round_off}
+                    onChange={(e) => setHead({ ...head, round_off: e.target.checked })} /> <b>{t('pharma.roundOff')}</b></label>
+                </td>
+                <td className="num">{roundOff > 0 ? '+ ' : roundOff < 0 ? '− ' : ''}{money(Math.abs(roundOff))}</td>
+                <td />
+              </tr>
+              <tr className="sale-total-row">
+                <td colSpan={showMore ? 15 : 16} className="num"><b>{t('pharma.netAmount')}</b></td>
+                <td className="num po-sum">{money(sumTotal + roundOff)}</td>
                 <td />
               </tr>
             </tfoot>

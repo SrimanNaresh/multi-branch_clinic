@@ -60,6 +60,9 @@ async function clean(body, clinicId, exceptId = 0, saved = new Map()) {
   if (po.supplier_id !== supplierId) throw badRequest('That purchase order is for another vendor', 'VALIDATION');
   const siDate = body?.si_date || todayISO();
   if (!isISODate(siDate)) throw badRequest('Invalid date', 'VALIDATION');
+  // the supplier's own bill / invoice number (optional), kept in capitals
+  const billNo = String(body?.bill_no ?? '').trim().toUpperCase();
+  if (billNo.length > 50) throw badRequest('Bill No: at most 50 characters', 'VALIDATION');
 
   const byLine = new Map((await orderLines(clinicId, poId, exceptId)).map((l) => [l.po_item_id, l]));
   const input = Array.isArray(body?.lines) ? body.lines : [];
@@ -92,14 +95,14 @@ async function clean(body, clinicId, exceptId = 0, saved = new Map()) {
     });
   }
   if (!lines.length) throw badRequest('Enter the quantity received for at least one item', 'VALIDATION');
-  return { head: { supplier_id: supplierId, po_id: poId, si_date: siDate }, lines };
+  return { head: { supplier_id: supplierId, po_id: poId, si_date: siDate, bill_no: billNo || null }, lines };
 }
 
 /**
  * Saves the lines of a Stock In: stock moves by (new − old) quantity per item (paid + free), never below zero,
  * and each item's selling price becomes its line's Sel.Amount. `note` names the change in the stock history.
  */
-async function applyLines(q, clinicId, userId, siId, supplierId, oldLines, lines, note) {
+export async function applyLines(q, clinicId, userId, siId, supplierId, oldLines, lines, note) {
   await lockStock(q, clinicId);
   const change = new Map();
   for (const l of oldLines) change.set(l.item_id, (change.get(l.item_id) || 0) - Number(l.qty) - Number(l.free_qty));
@@ -130,6 +133,16 @@ async function lockReason(q, clinicId, id) {
     'SELECT TOP 1 s.sale_no FROM sale_items i JOIN sales s ON s.id = i.sale_id JOIN stock_in_items l ON l.id = i.stock_in_item_id WHERE l.stock_in_id = ?', [id],
   );
   if (sold) return `Sale ${sold.sale_no} is made from this Stock In's batches – it can no longer be changed`;
+  const [paid] = await q('SELECT TOP 1 payment_no FROM vendor_payments WHERE stock_in_id = ? AND clinic_id = ?', [id, clinicId]);
+  if (paid) return `Payment ${paid.payment_no} is made against this Stock In – it can no longer be changed`;
+  const [adjusted] = await q(
+    'SELECT TOP 1 a.adj_no FROM stock_adjustment_items i JOIN stock_adjustments a ON a.id = i.adjustment_id JOIN stock_in_items l ON l.id = i.stock_in_item_id WHERE l.stock_in_id = ?', [id],
+  );
+  if (adjusted) return `Adjustment ${adjusted.adj_no} uses this Stock In's batches – it can no longer be changed`;
+  const [returnedBack] = await q(
+    'SELECT TOP 1 r.return_no FROM sales_return_items i JOIN sales_returns r ON r.id = i.sales_return_id JOIN stock_in_items l ON l.id = i.stock_in_item_id WHERE l.stock_in_id = ?', [id],
+  );
+  if (returnedBack) return `Sales Return ${returnedBack.return_no} uses this Stock In's batches – it can no longer be changed`;
   return null;
 }
 
@@ -155,14 +168,14 @@ router.get('/', async (req, res) => {
     params.push(toId(req.query.supplier_id, 'vendor'));
   }
   if (req.query.q) {
-    where.push('(si.si_no LIKE ? OR p.po_no LIKE ? OR s.name LIKE ?)');
-    params.push(like(req.query.q), like(req.query.q), like(req.query.q));
+    where.push('(si.si_no LIKE ? OR si.bill_no LIKE ? OR p.po_no LIKE ? OR s.name LIKE ?)');
+    params.push(...Array(4).fill(like(req.query.q)));
   }
   const w = where.join(' AND ');
   const from = 'FROM stock_ins si JOIN suppliers s ON s.id = si.supplier_id JOIN purchase_orders p ON p.id = si.po_id';
   const [{ total }] = await query(`SELECT COUNT(*) AS total ${from} WHERE ${w}`, params);
   const rows = await query(
-    `SELECT si.id, si.si_no, si.si_date, s.name AS supplier_name, p.po_no,
+    `SELECT si.id, si.si_no, si.si_date, si.bill_no, s.name AS supplier_name, p.po_no,
             (SELECT COUNT(*) FROM stock_in_items i WHERE i.stock_in_id = si.id) AS item_count,
             (SELECT SUM(i.qty + i.free_qty) FROM stock_in_items i WHERE i.stock_in_id = si.id) AS total_qty
        ${from} WHERE ${w} ORDER BY si.si_date DESC, si.id DESC ${pageSql}`,
@@ -183,8 +196,8 @@ router.get('/lines', async (req, res) => {
   const where = ['si.clinic_id = ?'];
   const params = [req.clinicId];
   if (req.query.q) {
-    where.push('(l.item_name LIKE ? OR l.batch_no LIKE ? OR si.si_no LIKE ? OR s.name LIKE ?)');
-    params.push(...Array(4).fill(like(req.query.q)));
+    where.push('(l.item_name LIKE ? OR l.batch_no LIKE ? OR si.si_no LIKE ? OR si.bill_no LIKE ? OR s.name LIKE ?)');
+    params.push(...Array(5).fill(like(req.query.q)));
   }
   const w = where.join(' AND ');
   const from = `FROM stock_in_items l JOIN stock_ins si ON si.id = l.stock_in_id JOIN suppliers s ON s.id = si.supplier_id
@@ -198,7 +211,7 @@ router.get('/lines', async (req, res) => {
             SUM(a.net_amount) AS net_amount ${from} WHERE ${w}`, params,
   );
   const rows = await query(
-    `SELECT l.id, l.stock_in_id, si.si_no, si.si_date, s.name AS supplier_name, p.po_no, l.item_name, l.batch_no, l.exp_date,
+    `SELECT l.id, l.stock_in_id, si.si_no, si.si_date, si.bill_no, s.name AS supplier_name, p.po_no, l.item_name, l.batch_no, l.exp_date,
             x.all_qty AS qty, l.qty AS paid_qty, l.free_qty, l.rate, l.mrp, l.disc_percent, l.sel_amount,
             a.buy_amount, a.sale_amount, a.net_amount, a.sale_amount - a.net_amount AS disc_amount
        ${from} WHERE ${w}
@@ -237,7 +250,7 @@ router.get('/:id', async (req, res) => {
   res.json(await loadStockIn(req.clinicId, toId(req.params.id)));
 });
 
-// POST /api/stock-in { supplier_id, po_id, si_date, lines: [{ po_item_id, batch_no, mfg_date, exp_date, qty, free_qty, disc_percent }] }
+// POST /api/stock-in { supplier_id, po_id, si_date, bill_no, lines: [{ po_item_id, batch_no, mfg_date, exp_date, qty, free_qty, disc_percent }] }
 router.post('/', async (req, res) => {
   const { head, lines } = await clean(req.body, req.clinicId);
   const id = await tx(async (q) => {
@@ -263,8 +276,8 @@ router.put('/:id', async (req, res) => {
     const locked = await lockReason(q, req.clinicId, id);
     if (locked) throw badRequest(locked, 'VALIDATION');
     const old = await q('SELECT item_id, qty, free_qty FROM stock_in_items WHERE stock_in_id = ?', [id]);
-    await q('UPDATE stock_ins SET supplier_id = ?, po_id = ?, si_date = ?, updated_at = NOW() WHERE id = ?',
-      [head.supplier_id, head.po_id, head.si_date, id]);
+    await q('UPDATE stock_ins SET supplier_id = ?, po_id = ?, si_date = ?, bill_no = ?, updated_at = NOW() WHERE id = ?',
+      [head.supplier_id, head.po_id, head.si_date, head.bill_no, id]);
     await applyLines(q, req.clinicId, req.user.id, id, head.supplier_id, old, lines, `Stock In ${si.si_no} changed`);
   });
   res.json(await loadStockIn(req.clinicId, id));

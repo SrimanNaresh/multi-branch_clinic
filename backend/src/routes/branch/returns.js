@@ -5,10 +5,10 @@
 import { Router } from '../../lib/mini-express.js';
 import { query, tx, insertRow, pageSql } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
-import { badRequest, notFound, paging, toAmount, toId, like } from '../../utils/http.js';
+import { badRequest, forbidden, notFound, paging, toAmount, toId, like } from '../../utils/http.js';
 import { isISODate, todayISO } from '../../utils/dates.js';
 import { nextSequence, formatReturnNo } from '../../utils/codes.js';
-import { lockStock, r4 } from '../../utils/stock.js';
+import { isAdmin, lockStock, r4 } from '../../utils/stock.js';
 
 const router = Router();
 router.use(clinicScope(), requirePermission('stock.manage'));
@@ -74,7 +74,7 @@ async function applyLines(q, clinicId, userId, retId, retNo, supplierId, oldLine
     await insertRow(q, 'stock_movements', {
       clinic_id: clinicId, item_id: itemId, qty_change: r4(diff), balance_after: balance,
       reason: isEdit ? 'adjustment' : 'return', ref_type: 'purchase_return', ref_id: retId, supplier_id: supplierId,
-      note: isEdit ? `Return ${retNo} changed` : `Return ${retNo} to vendor`, created_by: userId,
+      note: !isEdit ? `Return ${retNo} to vendor` : lines.length ? `Return ${retNo} changed` : `Return ${retNo} deleted`, created_by: userId,
     });
   }
   await q('DELETE FROM purchase_return_items WHERE return_id = ? AND clinic_id = ?', [retId, clinicId]);
@@ -154,6 +154,20 @@ router.put('/:id', async (req, res) => {
     await applyLines(q, req.clinicId, req.user.id, id, ret.return_no, head.supplier_id, old, lines);
   });
   res.json(await loadReturn(req.clinicId, id));
+});
+
+// DELETE /api/returns/:id – Admin only; puts the returned quantities back into stock
+router.delete('/:id', async (req, res) => {
+  if (!isAdmin(req.user)) throw forbidden('Only an Admin can delete a Return');
+  const id = toId(req.params.id);
+  await tx(async (q) => {
+    const [ret] = await q('SELECT return_no, supplier_id FROM purchase_returns WITH (UPDLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+    if (!ret) throw notFound('Return');
+    const old = await q('SELECT item_id, qty FROM purchase_return_items WHERE return_id = ?', [id]);
+    await applyLines(q, req.clinicId, req.user.id, id, ret.return_no, ret.supplier_id, old, []);
+    await q('DELETE FROM purchase_returns WHERE id = ?', [id]);
+  });
+  res.json({ ok: true });
 });
 
 export default router;

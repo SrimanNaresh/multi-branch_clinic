@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
+import { useAuth } from '../../lib/auth.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money } from '../../lib/format.js';
 import { Button, Card, DataTable, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
@@ -11,6 +12,7 @@ import { useReceiptPrinter } from '../../components/SaleReceipt.jsx';
 
 export default function SaleList() {
   const { t } = useT();
+  const { isGlobal: isAdmin } = useAuth();
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const dq = useDebounced(q);
@@ -33,10 +35,22 @@ export default function SaleList() {
         <span className="row-actions">
           <Button size="sm" variant="ghost" onClick={() => navigate(`/sales/${r.id}/edit`)}><Icon name="edit" size={15} /> {t('common.edit')}</Button>
           <Button size="sm" variant="ghost" onClick={() => reprint(r)}><Icon name="print" size={15} /> {t('sale.print')}</Button>
+          {isAdmin && <Button size="sm" variant="ghost" className="btn-danger-ghost" onClick={() => remove(r)}><Icon name="trash" size={15} /> {t('common.delete')}</Button>}
         </span>
       ),
     },
   ];
+
+  async function remove(r) {
+    if (!window.confirm(t('pharma.deleteConfirm', { no: r.sale_no }))) return;
+    try {
+      await api(`/sales/${r.id}`, { method: 'DELETE' });
+      toast(t('pharma.deleted', { no: r.sale_no }));
+      list.reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
 
   return (
     <>

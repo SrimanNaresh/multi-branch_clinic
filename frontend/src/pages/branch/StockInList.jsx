@@ -88,7 +88,7 @@ export default function StockInList() {
       ? [
         {
           key: 'si_no', label: t('stockin.no'), merged: true, className: 'si-merged',
-          render: (r) => <><b>{r.si_no}</b><small className="muted si-vendor">{r.supplier_name} · {r.po_no}</small></>,
+          render: (r) => <><b>{r.si_no}</b><small className="muted si-vendor">{r.supplier_name} · {r.po_no}{r.bill_no ? ` · ${t('pharma.billNo')} ${r.bill_no}` : ''}</small></>,
         },
         { key: 'item_name', label: t('items.name'), render: (r) => <b>{r.item_name}</b> },
       ]
@@ -96,7 +96,7 @@ export default function StockInList() {
     { key: 'batch_no', label: t('stockin.batch'), render: (r) => r.batch_no || '—' },
     { key: 'exp_date', label: t('stockin.exp'), render: (r) => month(r.exp_date) },
     ...(byDate ? [] : [
-      { key: 'si_no', label: t('stockin.no'), render: (r) => <span className="muted" title={fmtDate(r.si_date)}>{r.si_no}</span> },
+      { key: 'si_no', label: t('stockin.no'), render: (r) => <span className="muted" title={fmtDate(r.si_date)}>{r.si_no}{r.bill_no && <small className="si-vendor">{t('pharma.billNo')} {r.bill_no}</small>}</span> },
       { key: 'supplier_name', label: t('purchase.vendor') },
     ]),
     {

@@ -1169,3 +1169,153 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_salei_item' AND object_id = OBJECT_ID(N'dbo.sale_items'))
   CREATE INDEX ix_salei_item ON dbo.sale_items(item_id);
 GO
+
+/* ---------- 14. PHARMACY: aligned with Ayush All In One (docs/01_pharmacy_alignment_plan.md) ----------
+   Stock In Bill No, Round Off on orders and sales, Vendor Payments, Sales Return, Stock Adjustment,
+   Three in One (IPS) drafts. Adds only; existing columns and data are unchanged. */
+
+-- the supplier's own bill / invoice number on a Stock In (optional)
+IF COL_LENGTH(N'dbo.stock_ins', N'bill_no') IS NULL
+  ALTER TABLE dbo.stock_ins ADD bill_no NVARCHAR(50) NULL;
+GO
+-- Round Off: the rupee rounding added to the Sum of Total (order) / TOTAL (sale); total_amount includes it
+IF COL_LENGTH(N'dbo.purchase_orders', N'round_off') IS NULL
+  ALTER TABLE dbo.purchase_orders ADD round_off DECIMAL(10,2) NOT NULL CONSTRAINT df_po_round DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.sales', N'round_off') IS NULL
+  ALTER TABLE dbo.sales ADD round_off DECIMAL(10,2) NOT NULL CONSTRAINT df_sale_round DEFAULT 0;
+GO
+
+-- Vendor → Payments: money paid to a vendor against one Stock In (its bill)
+IF OBJECT_ID(N'dbo.vendor_payments', N'U') IS NULL
+CREATE TABLE dbo.vendor_payments (
+  id            INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id     INT NOT NULL CONSTRAINT fk_vp_clinic REFERENCES dbo.clinics(id),
+  payment_no    NVARCHAR(20) NOT NULL,
+  supplier_id   INT NOT NULL CONSTRAINT fk_vp_supplier REFERENCES dbo.suppliers(id),
+  stock_in_id   INT NOT NULL CONSTRAINT fk_vp_si REFERENCES dbo.stock_ins(id),
+  pay_date      DATE NOT NULL,
+  amount        DECIMAL(12,2) NOT NULL CONSTRAINT chk_vp_amount CHECK (amount > 0),
+  pay_mode      NVARCHAR(10) NOT NULL CONSTRAINT chk_vp_mode CHECK (pay_mode IN (N'cash', N'upi', N'card', N'cheque', N'neft', N'other')),
+  reference_no  NVARCHAR(50) NULL,
+  notes         NVARCHAR(300) NULL,
+  created_by    INT NULL CONSTRAINT fk_vp_by REFERENCES dbo.employees(id),
+  created_at    DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_vp_clinic_no UNIQUE (clinic_id, payment_no)
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_vp_si' AND object_id = OBJECT_ID(N'dbo.vendor_payments'))
+  CREATE INDEX ix_vp_si ON dbo.vendor_payments(stock_in_id);
+GO
+
+-- Return → Sales Return: goods a customer brings back, from one sale (or without a sale). Stock goes back up,
+-- into the batch it was sold from. Lines keep the sale line's id (sale_item_id, no FK: a sale's lines are
+-- re-written on edit, so a sale with a return can no longer be edited).
+IF OBJECT_ID(N'dbo.sales_returns', N'U') IS NULL
+CREATE TABLE dbo.sales_returns (
+  id               INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id        INT NOT NULL CONSTRAINT fk_sr_clinic REFERENCES dbo.clinics(id),
+  return_no        NVARCHAR(20) NOT NULL,
+  sale_id          INT NULL CONSTRAINT fk_sr_sale REFERENCES dbo.sales(id),
+  return_date      DATE NOT NULL,
+  customer_name    NVARCHAR(150) NOT NULL,
+  mobile           NVARCHAR(20) NULL,
+  sub_total        DECIMAL(12,2) NOT NULL CONSTRAINT df_sr_sub DEFAULT 0,
+  disc_percent     DECIMAL(5,2)  NOT NULL CONSTRAINT df_sr_disc DEFAULT 0,
+  discount_amount  DECIMAL(12,2) NOT NULL CONSTRAINT df_sr_discamt DEFAULT 0,
+  total_amount     DECIMAL(12,2) NOT NULL CONSTRAINT df_sr_total DEFAULT 0,
+  created_by       INT NULL CONSTRAINT fk_sr_by REFERENCES dbo.employees(id),
+  created_at       DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  updated_at       DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_sr_clinic_no UNIQUE (clinic_id, return_no)
+);
+GO
+IF OBJECT_ID(N'dbo.sales_return_items', N'U') IS NULL
+CREATE TABLE dbo.sales_return_items (
+  id                INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id         INT NOT NULL CONSTRAINT fk_sri_clinic REFERENCES dbo.clinics(id),
+  sales_return_id   INT NOT NULL CONSTRAINT fk_sri_sr REFERENCES dbo.sales_returns(id),
+  sale_item_id      INT NULL,
+  item_id           INT NOT NULL CONSTRAINT fk_sri_item REFERENCES dbo.items(id),
+  item_name         NVARCHAR(200) NOT NULL,
+  stock_in_item_id  INT NULL CONSTRAINT fk_sri_batch REFERENCES dbo.stock_in_items(id),
+  batch_no          NVARCHAR(50) NULL,
+  exp_date          DATE NULL,
+  sale_unit         NVARCHAR(4) NOT NULL CONSTRAINT df_sri_unit DEFAULT N'pack' CONSTRAINT chk_sri_unit CHECK (sale_unit IN (N'pack', N'unit')),
+  unit_qty          DECIMAL(10,2) NOT NULL,                 -- as typed (packs or units)
+  pack_size         DECIMAL(10,2) NOT NULL CONSTRAINT df_sri_pack DEFAULT 1,
+  qty               DECIMAL(12,4) NOT NULL,                 -- in packs (back into stock)
+  price             DECIMAL(10,2) NOT NULL CONSTRAINT df_sri_price DEFAULT 0,
+  disc_percent      DECIMAL(5,2)  NOT NULL CONSTRAINT df_sri_disc DEFAULT 0,
+  amount            DECIMAL(12,2) NOT NULL CONSTRAINT df_sri_amount DEFAULT 0
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_sri_sr' AND object_id = OBJECT_ID(N'dbo.sales_return_items'))
+  CREATE INDEX ix_sri_sr ON dbo.sales_return_items(sales_return_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_sri_batch' AND object_id = OBJECT_ID(N'dbo.sales_return_items'))
+  CREATE INDEX ix_sri_batch ON dbo.sales_return_items(stock_in_item_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_sri_saleline' AND object_id = OBJECT_ID(N'dbo.sales_return_items'))
+  CREATE INDEX ix_sri_saleline ON dbo.sales_return_items(sale_item_id);
+GO
+
+-- Stock In → Adjustment: corrections and opening stock. Each line adds (In) or takes out (Out) packs of an
+-- item, from / into one batch (stock_in_item_id) or the item's stock with no batch.
+IF OBJECT_ID(N'dbo.stock_adjustments', N'U') IS NULL
+CREATE TABLE dbo.stock_adjustments (
+  id          INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id   INT NOT NULL CONSTRAINT fk_adj_clinic REFERENCES dbo.clinics(id),
+  adj_no      NVARCHAR(20) NOT NULL,
+  adj_date    DATE NOT NULL,
+  remarks     NVARCHAR(300) NULL,
+  in_total    DECIMAL(12,2) NOT NULL CONSTRAINT df_adj_in DEFAULT 0,
+  out_total   DECIMAL(12,2) NOT NULL CONSTRAINT df_adj_out DEFAULT 0,
+  created_by  INT NULL CONSTRAINT fk_adj_by REFERENCES dbo.employees(id),
+  created_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  updated_at  DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  CONSTRAINT uq_adj_clinic_no UNIQUE (clinic_id, adj_no)
+);
+GO
+IF OBJECT_ID(N'dbo.stock_adjustment_items', N'U') IS NULL
+CREATE TABLE dbo.stock_adjustment_items (
+  id                INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id         INT NOT NULL CONSTRAINT fk_adji_clinic REFERENCES dbo.clinics(id),
+  adjustment_id     INT NOT NULL CONSTRAINT fk_adji_adj REFERENCES dbo.stock_adjustments(id),
+  item_id           INT NOT NULL CONSTRAINT fk_adji_item REFERENCES dbo.items(id),
+  item_name         NVARCHAR(200) NOT NULL,
+  stock_in_item_id  INT NULL CONSTRAINT fk_adji_batch REFERENCES dbo.stock_in_items(id),
+  batch_no          NVARCHAR(50) NULL,
+  cur_stock         DECIMAL(12,4) NOT NULL CONSTRAINT df_adji_cur DEFAULT 0,   -- stock when saved (for the record)
+  in_qty            DECIMAL(12,4) NOT NULL CONSTRAINT df_adji_in DEFAULT 0,
+  in_price          DECIMAL(10,2) NOT NULL CONSTRAINT df_adji_inp DEFAULT 0,
+  out_qty           DECIMAL(12,4) NOT NULL CONSTRAINT df_adji_out DEFAULT 0,
+  out_price         DECIMAL(10,2) NOT NULL CONSTRAINT df_adji_outp DEFAULT 0,
+  mrp               DECIMAL(10,2) NULL,
+  CONSTRAINT chk_adji_qty CHECK (in_qty >= 0 AND out_qty >= 0 AND (in_qty > 0 OR out_qty > 0))
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_adji_adj' AND object_id = OBJECT_ID(N'dbo.stock_adjustment_items'))
+  CREATE INDEX ix_adji_adj ON dbo.stock_adjustment_items(adjustment_id);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_adji_batch' AND object_id = OBJECT_ID(N'dbo.stock_adjustment_items'))
+  CREATE INDEX ix_adji_batch ON dbo.stock_adjustment_items(stock_in_item_id);
+GO
+
+-- Stock In → Three in One (IPS): a supplier bill entered partly and kept as a draft (the whole screen as JSON).
+-- A draft never touches items, orders, stock or prices; Save All turns it into items + order + Stock In.
+IF OBJECT_ID(N'dbo.ips_drafts', N'U') IS NULL
+CREATE TABLE dbo.ips_drafts (
+  id           INT IDENTITY(1,1) PRIMARY KEY,
+  clinic_id    INT NOT NULL CONSTRAINT fk_ips_clinic REFERENCES dbo.clinics(id),
+  supplier_id  INT NULL CONSTRAINT fk_ips_supplier REFERENCES dbo.suppliers(id),
+  bill_no      NVARCHAR(50) NULL,
+  draft_date   DATE NULL,
+  line_count   INT NOT NULL CONSTRAINT df_ips_lines DEFAULT 0,
+  total        DECIMAL(12,2) NOT NULL CONSTRAINT df_ips_total DEFAULT 0,
+  data         NVARCHAR(MAX) NOT NULL,
+  created_by   INT NULL CONSTRAINT fk_ips_by REFERENCES dbo.employees(id),
+  created_at   DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME()),
+  updated_at   DATETIME2(0) NOT NULL DEFAULT DATEADD(MINUTE, 330, SYSUTCDATETIME())
+);
+GO

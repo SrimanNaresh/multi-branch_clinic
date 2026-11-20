@@ -62,7 +62,7 @@ export default function StockInForm({ params }) {
   const toast = useToast();
   const { isGlobal: isAdmin } = useAuth();
   const id = params.id;
-  const [head, setHead] = useState({ supplier_id: '', po_id: '', si_date: todayLocal() });
+  const [head, setHead] = useState({ supplier_id: '', po_id: '', si_date: todayLocal(), bill_no: '' });
   const [rows, setRows] = useState([]);
   const [rowsLoading, setRowsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -101,7 +101,7 @@ export default function StockInForm({ params }) {
   useEffect(() => {
     const si = existing.data;
     if (!si) return;
-    setHead({ supplier_id: String(si.supplier_id), po_id: String(si.po_id), si_date: String(si.si_date).slice(0, 10) });
+    setHead({ supplier_id: String(si.supplier_id), po_id: String(si.po_id), si_date: String(si.si_date).slice(0, 10), bill_no: si.bill_no || '' });
     loadRows(si.po_id, si.lines);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing.data]);
@@ -148,7 +148,7 @@ export default function StockInForm({ params }) {
       const si = id ? await api(`/stock-in/${id}`, { method: 'PUT', body }) : await api('/stock-in', { method: 'POST', body });
       toast(t('stockin.saved', { no: si.si_no }));
       if (id) navigate('/stock-in');
-      else { setHead({ supplier_id: '', po_id: '', si_date: todayLocal() }); setRows([]); setTicked(new Set()); orders.reload(); }
+      else { setHead({ supplier_id: '', po_id: '', si_date: todayLocal(), bill_no: '' }); setRows([]); setTicked(new Set()); orders.reload(); }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -260,6 +260,8 @@ export default function StockInForm({ params }) {
               onChange={(e) => { setHead((h) => ({ ...h, po_id: e.target.value })); loadRows(e.target.value); }} />
             <Input label={t('purchase.date')} type="date" required value={head.si_date}
               onChange={(e) => setHead((h) => ({ ...h, si_date: e.target.value }))} />
+            <Input label={t('pharma.billNo')} maxLength={50} placeholder={t('pharma.billNoHint')} value={head.bill_no}
+              onChange={(e) => setHead((h) => ({ ...h, bill_no: e.target.value.toUpperCase() }))} />
           </div>
           {head.supplier_id && !orders.loading && !orderOptions.length && <p className="muted">{t('stockin.noOrders')}</p>}
 

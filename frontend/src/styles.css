@@ -403,6 +403,7 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .vendor-row > .po-more { width: 30px; height: 30px; flex-shrink: 0; }
 /* Pharmacy → Stock In: Vendor, Purchase No, Date on one row; the received items as an editable table */
 .form-grid.si-head { grid-template-columns: minmax(240px, 2fr) minmax(240px, 2fr) minmax(150px, 1fr); margin-bottom: 12px; }
+.form-grid.si-head:has(> :nth-child(4)) { grid-template-columns: minmax(220px, 2fr) minmax(220px, 2fr) minmax(140px, 1fr) minmax(140px, 1fr); }
 .po-lines.si-lines { overflow-x: auto; }
 /* Stock In → List: totals of the matching rows above the table */
 .si-totals { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-bottom: 8px; padding: 7px 10px; border-radius: 6px; background: var(--brand-50); color: var(--muted); font-size: 13px; }
@@ -1161,3 +1162,7 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .receipt-lines tfoot td { border-top: 1px dashed #000; }
   .receipt-lines tr.receipt-total td { font-size: 13px; font-weight: 700; border-top: 1px solid #000; }
 }
+
+/* Round Off tick box in the totals of Purchase / Order and Sales */
+.round-off { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; justify-content: flex-end; }
+.round-off input { width: auto; margin: 0; }

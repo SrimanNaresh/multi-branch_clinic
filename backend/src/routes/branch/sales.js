@@ -8,10 +8,11 @@
 import { Router } from '../../lib/mini-express.js';
 import { query, tx, insertRow, pageSql } from '../../config/db.js';
 import { clinicScope, requirePermission } from '../../middleware/access.js';
-import { badRequest, notFound, paging, toAmount, toId, like } from '../../utils/http.js';
+import { badRequest, forbidden, notFound, paging, toAmount, toId, like } from '../../utils/http.js';
 import { isISODate, todayISO } from '../../utils/dates.js';
 import { nextSequence, formatSaleNo } from '../../utils/codes.js';
-import { lockStock, r4 } from '../../utils/stock.js';
+import { batchLeftSql, isAdmin, lockStock, r4 } from '../../utils/stock.js';
+import { roundOffOf } from '../../../../shared/purchase.js';
 import { packSize } from '../../../../shared/stockin.js';
 import { lineAmount, lineCost, packsOf, perSaleUnit, saleTotals, unitsPerPack } from '../../../../shared/sale.js';
 
@@ -25,13 +26,11 @@ const money = (n) => Number(n || 0).toFixed(2);
 async function batchesOf(clinicId, itemId, exceptSale = 0) {
   return query(
     `SELECT l.id AS stock_in_item_id, l.batch_no, l.mfg_date, l.exp_date, l.sel_amount, l.mrp, l.rate AS cost, si.si_no,
-            l.qty + l.free_qty
-                  - COALESCE((SELECT SUM(r.qty) FROM purchase_return_items r WHERE r.stock_in_item_id = l.id), 0)
-                  - COALESCE((SELECT SUM(s.qty) FROM sale_items s WHERE s.stock_in_item_id = l.id AND s.sale_id <> ?), 0) AS available
+            ${batchLeftSql('l')} AS available
        FROM stock_in_items l JOIN stock_ins si ON si.id = l.stock_in_id
       WHERE l.item_id = ? AND l.clinic_id = ?
       ORDER BY CASE WHEN l.exp_date IS NULL THEN 1 ELSE 0 END, l.exp_date, l.id`,
-    [exceptSale, itemId, clinicId],
+    [exceptSale, 0, 0, itemId, clinicId],
   );
 }
 
@@ -97,10 +96,13 @@ async function clean(body, clinicId, exceptSale = 0) {
   if (sums.total_amount < sums.cost) {
     throw badRequest(`Total ${money(sums.total_amount)} is below the purchase cost ${money(sums.cost)} – lower the Bill Discount`, 'VALIDATION');
   }
+  // round_off: true rounds the TOTAL to the nearest rupee; total_amount includes it
+  const roundOff = body?.round_off ? roundOffOf(sums.total_amount) : 0;
   return {
     head: {
       sale_date: date, customer_name: customer, mobile, disc_percent: billDisc,
-      sub_total: sums.sub_total, discount_amount: sums.discount_amount, total_amount: sums.total_amount,
+      sub_total: sums.sub_total, discount_amount: sums.discount_amount, round_off: roundOff,
+      total_amount: Math.round((sums.total_amount + roundOff) * 100) / 100,
     },
     lines: lines.map(({ cost, ...l }) => l),
   };
@@ -121,7 +123,7 @@ async function applyLines(q, clinicId, userId, saleId, saleNo, oldLines, lines) 
     await insertRow(q, 'stock_movements', {
       clinic_id: clinicId, item_id: itemId, qty_change: r4(diff), balance_after: balance,
       reason: 'issue', ref_type: 'sale', ref_id: saleId,
-      note: isEdit ? `Sale ${saleNo} changed` : `Sale ${saleNo}`, created_by: userId,
+      note: !isEdit ? `Sale ${saleNo}` : lines.length ? `Sale ${saleNo} changed` : `Sale ${saleNo} deleted`, created_by: userId,
     });
   }
   await q('DELETE FROM sale_items WHERE sale_id = ? AND clinic_id = ?', [saleId, clinicId]);
@@ -177,7 +179,7 @@ router.get('/:id', async (req, res) => {
   res.json(await loadSale(req.clinicId, toId(req.params.id)));
 });
 
-// POST /api/sales { sale_date, customer_name, mobile, disc_percent,
+// POST /api/sales { sale_date, customer_name, mobile, disc_percent, round_off: bool,
 //                   lines: [{ item_id, stock_in_item_id?, sale_unit: 'pack' | 'unit', qty, price, disc_percent }] }
 router.post('/', async (req, res) => {
   const id = await tx(async (q) => {
@@ -198,16 +200,35 @@ router.put('/:id', async (req, res) => {
     await lockStock(q, req.clinicId);
     const [sale] = await q('SELECT sale_no FROM sales WITH (UPDLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
     if (!sale) throw notFound('Sale');
+    const [ret] = await q('SELECT TOP 1 return_no FROM sales_returns WHERE sale_id = ? AND clinic_id = ?', [id, req.clinicId]);
+    if (ret) throw badRequest(`Sales Return ${ret.return_no} is made from this sale – it can no longer be changed`, 'VALIDATION');
     const { head, lines } = await clean(req.body, req.clinicId, id);
     const old = await q('SELECT item_id, qty FROM sale_items WHERE sale_id = ?', [id]);
     await q(
       `UPDATE sales SET sale_date = ?, customer_name = ?, mobile = ?, disc_percent = ?, sub_total = ?, discount_amount = ?,
-              total_amount = ?, updated_at = NOW() WHERE id = ?`,
-      [head.sale_date, head.customer_name, head.mobile, head.disc_percent, head.sub_total, head.discount_amount, head.total_amount, id],
+              round_off = ?, total_amount = ?, updated_at = NOW() WHERE id = ?`,
+      [head.sale_date, head.customer_name, head.mobile, head.disc_percent, head.sub_total, head.discount_amount, head.round_off, head.total_amount, id],
     );
     await applyLines(q, req.clinicId, req.user.id, id, sale.sale_no, old, lines);
   });
   res.json(await loadSale(req.clinicId, id));
+});
+
+// DELETE /api/sales/:id – Admin only, and not once a Sales Return is made from it; puts its packs back into stock
+router.delete('/:id', async (req, res) => {
+  if (!isAdmin(req.user)) throw forbidden('Only an Admin can delete a sale');
+  const id = toId(req.params.id);
+  await tx(async (q) => {
+    await lockStock(q, req.clinicId);
+    const [sale] = await q('SELECT sale_no FROM sales WITH (UPDLOCK) WHERE id = ? AND clinic_id = ?', [id, req.clinicId]);
+    if (!sale) throw notFound('Sale');
+    const [ret] = await q('SELECT TOP 1 return_no FROM sales_returns WHERE sale_id = ? AND clinic_id = ?', [id, req.clinicId]);
+    if (ret) throw badRequest(`Sales Return ${ret.return_no} is made from this sale – it can't be deleted`, 'VALIDATION');
+    const old = await q('SELECT item_id, qty FROM sale_items WHERE sale_id = ?', [id]);
+    await applyLines(q, req.clinicId, req.user.id, id, sale.sale_no, old, []);
+    await q('DELETE FROM sales WHERE id = ?', [id]);
+  });
+  res.json({ ok: true });
 });
 
 export default router;

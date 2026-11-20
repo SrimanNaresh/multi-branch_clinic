@@ -17,6 +17,7 @@ import Icon from '../../components/Icon.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
 import { useReceiptPrinter } from '../../components/SaleReceipt.jsx';
 import { lineAmount, lineCost, packsOf, perSaleUnit, saleTotals, unitsPerPack } from '../../../../shared/sale.js';
+import { roundOffOf } from '../../../../shared/purchase.js';
 
 const r4 = (n) => Math.round((Number(n) || 0) * 10000) / 10000;
 const num4 = (n) => String(r4(n));
@@ -25,7 +26,7 @@ const newLine = () => ({
   key: Math.random().toString(36).slice(2), item_id: null, item_name: '', info: null,
   stock_in_item_id: '', sale_unit: 'pack', price: '', qty: '', disc_percent: '',
 });
-const EMPTY_HEAD = () => ({ sale_date: todayLocal(), customer_name: '', mobile: '', disc_percent: '' });
+const EMPTY_HEAD = () => ({ sale_date: todayLocal(), customer_name: '', mobile: '', disc_percent: '', round_off: false });
 
 /** The line's batch (or null: older stock with no batch) and its prices per pack */
 function packPrices(l) {
@@ -87,7 +88,7 @@ export default function SaleForm({ params }) {
   useEffect(() => {
     const s = existing.data;
     if (!s) return;
-    setHead({ sale_date: String(s.sale_date).slice(0, 10), customer_name: s.customer_name, mobile: s.mobile || '', disc_percent: Number(s.disc_percent) ? String(Number(s.disc_percent)) : '' });
+    setHead({ sale_date: String(s.sale_date).slice(0, 10), customer_name: s.customer_name, mobile: s.mobile || '', disc_percent: Number(s.disc_percent) ? String(Number(s.disc_percent)) : '', round_off: Number(s.round_off) !== 0 });
     const ls = s.lines.map((l) => ({
       ...newLine(), key: String(l.id), item_id: l.item_id, item_name: l.item_name,
       stock_in_item_id: l.stock_in_item_id ? String(l.stock_in_item_id) : '', sale_unit: l.sale_unit || 'pack',
@@ -132,6 +133,7 @@ export default function SaleForm({ params }) {
   };
   const problems = new Map(filled.map((l) => [l.key, problemsOf(l)]));
   const sums = saleTotals(filled.map((l) => views.get(l.key).calc), head.disc_percent);
+  const roundOff = head.round_off ? roundOffOf(sums.total_amount) : 0;
   const billDiscBad = Number(head.disc_percent) > 100 || Number(head.disc_percent) < 0;
   const totalBelowCost = filled.length > 0 && sums.total_amount < sums.cost;
   const hasProblem = billDiscBad || totalBelowCost || [...problems.values()].some((p) => Object.keys(p).length);
@@ -342,9 +344,17 @@ export default function SaleForm({ params }) {
                 <td className="num">{sums.discount_amount ? `− ${money(sums.discount_amount)}` : '—'}</td>
                 <td />
               </tr>
+              <tr>
+                <td colSpan={12} className="num">
+                  <label className="round-off"><input type="checkbox" checked={head.round_off}
+                    onChange={(e) => setHead((h) => ({ ...h, round_off: e.target.checked }))} /> <b>{t('pharma.roundOff')}</b></label>
+                </td>
+                <td className="num">{roundOff > 0 ? '+ ' : roundOff < 0 ? '− ' : ''}{money(Math.abs(roundOff))}</td>
+                <td />
+              </tr>
               <tr className="sale-total-row">
                 <td colSpan={12} className="num"><b>{t('sale.total')}</b></td>
-                <td className={`num po-sum${totalBelowCost ? ' cell-bad' : ''}`}>{money(sums.total_amount)}</td>
+                <td className={`num po-sum${totalBelowCost ? ' cell-bad' : ''}`}>{money(sums.total_amount + roundOff)}</td>
                 <td />
               </tr>
             </tfoot>

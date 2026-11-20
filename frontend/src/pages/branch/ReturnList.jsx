@@ -2,13 +2,16 @@
 import { useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
+import { useAuth } from '../../lib/auth.jsx';
 import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money } from '../../lib/format.js';
-import { Button, Card, DataTable, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced } from '../../components/ui.jsx';
+import { Button, Card, DataTable, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 
 export default function ReturnList() {
   const { t } = useT();
+  const { isGlobal: isAdmin } = useAuth();
+  const toast = useToast();
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const dq = useDebounced(q);
@@ -25,9 +28,25 @@ export default function ReturnList() {
     { key: 'total_amount', label: t('purchase.amount'), className: 'num', render: (r) => money(r.total_amount) },
     {
       key: '_a', label: '', className: 'col-actions',
-      render: (r) => <Button size="sm" variant="ghost" onClick={() => navigate(`/returns/${r.id}/edit`)}><Icon name="edit" size={15} /> {t('common.edit')}</Button>,
+      render: (r) => (
+        <span className="row-actions">
+          <Button size="sm" variant="ghost" onClick={() => navigate(`/returns/${r.id}/edit`)}><Icon name="edit" size={15} /> {t('common.edit')}</Button>
+          {isAdmin && <Button size="sm" variant="ghost" className="btn-danger-ghost" onClick={() => remove(r)}><Icon name="trash" size={15} /> {t('common.delete')}</Button>}
+        </span>
+      ),
     },
   ];
+
+  async function remove(r) {
+    if (!window.confirm(t('pharma.deleteConfirm', { no: r.return_no }))) return;
+    try {
+      await api(`/returns/${r.id}`, { method: 'DELETE' });
+      toast(t('pharma.deleted', { no: r.return_no }));
+      list.reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
 
   return (
     <>

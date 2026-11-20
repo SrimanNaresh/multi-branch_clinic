@@ -987,4 +987,10 @@ export default {
   'billing.to': 'To',
   'billing.billsCount': '{n} bills',
   'billing.collected': 'Collected',
+  'pharma.roundOff': 'Round Off',
+  'pharma.netAmount': 'Net Amount',
+  'pharma.billNo': 'Bill No',
+  'pharma.billNoHint': 'Vendor\'s invoice no.',
+  'pharma.deleteConfirm': 'Delete {no}? Its stock change is undone. This cannot be undone.',
+  'pharma.deleted': '{no} deleted',
 };
