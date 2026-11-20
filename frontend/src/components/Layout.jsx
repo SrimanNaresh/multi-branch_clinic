@@ -180,12 +180,20 @@ function MegaMenu({ items, isActive, onClose }) {
 
   return (
     <div className="topnav-menu topnav-mega" ref={box} onAnimationEnd={() => fitToScreen(box.current)}>
-      <div className="topnav-search">
-        <Icon name="search" size={15} />
-        <input ref={search} value={q} placeholder={t('topbar.menuSearch')} aria-label={t('topbar.menuSearch')}
-          onChange={(e) => setQ(e.target.value)} onKeyDown={onKeyDown} />
+      {/* first row: the search box, then the group's own pages without sub-menus (e.g. Pharmacy Dashboard) */}
+      <div className="topnav-mega-top">
+        <div className="topnav-search">
+          <Icon name="search" size={15} />
+          <input ref={search} value={q} placeholder={t('topbar.menuSearch')} aria-label={t('topbar.menuSearch')}
+            onChange={(e) => setQ(e.target.value)} onKeyDown={onKeyDown} />
+        </div>
+        {shown.filter((i) => !i.children).map((i) => (
+          <Link key={i.path} to={i.path} className={`topnav-item topnav-mega-link ${isActive(i.path) ? 'active' : ''}`} onClick={onClose}>
+            <Icon name={i.icon} size={16} /> <span>{t(i.label)}</span>
+          </Link>
+        ))}
       </div>
-      {shown.map((i) => (i.children ? (
+      {shown.filter((i) => i.children).map((i) => (
         <div key={i.id} className="topnav-sub">
           <div className="topnav-sub-title"><span className="topnav-sub-icon"><Icon name={i.icon} size={14} /></span> <span>{t(i.label)}</span></div>
           {i.children.map((c) => (
@@ -194,11 +202,7 @@ function MegaMenu({ items, isActive, onClose }) {
             </Link>
           ))}
         </div>
-      ) : (
-        <Link key={i.path} to={i.path} className={`topnav-item ${isActive(i.path) ? 'active' : ''}`} onClick={onClose}>
-          <Icon name={i.icon} size={16} /> <span>{t(i.label)}</span>
-        </Link>
-      )))}
+      ))}
       {!shown.length && <p className="topnav-none">{t('common.noRecords')}</p>}
     </div>
   );
