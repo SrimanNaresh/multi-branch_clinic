@@ -162,12 +162,12 @@ export default function StockAdjustmentForm({ params }) {
                     <td className="num">{l.info ? qtyText(v.cur) : '—'}</td>
                     <td><input {...num} aria-label={t('adj.inQty')} value={l.in_qty} onChange={(e) => setLine(l.key, { in_qty: e.target.value })} /></td>
                     <td><input {...num} aria-label={t('adj.inPrice')} placeholder={l.info ? v.rate.toFixed(2) : ''} value={l.in_price} onChange={(e) => setLine(l.key, { in_price: e.target.value })} /></td>
-                    <td className={v.bad ? 'si-over' : undefined}><input {...num} aria-label={t('adj.outQty')} value={l.out_qty} onChange={(e) => setLine(l.key, { out_qty: e.target.value })} /></td>
+                    <td className={v.bad ? 'cell-bad' : undefined}><input {...num} aria-label={t('adj.outQty')} value={l.out_qty} onChange={(e) => setLine(l.key, { out_qty: e.target.value })} /></td>
                     <td><input {...num} aria-label={t('adj.outPrice')} placeholder={l.info ? v.rate.toFixed(2) : ''} value={l.out_price} onChange={(e) => setLine(l.key, { out_price: e.target.value })} /></td>
                     <td className={`num${v.bad ? ' cell-bad' : ''}`}>{l.info ? qtyText(v.after) : '—'}</td>
                     <td>
                       <span className="po-row-actions">
-                        <button type="button" className="icon-btn" title={t('purchase.addRow')} aria-label={t('purchase.addRow')}
+                        <button type="button" className="icon-btn rx-add" title={t('purchase.addLine')} aria-label={t('purchase.addLine')}
                           onClick={(e) => { addLineAfter(l.key); focusNewRow(e.currentTarget); }}>
                           <Icon name="plus" size={16} />
                         </button>

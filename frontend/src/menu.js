@@ -68,6 +68,7 @@ export const MENU = [
       sub('stockin', 'menu.stockIn', 'download', [
         { path: '/stock-in/new', label: 'menu.itemMaster', perm: 'stock.manage' },
         { path: '/stock-in', label: 'menu.pharmacyList', perm: 'stock.manage' },
+        { path: '/stock-in/ips', label: 'menu.threeInOne', perm: 'stock.manage' },
         { path: '/stock-adjustments/new', label: 'menu.adjustmentEntry', perm: 'stock.adjust' },
         { path: '/stock-adjustments', label: 'menu.adjustmentList', perm: 'stock.adjust' },
       ]),

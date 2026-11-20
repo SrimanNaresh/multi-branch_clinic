@@ -30,6 +30,7 @@ import vendorPaymentRoutes from './routes/branch/vendorPayments.js';
 import salesReturnRoutes from './routes/branch/salesReturns.js';
 import stockAdjustmentRoutes from './routes/branch/stockAdjustments.js';
 import pharmacyDashboardRoutes from './routes/branch/pharmacyDashboard.js';
+import ipsRoutes from './routes/branch/ips.js';
 
 export function createApp() {
   const app = express();
@@ -76,6 +77,7 @@ export function createApp() {
   app.use('/api/sales-returns', salesReturnRoutes);
   app.use('/api/stock-adjustments', stockAdjustmentRoutes);
   app.use('/api/pharmacy-dashboard', pharmacyDashboardRoutes);
+  app.use('/api/ips', ipsRoutes);
 
   app.use('/api', notFoundHandler);
 

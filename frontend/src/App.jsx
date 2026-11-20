@@ -48,6 +48,7 @@ import SalesReturnList from './pages/branch/SalesReturnList.jsx';
 import StockAdjustmentForm from './pages/branch/StockAdjustmentForm.jsx';
 import StockAdjustmentList from './pages/branch/StockAdjustmentList.jsx';
 import PharmacyDashboard from './pages/branch/PharmacyDashboard.jsx';
+import StockIps from './pages/branch/StockIps.jsx';
 import PatientBill from './pages/branch/PatientBill.jsx';
 import BillList from './pages/branch/BillList.jsx';
 import BillView from './pages/branch/BillView.jsx';
@@ -100,6 +101,7 @@ const ROUTES = [
   { path: '/stock-in/new', perm: 'stock.manage', el: StockInForm, branch: true },
   { path: '/stock-in/:id/edit', perm: 'stock.manage', el: StockInForm, branch: true },
   { path: '/stock-in', perm: 'stock.manage', el: StockInList, branch: true },
+  { path: '/stock-in/ips', perm: 'stock.manage', el: StockIps, branch: true },
   { path: '/returns/new', perm: 'stock.manage', el: ReturnForm, branch: true },
   { path: '/returns/:id/edit', perm: 'stock.manage', el: ReturnForm, branch: true },
   { path: '/returns', perm: 'stock.manage', el: ReturnList, branch: true },

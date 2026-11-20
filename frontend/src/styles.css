@@ -1166,7 +1166,7 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 
 /* Round Off tick box in the totals of Purchase / Order and Sales */
 .round-off { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; justify-content: flex-end; }
-.round-off input { width: auto; margin: 0; }
+.table .round-off input[type='checkbox'], .round-off input[type='checkbox'] { width: 16px; height: 16px; min-width: 16px; padding: 0; margin: 0; flex: none; }
 
 /* Pharmacy Dashboard */
 .stat-warn { border-top: 3px solid var(--warning); }
@@ -1180,3 +1180,11 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .pdash-bar-fill { width: 70%; background: var(--brand); border-radius: 4px 4px 0 0; opacity: .85; }
 .pdash-bar-amt { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pdash-bar-day { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* Stock In → Three in One (IPS): column groups as on the Item, Purchase / Order and Stock In screens */
+.ips-lines .ips-groups th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; text-align: center; padding-top: 4px; padding-bottom: 4px; }
+.ips-lines .table thead tr.ips-groups th.ips-g-item { background: #e8f1f8; color: var(--brand); }
+.ips-lines .table thead tr.ips-groups th.ips-g-po { background: var(--warning-50); color: var(--warning); }
+.ips-lines .table thead tr.ips-groups th.ips-g-si { background: #e3f4e8; color: #1f7a3d; }
+.ips-lines td input { min-width: 0; }
+.ips-new { display: block; font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; }
