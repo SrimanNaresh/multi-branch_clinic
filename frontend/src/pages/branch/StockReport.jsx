@@ -13,10 +13,11 @@ const SHOW = ['moved', 'instock', 'out', 'all'];
 const kindOf = (m) => {
   if (m.ref_type === 'stock_in' || (m.reason === 'purchase' && !m.ref_type)) return 'stock_in';
   if (m.ref_type === 'purchase_return' || (m.reason === 'return' && !m.ref_type)) return 'returned';
+  if (m.ref_type === 'sales_return') return 'sales_return';
   if (m.reason === 'issue') return 'sold';
   return m.reason === 'opening' ? 'opening' : 'adjusted';
 };
-const KIND_LABEL = { opening: 'report.opening', stock_in: 'menu.stockIn', returned: 'menu.return', sold: 'report.sold', adjusted: 'report.adjusted' };
+const KIND_LABEL = { opening: 'report.opening', stock_in: 'menu.stockIn', returned: 'menu.purchaseReturn', sold: 'report.sold', sales_return: 'menu.salesReturn', adjusted: 'report.adjusted' };
 
 /** The item's stock history, shown under its row */
 function History({ itemId }) {

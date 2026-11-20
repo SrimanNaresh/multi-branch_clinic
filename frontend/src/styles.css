@@ -457,6 +457,7 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .sr-kind-stock_in { background: #e3f4e8; color: #1f7a3d; }
 .sr-kind-returned, .sr-kind-sold { background: #fbe9e4; color: #b0452b; }
 .sr-kind-adjusted { background: #fdf0d9; color: #8a5a00; }
+.sr-kind-sales_return { background: #e6eefc; color: #2a52a0; }
 .sr-table tr.sr-sum td b { color: #fff; }
 /* Pharmacy → Report → Vendor Payments */
 .vp-toolbar { align-items: flex-end; }
@@ -1166,3 +1167,16 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 /* Round Off tick box in the totals of Purchase / Order and Sales */
 .round-off { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; justify-content: flex-end; }
 .round-off input { width: auto; margin: 0; }
+
+/* Pharmacy Dashboard */
+.stat-warn { border-top: 3px solid var(--warning); }
+.stat-danger { border-top: 3px solid var(--danger); }
+.stat-link { cursor: pointer; }
+.stat-link:hover { border-color: var(--brand); }
+.pdash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 12px; }
+@media (max-width: 900px) { .pdash-grid { grid-template-columns: 1fr; } }
+.pdash-bars { display: flex; align-items: flex-end; gap: 8px; height: 180px; padding-top: 18px; }
+.pdash-bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; min-width: 0; }
+.pdash-bar-fill { width: 70%; background: var(--brand); border-radius: 4px 4px 0 0; opacity: .85; }
+.pdash-bar-amt { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pdash-bar-day { font-size: 11px; color: var(--muted); white-space: nowrap; }

@@ -111,6 +111,7 @@ router.get('/options', requirePermission('item.view'), async (req, res) => {
 // GET /api/items/stock-report?q=&category=&show=moved|instock|out|all&page= – Pharmacy → Report → Stock Report.
 // Per item, from its stock history: Opening + Stock In − Return − Sold + Adjustment = Current Stock, and
 // Stock Value = Current Stock × selling price. Stock In / Return include their later edits (ref_type).
+// Sold is net of Sales Returns; Adjustment includes Stock Adjustment documents.
 // `totals` sums every matching item. show: moved = items with any stock history or stock (default).
 router.get('/stock-report', requirePermission('item.view'), async (req, res) => {
   const { limit, offset, page } = paging(req.query, { maxLimit: 200, defaultLimit: 50 });
@@ -134,8 +135,8 @@ router.get('/stock-report', requirePermission('item.view'), async (req, res) => 
              COALESCE(SUM(CASE WHEN m.reason = 'opening' THEN m.qty_change END), 0) AS opening,
              COALESCE(SUM(CASE WHEN m.ref_type = 'stock_in' OR (m.reason = 'purchase' AND m.ref_type IS NULL) THEN m.qty_change END), 0) AS stock_in,
              COALESCE(-SUM(CASE WHEN m.ref_type = 'purchase_return' OR (m.reason = 'return' AND m.ref_type IS NULL) THEN m.qty_change END), 0) AS returned,
-             COALESCE(-SUM(CASE WHEN m.reason = 'issue' THEN m.qty_change END), 0) AS sold,
-             COALESCE(SUM(CASE WHEN m.reason = 'adjustment' AND m.ref_type IS NULL THEN m.qty_change END), 0) AS adjusted
+             COALESCE(-SUM(CASE WHEN m.reason = 'issue' OR m.ref_type = 'sales_return' THEN m.qty_change END), 0) AS sold,
+             COALESCE(SUM(CASE WHEN m.reason = 'adjustment' AND (m.ref_type IS NULL OR m.ref_type = 'stock_adjustment') THEN m.qty_change END), 0) AS adjusted
         FROM stock_movements m WHERE m.item_id = i.id) m`;
   const [sum] = await query(
     `SELECT COUNT(*) AS total, SUM(m.opening) AS opening, SUM(m.stock_in) AS stock_in, SUM(m.returned) AS returned,

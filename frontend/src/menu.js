@@ -50,6 +50,7 @@ export const MENU = [
     id: 'pharmacy', scope: 'branch', label: 'menu.pharmacy',
     // each entry opens into its own Master (add) / List pages
     items: [
+      { path: '/pharmacy', label: 'pdash.title', perm: 'item.view', icon: 'dashboard' },
       sub('item', 'menu.itemGroup', 'box', [
         { path: '/items/new', label: 'menu.itemMaster', perm: 'item.manage' },
         { path: '/items', label: 'menu.pharmacyList', perm: 'item.view' },
