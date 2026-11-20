@@ -74,3 +74,30 @@ New permissions: `stock.adjust` (Adjustment), `sales.return` (Sales Return), `ve
    PascalCase tables?
 2. All phases, or only some (Phase 7 is the largest and adds packages)?
 3. Tamil labels for the new screens too (the app has `ta.js`)?
+
+## 6. Result (20-11-2026, branch `Naresh`)
+
+Decisions: keep this repo's structure; all 7 phases. Each phase was tested against the API on the dev
+database (`T_multi_branch`) with test documents that were then deleted, and the screens were checked in the browser.
+
+| Phase | Commit | What was built |
+|---|---|---|
+| 1 | 884aef1 | `stock_ins.bill_no`, `purchase_orders.round_off`, `sales.round_off` (+ receipt); Admin delete of Sales and Purchase Returns; new tables for the later phases |
+| 2–3 | 1ebe58f | Vendor → Payments (`vendor_payments`, `/api/vendor-payments`), Paid / Balance in the Vendor Payments report; Return → Sales Return entry / list (`sales_returns`, `sales_return_items`, `/api/sales-returns`) |
+| 4 | 9a30d7e | Stock In → Adjustment entry / list (`stock_adjustments`, `stock_adjustment_items`, `/api/stock-adjustments`) |
+| 5 | 828ce1d | Pharmacy Dashboard (`/api/pharmacy-dashboard`); Stock Report counts Sales Returns (in Sold) and Adjustments. G8 (stock history) already existed in the Stock Report. |
+| 6 | a51601f | Stock In → Three in One (IPS) with Drafts (`ips_drafts`, `/api/ips`) – one transaction for new items + order + Stock In |
+| 7 | (this commit) | Scan Bill in Three in One (Tesseract / PDF.js, `lib/billOcr.js` + `lib/billScan.js` copied from All In One); Report → All in One (`/api/all-in-one`); Excel / PDF export on the pharmacy lists and reports |
+
+Rules that hold across the new documents:
+- Batch stock = received (paid + free) − purchase returned − sold + sales returned + adjusted in − adjusted out
+  (`utils/stock.js → batchLeftSql`); Sales, Adjustment and Sales Return use it; no batch or item goes below zero.
+- A Stock In can no longer be edited / deleted once a Return, Sale, Payment, Adjustment or Sales Return uses it;
+  a Sale once a Sales Return is made from it.
+- Deletes of documents are Admin-only; every stock change is in `stock_movements`.
+- New permissions `vendor.pay`, `sales.return`, `stock.adjust` (on for Pharmacist; editable in Menu Permission).
+
+Notes:
+- Scan Bill loads the Tesseract engine and English data from the jsDelivr CDN the first time it is used, so it
+  needs internet on that PC.
+- `xlsx@0.18.5` (same version as All In One) is used only to write files; its known advisories are about reading files.

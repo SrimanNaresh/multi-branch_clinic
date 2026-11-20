@@ -1188,3 +1188,17 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .ips-lines .table thead tr.ips-groups th.ips-g-si { background: #e3f4e8; color: #1f7a3d; }
 .ips-lines td input { min-width: 0; }
 .ips-new { display: block; font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; }
+
+/* Scan Bill: page previews */
+.scan-pages { display: flex; gap: 10px; overflow-x: auto; padding: 6px 0; }
+.scan-pages img { max-height: 320px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+
+/* Report → All in One */
+.aio-cols { display: grid; gap: 10px; margin: 12px 0; }
+.aio-cols-group { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.aio-cols-list { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
+.aio-col { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.aio-col input[type='checkbox'] { margin: 0; }
+.aio-filters { margin-bottom: 10px; }
+.aio-filter select[multiple] { min-height: 86px; }
+.export-buttons { margin-left: auto; }

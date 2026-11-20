@@ -7,6 +7,8 @@ import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money } from '../../lib/format.js';
 import { Button, Card, DataTable, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import ExportButtons from '../../components/ExportButtons.jsx';
+import { fetchAll } from '../../lib/exportTable.js';
 
 export default function PurchaseList() {
   const { t } = useT();
@@ -52,6 +54,11 @@ export default function PurchaseList() {
       <Card className="crud-compact">
         <div className="toolbar">
           <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={t('purchase.searchHint')} />
+          <ExportButtons title={t('menu.purchase')} columns={[
+      { label: t('purchase.no'), value: (r) => r.po_no }, { label: t('purchase.date'), type: 'date', value: (r) => r.po_date },
+      { label: t('purchase.vendor'), value: (r) => r.supplier_name }, { label: t('purchase.items'), type: 'qty', value: (r) => r.item_count },
+      { label: t('purchase.sumTotal'), type: 'money', value: (r) => r.total_amount }]}
+            getRows={() => fetchAll((p) => api('/purchases', { query: { ...{ q: dq }, page: p, limit: 100 } }))} />
         </div>
         {list.loading && !list.data ? <Loading /> : <ErrorBox error={list.error} onRetry={list.reload} />}
         {list.data && (

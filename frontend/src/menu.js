@@ -86,6 +86,7 @@ export const MENU = [
       sub('report', 'menu.report', 'file', [
         { path: '/reports/stock', label: 'menu.stockReport', perm: 'item.view' },
         { path: '/reports/vendor-payments', label: 'menu.vendorPayments', perm: 'stock.manage' },
+        { path: '/reports/all-in-one', label: 'aio.title', perm: 'stock.manage' },
       ]),
     ],
   },

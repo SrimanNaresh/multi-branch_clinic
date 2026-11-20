@@ -7,6 +7,8 @@ import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money } from '../../lib/format.js';
 import { Button, Card, DataTable, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import ExportButtons from '../../components/ExportButtons.jsx';
+import { fetchAll } from '../../lib/exportTable.js';
 
 export default function SalesReturnList() {
   const { t } = useT();
@@ -56,6 +58,12 @@ export default function SalesReturnList() {
       <Card className="crud-compact">
         <div className="toolbar">
           <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={t('sret.searchHint')} />
+          <ExportButtons title={t('menu.salesReturn')} columns={[
+      { label: t('sret.no'), value: (r) => r.return_no }, { label: t('purchase.date'), type: 'date', value: (r) => r.return_date },
+      { label: t('sale.no'), value: (r) => r.sale_no }, { label: t('sale.customer'), value: (r) => r.customer_name },
+      { label: t('suppliers.mobile'), value: (r) => r.mobile }, { label: t('items.name'), value: (r) => r.item_names },
+      { label: t('stockin.totalQty'), type: 'qty', value: (r) => r.total_qty }, { label: t('sret.refund'), type: 'money', value: (r) => r.total_amount }]}
+            getRows={() => fetchAll((p) => api('/sales-returns', { query: { ...{ q: dq }, page: p, limit: 100 } }))} />
         </div>
         {list.loading && !list.data ? <Loading /> : <ErrorBox error={list.error} onRetry={list.reload} />}
         {list.data && (

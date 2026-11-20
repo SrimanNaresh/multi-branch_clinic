@@ -7,6 +7,8 @@ import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money } from '../../lib/format.js';
 import { Button, Card, DataTable, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import ExportButtons from '../../components/ExportButtons.jsx';
+import { fetchAll } from '../../lib/exportTable.js';
 
 export default function ReturnList() {
   const { t } = useT();
@@ -55,6 +57,12 @@ export default function ReturnList() {
       <Card className="crud-compact">
         <div className="toolbar">
           <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={t('return.searchHint')} />
+          <ExportButtons title={t('menu.purchaseReturn')} columns={[
+      { label: t('return.no'), value: (r) => r.return_no }, { label: t('purchase.date'), type: 'date', value: (r) => r.return_date },
+      { label: t('purchase.vendor'), value: (r) => r.supplier_name }, { label: t('stockin.no'), value: (r) => r.si_no },
+      { label: t('items.name'), value: (r) => r.item_names }, { label: t('stockin.totalQty'), type: 'qty', value: (r) => r.total_qty },
+      { label: t('purchase.amount'), type: 'money', value: (r) => r.total_amount }]}
+            getRows={() => fetchAll((p) => api('/returns', { query: { ...{ q: dq }, page: p, limit: 100 } }))} />
         </div>
         {list.loading && !list.data ? <Loading /> : <ErrorBox error={list.error} onRetry={list.reload} />}
         {list.data && (

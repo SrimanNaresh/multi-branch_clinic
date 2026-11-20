@@ -14,6 +14,7 @@ import { Button, Card, Empty, Input, Modal, useAsync, useToast } from '../../com
 import Icon from '../../components/Icon.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
 import VendorPicker from '../../components/VendorPicker.jsx';
+import ScanBillModal from '../../components/ScanBillModal.jsx';
 import { calcLine, roundOffOf } from '../../../../shared/purchase.js';
 import { selAmount } from '../../../../shared/stockin.js';
 
@@ -61,6 +62,7 @@ export default function StockIps() {
   const [draftId, setDraftId] = useState(null);
   const [showItem, setShowItem] = useState(false);
   const [showDrafts, setShowDrafts] = useState(false);
+  const [showScan, setShowScan] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [done, setDone] = useState(null);
@@ -79,6 +81,24 @@ export default function StockIps() {
   const roundOff = head.round_off ? roundOffOf(sum) : 0;
 
   useEffect(() => { setDone(null); }, [head.supplier_id]);
+
+  /** Rows read from a scanned bill go under the rows already typed; the bill date / supplier GSTIN fill the head */
+  function addScanned(list, header) {
+    const scanned = list.map((s) => ({
+      ...emptyRow(), ...(s.item ? fromItem(s.item) : { name: s.name, hsn_code: s.hsn_code, manufacturer: s.manufacturer, pack: s.pack }),
+      batch_no: s.batch_no || '', mrp: s.mrp || (s.item ? Number(s.item.mrp) || '' : ''), qty: s.qty || '',
+    }));
+    setRows((rs) => [...rs.filter(filled), ...scanned, emptyRow()]);
+    if (scanned.some((r) => !r.item_id)) setShowItem(true);
+    const gst = String(header?.gstNo || '').toUpperCase();
+    const v = gst && (vendors.data?.rows || []).find((x) => String(x.gstin || '').toUpperCase() === gst);
+    setHead((h) => ({
+      ...h,
+      supplier_id: h.supplier_id || (v ? String(v.id) : ''),
+      date: header?.billDate && header.billDate <= todayLocal() ? header.billDate : h.date,
+    }));
+    toast(t('scan.added', { n: scanned.length }));
+  }
 
   const screen = () => ({ head, rows: rows.map(({ key, ...r }) => r), showItem });
   async function saveDraft() {
@@ -174,6 +194,7 @@ export default function StockIps() {
             <p className="muted">{t('ips.hint')}</p>
           </div>
           <div className="compact-head-actions">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setShowScan(true)}><Icon name="upload" size={15} /> {t('scan.title')}</Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => setShowDrafts(true)}><Icon name="file" size={15} /> {t('ips.drafts', { n: draftRows.length })}</Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/stock-in')}><Icon name="list" size={15} /> {t('stockin.viewList')}</Button>
           </div>
@@ -311,6 +332,7 @@ export default function StockIps() {
         </div>
       </Card>
 
+      {showScan && <ScanBillModal onClose={() => setShowScan(false)} onAdd={addScanned} />}
       {showDrafts && (
         <Modal title={t('ips.drafts', { n: draftRows.length })} onClose={() => setShowDrafts(false)} wide>
           {draftRows.length ? (

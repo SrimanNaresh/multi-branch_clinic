@@ -10,6 +10,8 @@ import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money } from '../../lib/format.js';
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import ExportButtons from '../../components/ExportButtons.jsx';
+import { fetchAll } from '../../lib/exportTable.js';
 
 const month = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—');
 const qtyText = (n) => String(Number(n || 0));
@@ -127,6 +129,14 @@ export default function StockInList() {
         </div>
         <div className="toolbar">
           <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={t('stockin.lineSearch')} />
+          <ExportButtons title={t('menu.stockIn')} columns={[
+      { label: t('stockin.no'), value: (r) => r.si_no }, { label: t('purchase.date'), type: 'date', value: (r) => r.si_date },
+      { label: t('pharma.billNo'), value: (r) => r.bill_no }, { label: t('purchase.vendor'), value: (r) => r.supplier_name },
+      { label: t('items.name'), value: (r) => r.item_name }, { label: t('stockin.batch'), value: (r) => r.batch_no },
+      { label: t('stockin.exp'), type: 'date', value: (r) => r.exp_date }, { label: t('items.quantity'), type: 'qty', value: (r) => r.qty },
+      { label: t('purchase.rate'), type: 'money', value: (r) => r.rate }, { label: t('items.mrp'), type: 'money', value: (r) => r.mrp },
+      { label: t('stockin.sel'), type: 'money', value: (r) => r.sel_amount }, { label: t('purchase.amount'), type: 'money', value: (r) => r.net_amount }]}
+            getRows={() => fetchAll((p) => api('/stock-in/lines', { query: { ...{ q: dq, group: tab }, page: p, limit: 200 } }))} />
         </div>
         {tot && list.data.total > 0 && (
           <div className="si-totals">

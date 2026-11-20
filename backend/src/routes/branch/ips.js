@@ -163,6 +163,15 @@ router.post('/save', async (req, res) => {
   res.status(201).json(result);
 });
 
+// GET /api/ips/items – every active item (light), for matching the names read from a scanned bill
+router.get('/items', async (req, res) => {
+  const rows = await query(
+    `SELECT id, name, unit, generic_name, manufacturer, hsn_code, category, pack, mrp, purchase_rate, gst_percent, cgst_percent, sgst_percent
+       FROM items WHERE clinic_id = ? AND status = N'active' ORDER BY name`, [req.clinicId],
+  );
+  res.json({ rows });
+});
+
 /* ---------- Drafts ---------- */
 
 // GET /api/ips/drafts – newest first

@@ -11,6 +11,8 @@ import {
 } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 import VendorPicker from '../../components/VendorPicker.jsx';
+import ExportButtons from '../../components/ExportButtons.jsx';
+import { fetchAll } from '../../lib/exportTable.js';
 
 const MODES = ['cash', 'upi', 'card', 'cheque', 'neft', 'other'];
 const NEEDS_REF = ['cheque', 'neft', 'upi'];
@@ -134,6 +136,12 @@ export default function VendorPaymentEntry() {
       <Card className="crud-compact" title={list.data ? t('vpay.count', { n: list.data.total, amount: money(list.data.amount) }) : t('vpay.list')}>
         <div className="toolbar">
           <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={t('vpay.searchHint')} />
+          <ExportButtons title={t('vpay.list')} columns={[
+      { label: t('vpay.no'), value: (r) => r.payment_no }, { label: t('purchase.date'), type: 'date', value: (r) => r.pay_date },
+      { label: t('purchase.vendor'), value: (r) => r.supplier_name }, { label: t('stockin.no'), value: (r) => r.si_no },
+      { label: t('pharma.billNo'), value: (r) => r.bill_no }, { label: t('vpay.mode'), value: (r) => t(`vpay.mode.${r.pay_mode}`) },
+      { label: t('vpay.refNo'), value: (r) => r.reference_no }, { label: t('purchase.amount'), type: 'money', value: (r) => r.amount }]}
+            getRows={() => fetchAll((p) => api('/vendor-payments', { query: { ...{ q: dq }, page: p, limit: 100 } }))} />
         </div>
         {list.loading && !list.data ? <Loading /> : <ErrorBox error={list.error} onRetry={list.reload} />}
         {list.data && (

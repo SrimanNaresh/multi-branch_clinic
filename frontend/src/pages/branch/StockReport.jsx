@@ -7,6 +7,8 @@ import { useT } from '../../lib/i18n.jsx';
 import { fmtDate, money } from '../../lib/format.js';
 import { Card, Empty, ErrorBox, Loading, PageHeader, Pagination, SearchBox, useAsync, useDebounced } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import ExportButtons from '../../components/ExportButtons.jsx';
+import { fetchAll } from '../../lib/exportTable.js';
 
 const SHOW = ['moved', 'instock', 'out', 'all'];
 /** Which report column a stock change belongs to (same rules as the server's totals) */
@@ -84,6 +86,13 @@ export default function StockReport() {
       <Card className="crud-compact sr-card">
         <div className="toolbar">
           <SearchBox value={q} onChange={reset(setQ)} placeholder={t('report.searchHint')} />
+          <ExportButtons title={t('menu.stockReport')} columns={[
+      { label: t('items.code'), value: (r) => r.item_code }, { label: t('items.name'), value: (r) => r.name },
+      { label: t('items.category'), value: (r) => r.category }, { label: t('report.opening'), type: 'qty', value: (r) => r.opening },
+      { label: t('menu.stockIn'), type: 'qty', value: (r) => r.stock_in }, { label: t('menu.purchaseReturn'), type: 'qty', value: (r) => r.returned },
+      { label: t('report.sold'), type: 'qty', value: (r) => r.sold }, { label: t('report.adjusted'), type: 'qty', value: (r) => r.adjusted },
+      { label: t('sale.stock'), type: 'qty', value: (r) => r.stock_qty }, { label: t('pdash.stockValue'), type: 'money', value: (r) => r.stock_value }]}
+            getRows={() => fetchAll((p) => api('/items/stock-report', { query: { ...{ q: dq, category, show }, page: p, limit: 200 } }))} />
           <select value={category} onChange={(e) => reset(setCategory)(e.target.value)} aria-label={t('items.category')}>
             <option value="">{t('items.allCategories')}</option>
             {(cats.data?.rows || []).map((c) => <option key={c} value={c}>{c}</option>)}
