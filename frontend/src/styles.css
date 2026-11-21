@@ -1316,3 +1316,15 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 @media (max-width: 1100px) { .ips-lines { overflow-x: auto; } .ips-lines .table { min-width: 1040px; } }
 /* Scan Bill: the step buttons sit at the top, under the steps, and stay in view while the bill scrolls */
 .scan-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; position: sticky; top: -16px; z-index: 3; margin: -4px -16px 0; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+/* Scan Bill: the bill and the "Read from the bill" table get a box sized to the screen (pop-up head and
+   button bar left out), so both the vertical and the horizontal scrollbar are on screen together */
+.scan-table-wrap { max-height: max(240px, calc(100vh - 170px)); max-height: max(240px, calc(100dvh - 170px)); overscroll-behavior: contain; }
+.scan-view { max-height: max(240px, calc(100vh - 230px)); max-height: max(240px, calc(100dvh - 230px)); overscroll-behavior: contain; }
+.scan-paper img { max-height: max(224px, calc(100dvh - 246px)); }
+/* scrollbars always shown (touch tablets hide thin ones) */
+.scan-table-wrap, .scan-view { scrollbar-width: auto; scrollbar-color: var(--line-strong) var(--surface-2); }
+.scan-table-wrap::-webkit-scrollbar, .scan-view::-webkit-scrollbar { width: 12px; height: 12px; }
+.scan-table-wrap::-webkit-scrollbar-track, .scan-view::-webkit-scrollbar-track { background: var(--surface-2); }
+.scan-table-wrap::-webkit-scrollbar-thumb, .scan-view::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 99px; border: 3px solid var(--surface-2); }
+.scan-table-wrap::-webkit-scrollbar-thumb:hover, .scan-view::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.scan-table-wrap::-webkit-scrollbar-corner, .scan-view::-webkit-scrollbar-corner { background: var(--surface-2); }
