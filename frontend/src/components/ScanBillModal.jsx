@@ -449,7 +449,8 @@ export default function ScanBillModal({ onClose, onLines }) {
     onClose();
   }
 
-  const footer = step === 'select' ? (
+  // Step buttons sit at the top (under the steps), not in the pop-up footer
+  const actions = step === 'select' ? (
     <>
       <Button type="button" variant="ghost" disabled={working} onClick={() => fileRef.current?.click()}><Icon name="upload" size={16} /> {t('scan.another')}</Button>
       <span className="scan-foot-gap" />
@@ -468,11 +469,12 @@ export default function ScanBillModal({ onClose, onLines }) {
   ) : null;
 
   return (
-    <Modal title={t('scan.modalTitle')} onClose={working ? () => {} : onClose} wide footer={footer}>
+    <Modal title={t('scan.modalTitle')} onClose={working ? () => {} : onClose} wide>
       <div className="scan-bill">
         <input ref={fileRef} type="file" accept="image/*,application/pdf,.pdf" hidden onChange={onFile} />
         <input ref={photoRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
         <Steps step={step} t={t} />
+        {actions && <div className="scan-actions">{actions}</div>}
 
         {step === 'pick' && !busy && (
           <div className="scan-drop">
