@@ -1298,3 +1298,19 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .ips-lines .po-row-actions .icon-btn { width: 22px; height: 22px; padding: 0; }
 .ips-lines .table td input { font-size: 12px; padding: 0 3px; }
 .ips-lines .table td input:not([type=number]):not(.si-month) { text-align: left; }
+
+/* Tablets / phones: entry grids (Purchase / Order, Stock In, Three in One, Sale, Return, Adjustment, Bulk)
+   stay real tables and scroll sideways – the "tables become stacked cards" rule above is for list tables only */
+@media (max-width: 900px) {
+  .po-lines { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .po-lines .table { display: table; width: 100%; }
+  .po-lines .table thead { display: table-header-group; }
+  .po-lines .table tbody { display: table-row-group; }
+  .po-lines .table tfoot { display: table-footer-group; }
+  .po-lines .table tr { display: table-row; border: 0; border-radius: 0; padding: 0; margin: 0; background: none; }
+  .po-lines .table td { display: table-cell; width: auto; padding: 4px 3px; border: 1px solid var(--line); text-align: left; }
+  .po-lines .table td.num { text-align: right; }
+  .po-lines .table td::before { content: none; }
+}
+/* Three in One: below the width where its 20 columns fit, keep them readable and scroll */
+@media (max-width: 1100px) { .ips-lines { overflow-x: auto; } .ips-lines .table { min-width: 1040px; } }
