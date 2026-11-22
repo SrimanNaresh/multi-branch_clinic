@@ -35,6 +35,8 @@ async function clean(body, clinicId) {
   );
   const byId = new Map(items.map((i) => [i.id, i]));
 
+  const seen = new Set();
+  // MRP, Disc % and P.Rate are linked; Disc % is worked out again from MRP and P.Rate (shared/purchase.js calcLine)
   const lines = input.map((l, n) => {
     const item = byId.get(Number(l.item_id));
     if (!item) throw badRequest(`Line ${n + 1}: item not found`, 'VALIDATION');
@@ -44,7 +46,11 @@ async function clean(body, clinicId) {
       cgst_percent: toAmount(l.cgst_percent, 'CGST %'), sgst_percent: toAmount(l.sgst_percent, 'SGST %'),
     };
     if (v.disc_percent > 100) throw badRequest(`Line ${n + 1}: Disc % must be 0–100`, 'VALIDATION');
-    if (v.mrp > 0 && v.p_rate > v.mrp) throw badRequest(`${item.name}: P.Rate ${v.p_rate.toFixed(2)} is more than MRP ${v.mrp.toFixed(2)}`, 'VALIDATION');
+    if (!(v.mrp > 0)) throw badRequest(`${item.name}: enter the MRP`, 'VALIDATION');
+    if (!(v.p_rate > 0)) throw badRequest(`${item.name}: enter the P.Rate`, 'VALIDATION');
+    if (seen.has(item.id)) throw badRequest(`${item.name} is on the order twice – keep one line`, 'VALIDATION');
+    seen.add(item.id);
+    if (v.p_rate > v.mrp) throw badRequest(`${item.name}: P.Rate ${v.p_rate.toFixed(2)} is more than MRP ${v.mrp.toFixed(2)}`, 'VALIDATION');
     if (v.cgst_percent + v.sgst_percent > 28) throw badRequest(`Line ${n + 1}: GST % looks wrong`, 'VALIDATION');
     if (v.qty <= 0) throw badRequest(`Line ${n + 1}: enter the quantity`, 'VALIDATION');
     return {

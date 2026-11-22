@@ -68,11 +68,25 @@ action buttons).
 
 ### Still different from the prompt
 
-- **Purchase line formula (needs your decision, billing logic):** the prompt links MRP, Disc % and P.Rate
-  (P.Rate = MRP less Disc %, Amount = Qty × P.Rate). Here Disc % is taken off P.Rate (Rate = P.Rate less Disc %,
-  Amount = Qty × Rate), as in All In One. Both give the same Amount when Disc % is 0, which is how Scan Bill fills lines.
-  Not changed.
 - Item Master is 10 + 6 boxes a row and Vendor Master 4 + 7 + 1 on desktop (prompt: 8 + 8 and 7 a row); these layouts
   were set on purpose earlier (wider name boxes). Not changed.
 - Pay modes are Cash / UPI / Card / Cheque / NEFT / Other (prompt: … Bank …); saved payments use them. Not changed.
 - D1–D4 above (kept on purpose).
+
+## 6. Purchase line formula switched to the prompt's (approved 22-11-2026)
+
+Before: Rate = P.Rate less Disc %, Amount = Qty × Rate (Disc % taken off P.Rate).
+Now: MRP, Disc % and P.Rate are linked – P.Rate = MRP less Disc %, Disc % = (1 − P.Rate / MRP) × 100,
+Amount = Qty × P.Rate (`shared/purchase.js`: `calcLine`, `pRateOf`, `discOf`, `linkPrice`).
+
+- Server: Disc % is worked out again from MRP and P.Rate (the screen's value is not trusted); `rate` (Cur.Rate) =
+  P.Rate. Purchase Order lines also need MRP > 0 and P.Rate > 0, and the same item may not be on an order twice.
+- Purchase Order screen: columns MRP · Old Price · Disc % · P.Rate; typing MRP or Disc % works out P.Rate, typing
+  P.Rate works out Disc %; a picked item starts at Qty 1 and at this vendor's last P.Rate (else its purchase rate).
+- Three in One: the same linking; "Disc % on all lines" now sets P.Rate = MRP less that %.
+- Saved data is not changed. Stock In, Purchase Returns, Vendor Payments and reports already use the saved `rate`,
+  so old documents keep their amounts. An old order still open for editing loads with P.Rate = its saved rate and
+  Disc % worked out from it, so re-saving it keeps the same amounts (1 such line with a Disc % on the dev DB;
+  no Three in One drafts).
+- Checked: API (5 × 90 on MRP 100 → Disc 10 %, Amount 450, Total 504; Stock In 2 × 90 + 12 % = 201.60; repeated item,
+  MRP 0 and P.Rate over MRP refused; test documents deleted) and both screens in the browser. 75 unit tests pass.

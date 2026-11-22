@@ -17,7 +17,7 @@ import Icon from '../../components/Icon.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
 import VendorPicker from '../../components/VendorPicker.jsx';
 import ScanBillModal from '../../components/ScanBillModal.jsx';
-import { calcLine, roundOffOf } from '../../../../shared/purchase.js';
+import { calcLine, discOf, linkPrice, roundOffOf } from '../../../../shared/purchase.js';
 import { selAmount } from '../../../../shared/stockin.js';
 
 let seq = 0;
@@ -28,12 +28,13 @@ const emptyRow = () => ({
 const fromItem = (i) => ({
   item_id: i.id, name: i.name, generic_name: i.generic_name || '', manufacturer: i.manufacturer || '', hsn_code: i.hsn_code || '',
   category: i.category || '', pack: i.pack || '', unit: i.unit || '', rack: i.rack || '', mrp: Number(i.mrp) || '', p_rate: Number(i.purchase_rate) || '',
+  disc_percent: Number(i.mrp) > 0 && Number(i.purchase_rate) > 0 ? discOf(i.mrp, i.purchase_rate) : '',
   gst: Number(i.gst_percent) || (Number(i.cgst_percent) + Number(i.sgst_percent)) || '',
 });
 const EMPTY_HEAD = () => ({ supplier_id: '', date: todayLocal(), bill_no: '', round_off: true });
 const two = (n) => Number(n || 0).toFixed(2);
 const filled = (r) => r.item_id || r.name.trim();
-const calcOf = (r) => calcLine({ p_rate: r.p_rate, disc_percent: r.disc_percent, qty: r.qty, cgst_percent: Number(r.gst || 0) / 2, sgst_percent: Number(r.gst || 0) / 2 });
+const calcOf = (r) => calcLine({ mrp: r.mrp, p_rate: r.p_rate, qty: r.qty, cgst_percent: Number(r.gst || 0) / 2, sgst_percent: Number(r.gst || 0) / 2 });
 
 /** What is wrong with a row (field → message), checked as the server will */
 function rowProblems(r, thisMonth, t) {
@@ -72,10 +73,12 @@ export default function StockIps() {
   const drafts = useAsync(() => api('/ips/drafts'), []);
 
   const setRow = (key, patch) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  // MRP / Disc % / P.Rate typed: the other one is worked out (P.Rate = MRP less Disc %, shared/purchase.js)
+  const setPrice = (key, patch) => setRows((rs) => rs.map((r) => (r.key === key ? linkPrice(r, patch) : r)));
   // Disc % on all lines: for a supplier bill with one discount; every line's Disc % is set (each can still be
-  // changed after), so each Total and the Sum of Total come down
+  // changed after); P.Rate = MRP less Disc %, so each Total and the Sum of Total come down
   const [allDisc, setAllDisc] = useState('');
-  const discAllLines = (v) => { setAllDisc(v); setRows((rs) => rs.map((r) => ({ ...r, disc_percent: v }))); };
+  const discAllLines = (v) => { setAllDisc(v); setRows((rs) => rs.map((r) => linkPrice(r, { disc_percent: v }))); };
   const addAfter = (key) => setRows((rs) => rs.flatMap((r) => (r.key === key ? [r, emptyRow()] : [r])));
   const remove = (key) => setRows((rs) => (rs.length > 1 ? rs.filter((r) => r.key !== key) : [emptyRow()]));
 
@@ -112,7 +115,9 @@ export default function StockIps() {
       };
       return {
         ...emptyRow(), ...base,
-        mrp: mrp || base.mrp || '', p_rate: pRate || base.p_rate || '', gst: gst || base.gst || '',
+        mrp: mrp || base.mrp || '', p_rate: pRate || base.p_rate || '',
+        disc_percent: (mrp || base.mrp) > 0 && (pRate || base.p_rate) > 0 ? discOf(mrp || base.mrp, pRate || base.p_rate) : '',
+        gst: gst || base.gst || '',
         qty: num(l.qty), free_qty: num(l.free),
         batch_no: l.batch || l.category || '', mfg: monthToMMYY(l.mfg), exp: monthToMMYY(l.exp),
         s_disc: sDisc > 0 && sDisc <= 100 ? sDisc : '',
@@ -286,8 +291,8 @@ export default function StockIps() {
                 )}
                 <th>{t('purchase.unit')}</th>
                 <th className="num">{t('items.mrp')}</th>
-                <th className="num">{t('purchase.pRate')}</th>
                 <th className="num">{t('purchase.disc')}</th>
+                <th className="num">{t('purchase.pRate')}</th>
                 <th className="num">{t('items.quantity')}</th>
                 <th className="num">{t('purchase.free')}</th>
                 <th className="num">{t('purchase.gst')}</th>
@@ -316,9 +321,9 @@ export default function StockIps() {
                         onChange={(e) => setRow(r.key, { [f]: e.target.value })} /></td>
                     ))}
                     <td><input aria-label={t('purchase.unit')} disabled={!!r.item_id} maxLength={30} value={r.unit} onChange={(e) => setRow(r.key, { unit: e.target.value })} /></td>
-                    {cell(r, 'mrp', <input {...num} aria-label={t('items.mrp')} value={r.mrp} onChange={(e) => setRow(r.key, { mrp: e.target.value })} />)}
-                    {cell(r, 'p_rate', <input {...num} aria-label={t('purchase.pRate')} value={r.p_rate} onChange={(e) => setRow(r.key, { p_rate: e.target.value })} />)}
-                    {cell(r, 'disc_percent', <input {...num} max="100" aria-label={t('purchase.disc')} value={r.disc_percent} onChange={(e) => setRow(r.key, { disc_percent: e.target.value })} />)}
+                    {cell(r, 'mrp', <input {...num} aria-label={t('items.mrp')} value={r.mrp} onChange={(e) => setPrice(r.key, { mrp: e.target.value })} />)}
+                    {cell(r, 'disc_percent', <input {...num} max="100" aria-label={t('purchase.disc')} value={r.disc_percent} onChange={(e) => setPrice(r.key, { disc_percent: e.target.value })} />)}
+                    {cell(r, 'p_rate', <input {...num} aria-label={t('purchase.pRate')} value={r.p_rate} onChange={(e) => setPrice(r.key, { p_rate: e.target.value })} />)}
                     {cell(r, 'qty', <input {...num} aria-label={t('items.quantity')} value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} />)}
                     <td><input {...num} aria-label={t('purchase.free')} value={r.free_qty} onChange={(e) => setRow(r.key, { free_qty: e.target.value })} /></td>
                     {cell(r, 'gst', <input {...num} max="28" aria-label={t('purchase.gst')} value={r.gst} onChange={(e) => setRow(r.key, { gst: e.target.value })} />)}

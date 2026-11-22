@@ -1,13 +1,26 @@
 // Pharmacy formulas shared by the screens and the server: Purchase / Order, Stock In and Sales.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcLine, orderTotals, roundOffOf, splitGst } from '../../shared/purchase.js';
+import { calcLine, discOf, linkPrice, orderTotals, pRateOf, roundOffOf, splitGst } from '../../shared/purchase.js';
 import { packSize, selAmount, unitPrice } from '../../shared/stockin.js';
 import { lineAmount, lineCost, packsOf, perSaleUnit, saleTotals } from '../../shared/sale.js';
 
-test('Purchase line: Rate = P.Rate less Disc %, free units not charged', () => {
-  const c = calcLine({ p_rate: 100, disc_percent: 10, qty: 5, free_qty: 1, cgst_percent: 6, sgst_percent: 6 });
-  assert.deepEqual(c, { rate: 90, amount: 450, gst_percent: 12, gst_amount: 54, total: 504 });
+test('Purchase line: Amount = Qty × P.Rate, Disc % worked out from MRP, free units not charged', () => {
+  const c = calcLine({ mrp: 100, p_rate: 90, disc_percent: 99, qty: 5, free_qty: 1, cgst_percent: 6, sgst_percent: 6 });
+  assert.deepEqual(c, { disc_percent: 10, rate: 90, amount: 450, gst_percent: 12, gst_amount: 54, total: 504 });
+  assert.equal(calcLine({ mrp: 0, p_rate: 50, qty: 1 }).disc_percent, 0);
+});
+
+test('MRP, Disc % and P.Rate are linked', () => {
+  assert.equal(pRateOf(100, 10), 90);
+  assert.equal(discOf(100, 90), 10);
+  assert.equal(pRateOf(32.12, 5), 30.51);
+  const line = { mrp: 100, disc_percent: 10, p_rate: 90 };
+  assert.deepEqual(linkPrice(line, { disc_percent: 20 }), { mrp: 100, disc_percent: 20, p_rate: 80 });   // Disc % → P.Rate
+  assert.deepEqual(linkPrice(line, { p_rate: 75 }), { mrp: 100, disc_percent: 25, p_rate: 75 });        // P.Rate → Disc %
+  assert.deepEqual(linkPrice(line, { mrp: 200 }), { mrp: 200, disc_percent: 10, p_rate: 180 });         // MRP → P.Rate
+  assert.deepEqual(linkPrice({ mrp: 100, disc_percent: '', p_rate: 80 }, { mrp: 160 }), { mrp: 160, disc_percent: 50, p_rate: 80 });
+  assert.deepEqual(linkPrice({ mrp: '', disc_percent: '', p_rate: '' }, { p_rate: 40 }), { mrp: '', disc_percent: '', p_rate: 40 });
 });
 
 test('GST % splits evenly into CGST % and SGST %', () => {

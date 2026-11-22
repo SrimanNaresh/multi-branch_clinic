@@ -1125,7 +1125,7 @@ export default {
   'ips.openSi': 'Stock In ஐத் திற',
   'ips.discAll': 'எல்லா வரிகளுக்கும் தள்ளுபடி %',
   'ips.discAllHint': 'ஒவ்வொரு வரியிலும் தள்ளுபடி % அமைக்கும்; பிறகும் ஒரு வரியை மாற்றலாம்',
-  'ips.formula': 'Rate = P.Rate − Disc %; Total = Qty × Rate + GST (Free க்கு கட்டணம் இல்லை); Sel.Amount = MRP − S.Disc %. இருப்பு Qty + Free அளவு கூடும்.',
+  'ips.formula': 'P.Rate = MRP − Disc % (P.Rate உள்ளிட்டால் Disc % கணக்கிடப்படும்); Total = Qty × P.Rate + GST (Free க்கு கட்டணம் இல்லை); Sel.Amount = MRP − S.Disc %. இருப்பு Qty + Free அளவு கூடும்.',
   'ips.saveDraft': 'வரைவைச் சேமி',
   'ips.saveAll': 'அனைத்தையும் சேமி',
   'ips.lastSaved': 'கடைசியாகச் சேமித்தது',

@@ -1124,7 +1124,7 @@ export default {
   'ips.openSi': 'Open Stock In',
   'ips.discAll': 'Disc % on all lines',
   'ips.discAllHint': 'Sets Disc % on every line; a line can still be changed after',
-  'ips.formula': 'Rate = P.Rate less Disc %; Total = Qty × Rate + GST (Free not charged); Sel.Amount = MRP less S.Disc %. Stock goes up by Qty + Free.',
+  'ips.formula': 'P.Rate = MRP less Disc % (typing P.Rate works out Disc %); Total = Qty × P.Rate + GST (Free not charged); Sel.Amount = MRP less S.Disc %. Stock goes up by Qty + Free.',
   'ips.saveDraft': 'Save Draft',
   'ips.saveAll': 'Save All',
   'ips.lastSaved': 'Last saved',

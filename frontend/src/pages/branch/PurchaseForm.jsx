@@ -1,6 +1,7 @@
 // Pharmacy → Purchase / Order → Master: an order to a vendor. Picking an item fills its details, MRP and GST;
-// Rate (P.Rate less Disc %), Amount, GST Amount and Total are worked out as you type (shared/purchase.js, same
-// as the server). Old Price is this vendor's last net rate for the item; Free units are not charged.
+// MRP, Disc % and P.Rate are linked (P.Rate = MRP less Disc %); P.Rate starts at this vendor's last rate for the
+// item (else the item's purchase rate). Amount = Qty × P.Rate, GST Amount and Total are worked out as you type
+// (shared/purchase.js, same as the server). Old Price is this vendor's last P.Rate; Free units are not charged.
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
@@ -11,7 +12,7 @@ import Icon from '../../components/Icon.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
 import ItemBulkPicker from '../../components/ItemBulkPicker.jsx';
 import VendorPicker from '../../components/VendorPicker.jsx';
-import { calcLine, orderTotal, roundOffOf, splitGst } from '../../../../shared/purchase.js';
+import { calcLine, discOf, linkPrice, orderTotal, roundOffOf, splitGst } from '../../../../shared/purchase.js';
 import { arrowMove, focusNewRow } from '../../lib/tableKeys.js';
 
 const newLine = () => ({
@@ -22,7 +23,8 @@ const newLine = () => ({
 const fromItem = (i) => ({
   item_id: i.id, item_name: i.name, generic_name: i.generic_name || '', hsn_code: i.hsn_code || '',
   manufacturer: i.manufacturer || '', category: i.category || '', pack: i.pack || '', unit: i.unit || '',
-  mrp: Number(i.mrp) || '', p_rate: Number(i.purchase_rate) || '', gst: undefined,
+  mrp: Number(i.mrp) || '', p_rate: Number(i.purchase_rate) || '', gst: undefined, qty: 1, rateSet: false,
+  disc_percent: Number(i.mrp) > 0 && Number(i.purchase_rate) > 0 ? discOf(i.mrp, i.purchase_rate) : '',
   cgst_percent: Number(i.cgst_percent) || '', sgst_percent: Number(i.sgst_percent) || '',
 });
 const overMrp = (l) => Number(l.mrp) > 0 && Number(l.p_rate) > Number(l.mrp);
@@ -84,8 +86,10 @@ export default function PurchaseForm({ params }) {
     const po = existing.data;
     if (!po) return;
     setHead({ supplier_id: String(po.supplier_id), po_date: String(po.po_date).slice(0, 10), details: po.details || '', round_off: Number(po.round_off) !== 0 });
-    setLines(po.lines.map((l) => ({ ...newLine(), ...l, key: String(l.id), mrp: Number(l.mrp), disc_percent: Number(l.disc_percent) || '',
-      p_rate: Number(l.p_rate ?? l.mrp) || '', free_qty: Number(l.free_qty) || '',
+    setLines(po.lines.map((l) => ({ ...newLine(), ...l, key: String(l.id), mrp: Number(l.mrp), 
+      // P.Rate = the saved Cur.Rate (what was paid); Disc % from it, so an order saved before MRP / Disc % / P.Rate
+      // were linked keeps its amounts
+      p_rate: Number(l.rate) || '', disc_percent: Number(l.mrp) > 0 && Number(l.rate) > 0 ? discOf(l.mrp, l.rate) : '', free_qty: Number(l.free_qty) || '',
       qty: Number(l.qty), cgst_percent: Number(l.cgst_percent) || '', sgst_percent: Number(l.sgst_percent) || '' })));
   }, [existing.data]);
 
@@ -99,6 +103,16 @@ export default function PurchaseForm({ params }) {
   );
 
   const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  // MRP / Disc % / P.Rate typed: the other one is worked out (shared/purchase.js linkPrice)
+  const setPrice = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? linkPrice(l, patch) : l)));
+  // newly picked items: P.Rate starts at this vendor's last rate for the item, when there is one
+  async function applyLastRates(itemIds) {
+    if (!head.supplier_id || !itemIds.length) return;
+    let rates = {};
+    try { rates = await api('/purchases/old-prices', { query: { supplier_id: head.supplier_id, item_ids: itemIds.join(','), except: id || '' } }); } catch { return; }
+    setLines((ls) => ls.map((l) => (itemIds.includes(l.item_id) && Number(rates[l.item_id]) > 0 && !l.rateSet
+      ? { ...linkPrice(l, { p_rate: Number(rates[l.item_id]) }), rateSet: true } : l)));
+  }
   // + on a row adds a new empty line right under it
   const addLineAfter = (key) => setLines((ls) => ls.flatMap((l) => (l.key === key ? [l, newLine()] : [l])));
   const removeLine = (key) => setLines((ls) => (ls.length > 1 ? ls.filter((l) => l.key !== key) : [newLine()]));
@@ -196,6 +210,7 @@ export default function PurchaseForm({ params }) {
             onAdd={(items) => {
               // ticked items become rows (MRP / GST filled in), after the rows already chosen; empty rows go
               setLines((ls) => [...ls.filter((l) => l.item_id), ...items.map((i) => ({ ...newLine(), ...fromItem(i) }))]);
+              applyLastRates(items.map((i) => i.id));
               toast(t('bulkAdd.added', { n: items.length }));
             }} />
         )}
@@ -231,9 +246,9 @@ export default function PurchaseForm({ params }) {
                 <th>{t('purchase.unit')}</th>
                 <th className="num">{t('items.mrp')}</th>
                 <th className="num">{t('purchase.oldPrice')}</th>
+                <th className="num">{t('purchase.disc')}</th>
                 <th className="num">{t('purchase.pRate')}</th>
                 <th className="num">{t('purchase.free')}</th>
-                <th className="num">{t('purchase.disc')}</th>
                 <th className="num">{t('items.quantity')}</th>
                 <th className="num">{t('purchase.amount')}</th>
                 {showMore ? (
@@ -263,18 +278,21 @@ export default function PurchaseForm({ params }) {
                     <td className="muted">{n + 1}</td>
                     <td className="po-item">
                       <ItemPicker browse value={l.item_name} ariaLabel={t('items.name')} placeholder={t('purchase.itemHint')}
-                        onPick={({ item, medicine_name: typed }) => setLine(l.key, item ? fromItem(item) : { ...newLine(), key: l.key, item_name: typed })} />
+                        onPick={({ item, medicine_name: typed }) => {
+                          setLine(l.key, item ? fromItem(item) : { ...newLine(), key: l.key, item_name: typed });
+                          if (item) applyLastRates([item.id]);
+                        }} />
                     </td>
                     <td className="po-wrap">{l.category || '—'}</td>
                     <td className="po-wrap">{l.pack || '—'}</td>
                     <td className="po-wrap">{l.unit || '—'}</td>
-                    <td><input {...num} aria-label={t('items.mrp')} value={l.mrp} onChange={(e) => setLine(l.key, { mrp: e.target.value })} /></td>
+                    <td><input {...num} aria-label={t('items.mrp')} value={l.mrp} onChange={(e) => setPrice(l.key, { mrp: e.target.value })} /></td>
                     <td className="num muted">{old == null ? '—' : two(old)}</td>
+                    <td><input {...num} max="100" aria-label={t('purchase.disc')} value={l.disc_percent} onChange={(e) => setPrice(l.key, { disc_percent: e.target.value })} /></td>
                     <td className={overMrp(l) ? 'cell-bad' : undefined} title={overMrp(l) ? t('purchase.rateOverMrp', { name: l.item_name }) : undefined}>
-                      <input {...num} aria-label={t('purchase.pRate')} value={l.p_rate} onChange={(e) => setLine(l.key, { p_rate: e.target.value })} />
+                      <input {...num} aria-label={t('purchase.pRate')} value={l.p_rate} onChange={(e) => setPrice(l.key, { p_rate: e.target.value })} />
                     </td>
                     <td><input {...num} aria-label={t('purchase.free')} value={l.free_qty} onChange={(e) => setLine(l.key, { free_qty: e.target.value })} /></td>
-                    <td><input {...num} max="100" aria-label={t('purchase.disc')} value={l.disc_percent} onChange={(e) => setLine(l.key, { disc_percent: e.target.value })} /></td>
                     <td><input {...num} aria-label={t('items.quantity')} value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value })} /></td>
                     <td className="num">{two(c.amount)}</td>
                     {showMore ? (

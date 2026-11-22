@@ -3,16 +3,40 @@
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+/** P.Rate from MRP and Disc %: MRP − MRP × Disc % / 100 (MRP 100, Disc 10 → 90) */
+export const pRateOf = (mrp, disc) => r2(Number(mrp || 0) - (Number(mrp || 0) * Number(disc || 0)) / 100);
+
+/** Disc % from MRP and P.Rate: (1 − P.Rate / MRP) × 100 (MRP 100, P.Rate 90 → 10); 0 when there is no MRP */
+export const discOf = (mrp, pRate) => (Number(mrp) > 0 ? r2((1 - Number(pRate || 0) / Number(mrp)) * 100) : 0);
+
 /**
- * Rate = P.Rate − Disc % of P.Rate; Amount = Qty × Rate (Free units are not charged);
- * GST Amount = Amount / 100 × (CGST + SGST); Total = Amount + GST Amount
+ * MRP, Disc % and P.Rate are linked (Disc % is a % of the MRP; P.Rate is what is paid per pack):
+ * Amount = Qty × P.Rate (Free units are not charged); GST Amount = Amount / 100 × (CGST + SGST);
+ * Total = Amount + GST Amount. disc_percent is worked out from MRP and P.Rate; rate (the saved Cur.Rate) = P.Rate.
  */
-export function calcLine({ p_rate: pRate, disc_percent: disc, qty, cgst_percent: cgst, sgst_percent: sgst }) {
-  const rate = r2(Number(pRate || 0) - (Number(pRate || 0) * Number(disc || 0)) / 100);
+export function calcLine({ mrp, p_rate: pRate, qty, cgst_percent: cgst, sgst_percent: sgst }) {
+  const rate = r2(pRate);
   const amount = r2(Number(qty || 0) * rate);
   const gst = r2(Number(cgst || 0) + Number(sgst || 0));
   const gstAmount = r2((amount / 100) * gst);
-  return { rate, amount, gst_percent: gst, gst_amount: gstAmount, total: r2(amount + gstAmount) };
+  return { disc_percent: discOf(mrp, rate), rate, amount, gst_percent: gst, gst_amount: gstAmount, total: r2(amount + gstAmount) };
+}
+
+/**
+ * A line after one box is typed, with MRP, Disc % and P.Rate kept linked:
+ * typing Disc % (or MRP, when a Disc % is set) works out P.Rate; typing P.Rate (or MRP, when Disc % is empty)
+ * works out Disc %. Empty boxes stay empty.
+ */
+export function linkPrice(line, patch) {
+  const l = { ...line, ...patch };
+  const mrp = Number(l.mrp) || 0;
+  const has = (v) => v !== '' && v != null;
+  if ('disc_percent' in patch || ('mrp' in patch && has(l.disc_percent))) {
+    if (mrp > 0 && has(l.disc_percent)) l.p_rate = pRateOf(mrp, l.disc_percent);
+  } else if ('p_rate' in patch || 'mrp' in patch) {
+    l.disc_percent = mrp > 0 && has(l.p_rate) ? discOf(mrp, l.p_rate) : '';
+  }
+  return l;
 }
 
 /** GST % typed in one box: split evenly into CGST % and SGST % */
