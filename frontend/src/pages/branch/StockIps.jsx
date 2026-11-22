@@ -18,7 +18,7 @@ import ItemPicker from '../../components/ItemPicker.jsx';
 import VendorPicker from '../../components/VendorPicker.jsx';
 import ScanBillModal from '../../components/ScanBillModal.jsx';
 import { calcLine, discOf, linkPrice, roundOffOf } from '../../../../shared/purchase.js';
-import { selAmount } from '../../../../shared/stockin.js';
+import { selAmount, unitPrice } from '../../../../shared/stockin.js';
 
 let seq = 0;
 const emptyRow = () => ({
@@ -63,7 +63,10 @@ export default function StockIps() {
   const [head, setHead] = useState(EMPTY_HEAD);
   const [rows, setRows] = useState([emptyRow()]);
   const [draftId, setDraftId] = useState(null);
+  // column groups that open / close with the › in their heading: Item details, Purchase extras, Stock In extras
   const [showItem, setShowItem] = useState(false);
+  const [showPo, setShowPo] = useState(false);
+  const [showSi, setShowSi] = useState(false);
   const [showDrafts, setShowDrafts] = useState(false);
   const [showScan, setShowScan] = useState(false);
   const [busy, setBusy] = useState('');
@@ -85,6 +88,16 @@ export default function StockIps() {
   const thisMonth = todayLocal().slice(0, 7);
   const used = rows.filter(filled);
   const problems = new Map(rows.map((r) => [r.key, rowProblems(r, thisMonth, t)]));
+  // the Stock In extras open by themselves when one of their boxes has a problem, so nothing wrong is hidden
+  const siOpen = showSi || [...problems.values()].some((p) => p.mfg || p.s_disc);
+  // Old Price: this vendor's last P.Rate for each item already in the Item List (0 when never ordered from them)
+  const oldIds = [...new Set(rows.filter((r) => r.item_id).map((r) => r.item_id))].sort((a, b) => a - b).join(',');
+  const oldPrices = useAsync(
+    () => (showPo && head.supplier_id && oldIds
+      ? api('/purchases/old-prices', { query: { supplier_id: head.supplier_id, item_ids: oldIds } })
+      : Promise.resolve({})),
+    [showPo, head.supplier_id, oldIds],
+  );
   const hasProblem = [...problems.values()].some((p) => Object.keys(p).length);
   const sum = Math.round(used.reduce((s, r) => s + calcOf(r).total, 0) * 100) / 100;
   const roundOff = head.round_off ? roundOffOf(sum) : 0;
@@ -124,6 +137,7 @@ export default function StockIps() {
       };
     });
     setRows((rs) => [...rs.filter(filled), ...scanned, emptyRow()]);
+    if (scanned.some((r) => r.mfg || r.s_disc)) setShowSi(true);   // the bill filled Mf.Date / S.Disc %: show them
     if (scanned.some((r) => !r.item_id)) setShowItem(true);
     const gstNo = String(header?.gstNo || '').toUpperCase();
     const v = gstNo && (vendors.data?.rows || []).find((x) => String(x.gstin || '').toUpperCase() === gstNo);
@@ -135,7 +149,7 @@ export default function StockIps() {
     toast(t('scan.added', { n: scanned.length }));
   }
 
-  const screen = () => ({ head, rows: rows.map(({ key, ...r }) => r), showItem });
+  const screen = () => ({ head, rows: rows.map(({ key, ...r }) => r), showItem, showPo, showSi });
   async function saveDraft() {
     if (!head.supplier_id && !head.bill_no.trim()) { setError(t('ips.draftNeeds')); return; }
     setBusy('draft');
@@ -162,6 +176,8 @@ export default function StockIps() {
       setHead({ ...EMPTY_HEAD(), ...(data.head || {}) });
       setRows((data.rows || []).length ? data.rows.map((r) => ({ ...emptyRow(), ...r, key: emptyRow().key })) : [emptyRow()]);
       setShowItem(!!data.showItem);
+      setShowPo(!!data.showPo);
+      setShowSi(!!data.showSi);
       setDraftId(d.id);
       setShowDrafts(false);
       setError('');
@@ -214,10 +230,23 @@ export default function StockIps() {
   }
 
   const num = { type: 'number', min: '0', step: '0.01', inputMode: 'decimal' };
-  const cell = (r, field, input) => {
+  const cell = (r, field, input, cls = '') => {
     const msg = problems.get(r.key)?.[field];
-    return <td className={msg ? 'cell-bad' : undefined} title={msg}>{input}</td>;
+    return <td className={[cls, msg ? 'cell-bad' : ''].filter(Boolean).join(' ') || undefined} title={msg}>{input}</td>;
   };
+  // footer: the columns before Total (# … GST %, with the open groups) and after it (Stock In + the + / bin column)
+  const beforeTotal = 9 + (showItem ? 5 : 0) + (showPo ? 3 : 0);
+  const afterTotal = (siOpen ? 6 : 3) + 1;
+  // a group's heading: its name and the round › / ‹ that shows / hides its extra columns
+  const groupHead = (label, open, setOpen, tone) => (
+    <span className="po-item-head">
+      <span>{label}</span>
+      <button type="button" className={`po-more ips-more-${tone} ${open ? 'open' : ''}`} aria-expanded={open}
+        title={open ? t('purchase.hideDetails') : t('purchase.showDetails')} onClick={() => setOpen(!open)}>
+        <Icon name={open ? 'chevronLeft' : 'chevronRight'} size={14} />
+      </button>
+    </span>
+  );
   const draftRows = drafts.data?.rows || [];
 
   return (
@@ -253,28 +282,24 @@ export default function StockIps() {
 
         <div className="table-wrap po-lines ips-lines">
           <table className="table">
-            {/* fixed column shares (adding up to 100 %), so the table fits the screen with or without the Item details */}
+            {/* fixed column shares (adding up to 100 %), so the table fits the screen with any group open or closed */}
             <colgroup>
               {(() => {
-                const w = [2.5, 12, ...(showItem ? [6.5, 8.5, 6, 6, 5] : []), 4, 5, 5, 4.5, 5.5, 4, 4.5, 5, 6, 6.5, 5.5, 5.5, 5, 6.5, 4];
-                const sum = w.reduce((a, x) => a + x, 0);
-                return w.map((x, i) => <col key={i} style={{ width: `${(x / sum) * 100}%` }} />);
+                const w = [
+                  2.5, 12, ...(showItem ? [6.5, 8.5, 6, 6, 5] : []), 4,
+                  5, ...(showPo ? [5] : []), 4.5, 5, 4.5, 4, ...(showPo ? [6] : []), 4, ...(showPo ? [5.5] : []), 6.5,
+                  6.5, ...(siOpen ? [5.5] : []), 5.5, ...(siOpen ? [5] : []), 6, ...(siOpen ? [5.5] : []), 4,
+                ];
+                const total = w.reduce((a, x) => a + x, 0);
+                return w.map((x, i) => <col key={i} style={{ width: `${(x / total) * 100}%` }} />);
               })()}
             </colgroup>
             <thead>
               <tr className="ips-groups">
                 <th />
-                <th colSpan={showItem ? 7 : 2} className="ips-g-item">
-                  <span className="po-item-head">
-                    <span>{t('ips.gItem')}</span>
-                    <button type="button" className={`po-more ${showItem ? 'open' : ''}`} aria-expanded={showItem}
-                      title={showItem ? t('purchase.hideDetails') : t('purchase.showDetails')} onClick={() => setShowItem((s) => !s)}>
-                      <Icon name={showItem ? 'chevronLeft' : 'chevronRight'} size={14} />
-                    </button>
-                  </span>
-                </th>
-                <th colSpan={8} className="ips-g-po">{t('ips.gPurchase')}</th>
-                <th colSpan={5} className="ips-g-si">{t('ips.gStockIn')}</th>
+                <th colSpan={showItem ? 7 : 2} className="ips-g-item">{groupHead(t('ips.gItem'), showItem, setShowItem, 'item')}</th>
+                <th colSpan={showPo ? 10 : 7} className="ips-g-po">{groupHead(t('ips.gPurchase'), showPo, setShowPo, 'po')}</th>
+                <th colSpan={siOpen ? 6 : 3} className="ips-g-si">{groupHead(t('ips.gStockIn'), siOpen, setShowSi, 'si')}</th>
                 <th />
               </tr>
               <tr>
@@ -282,33 +307,38 @@ export default function StockIps() {
                 <th className="po-item">{t('items.name')}</th>
                 {showItem && (
                   <>
-                    <th>{t('items.generic')}</th>
-                    <th>{t('items.manufacturer')}</th>
-                    <th>HSN</th>
-                    <th>{t('items.category')}</th>
-                    <th>{t('items.pack')}</th>
+                    <th className="ips-x-item">{t('items.generic')}</th>
+                    <th className="ips-x-item">{t('items.manufacturer')}</th>
+                    <th className="ips-x-item">HSN</th>
+                    <th className="ips-x-item">{t('items.category')}</th>
+                    <th className="ips-x-item">{t('items.pack')}</th>
                   </>
                 )}
                 <th>{t('purchase.unit')}</th>
                 <th className="num">{t('items.mrp')}</th>
+                {showPo && <th className="num ips-x-po">{t('purchase.oldPrice')}</th>}
                 <th className="num">{t('purchase.disc')}</th>
                 <th className="num">{t('purchase.pRate')}</th>
                 <th className="num">{t('items.quantity')}</th>
                 <th className="num">{t('purchase.free')}</th>
+                {showPo && <th className="num ips-x-po">{t('purchase.amount')}</th>}
                 <th className="num">{t('purchase.gst')}</th>
-                <th className="num">{t('purchase.rate')}</th>
+                {showPo && <th className="num ips-x-po">{t('purchase.gstAmount')}</th>}
                 <th className="num">{t('purchase.total')}</th>
                 <th>{t('stockin.batch')}</th>
-                <th>{t('stockin.mfg')}</th>
+                {siOpen && <th className="ips-x-si">{t('stockin.mfg')}</th>}
                 <th>{t('stockin.exp')}</th>
-                <th className="num">{t('stockin.sDisc')}</th>
+                {siOpen && <th className="num ips-x-si">{t('stockin.sDisc')}</th>}
                 <th className="num">{t('stockin.sel')}</th>
+                {siOpen && <th className="num ips-x-si">{t('stockin.unitPrice')}</th>}
                 <th />
               </tr>
             </thead>
             <tbody onKeyDown={arrowMove}>
               {rows.map((r, n) => {
                 const c = calcOf(r);
+                const sel = Number(r.mrp) > 0 ? selAmount({ mrp: r.mrp, disc_percent: r.s_disc }) : null;
+                const old = r.item_id && head.supplier_id ? Number(oldPrices.data?.[r.item_id] || 0) : null;
                 return (
                   <tr key={r.key}>
                     <td className="muted">{n + 1}{r.name && !r.item_id && <small className="ips-new">{t('ips.newItem')}</small>}</td>
@@ -317,23 +347,26 @@ export default function StockIps() {
                         onPick={({ item, medicine_name: typed }) => setRow(r.key, item ? fromItem(item) : { item_id: null, name: typed })} />
                     </td>
                     {showItem && ['generic_name', 'manufacturer', 'hsn_code', 'category', 'pack'].map((f) => (
-                      <td key={f}><input aria-label={f} disabled={!!r.item_id} maxLength={f === 'hsn_code' ? 20 : 150} value={r[f]}
+                      <td key={f} className="ips-x-item"><input aria-label={f} disabled={!!r.item_id} maxLength={f === 'hsn_code' ? 20 : 150} value={r[f]}
                         onChange={(e) => setRow(r.key, { [f]: e.target.value })} /></td>
                     ))}
                     <td><input aria-label={t('purchase.unit')} disabled={!!r.item_id} maxLength={30} value={r.unit} onChange={(e) => setRow(r.key, { unit: e.target.value })} /></td>
                     {cell(r, 'mrp', <input {...num} aria-label={t('items.mrp')} value={r.mrp} onChange={(e) => setPrice(r.key, { mrp: e.target.value })} />)}
+                    {showPo && <td className="num muted ips-x-po">{old == null ? '—' : two(old)}</td>}
                     {cell(r, 'disc_percent', <input {...num} max="100" aria-label={t('purchase.disc')} value={r.disc_percent} onChange={(e) => setPrice(r.key, { disc_percent: e.target.value })} />)}
                     {cell(r, 'p_rate', <input {...num} aria-label={t('purchase.pRate')} value={r.p_rate} onChange={(e) => setPrice(r.key, { p_rate: e.target.value })} />)}
                     {cell(r, 'qty', <input {...num} aria-label={t('items.quantity')} value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} />)}
                     <td><input {...num} aria-label={t('purchase.free')} value={r.free_qty} onChange={(e) => setRow(r.key, { free_qty: e.target.value })} /></td>
+                    {showPo && <td className="num ips-x-po">{filled(r) ? two(c.amount) : ''}</td>}
                     {cell(r, 'gst', <input {...num} max="28" aria-label={t('purchase.gst')} value={r.gst} onChange={(e) => setRow(r.key, { gst: e.target.value })} />)}
-                    <td className="num">{filled(r) ? two(c.rate) : ''}</td>
+                    {showPo && <td className="num ips-x-po">{filled(r) ? two(c.gst_amount) : ''}</td>}
                     <td className="num"><b>{filled(r) ? two(c.total) : ''}</b></td>
                     <td><input className="si-batch" aria-label={t('stockin.batch')} maxLength={50} value={r.batch_no} onChange={(e) => setRow(r.key, { batch_no: e.target.value })} /></td>
-                    {cell(r, 'mfg', <input className="si-month" inputMode="numeric" placeholder="MM/YY" aria-label={t('stockin.mfg')} value={r.mfg} onChange={(e) => setRow(r.key, { mfg: typeMMYY(e.target.value) })} />)}
+                    {siOpen && cell(r, 'mfg', <input className="si-month" inputMode="numeric" placeholder="MM/YY" aria-label={t('stockin.mfg')} value={r.mfg} onChange={(e) => setRow(r.key, { mfg: typeMMYY(e.target.value) })} />, 'ips-x-si')}
                     {cell(r, 'exp', <input className="si-month" inputMode="numeric" placeholder="MM/YY" aria-label={t('stockin.exp')} value={r.exp} onChange={(e) => setRow(r.key, { exp: typeMMYY(e.target.value) })} />)}
-                    {cell(r, 's_disc', <input {...num} max="100" aria-label={t('stockin.sDisc')} value={r.s_disc} onChange={(e) => setRow(r.key, { s_disc: e.target.value })} />)}
-                    <td className="num">{Number(r.mrp) > 0 ? two(selAmount({ mrp: r.mrp, disc_percent: r.s_disc })) : ''}</td>
+                    {siOpen && cell(r, 's_disc', <input {...num} max="100" aria-label={t('stockin.sDisc')} value={r.s_disc} onChange={(e) => setRow(r.key, { s_disc: e.target.value })} />, 'ips-x-si')}
+                    <td className="num">{sel != null ? two(sel) : ''}</td>
+                    {siOpen && <td className="num ips-x-si">{sel != null ? two(unitPrice(sel, r.unit)) : ''}</td>}
                     <td>
                       <span className="po-row-actions">
                         <button type="button" className="icon-btn rx-add" title={t('purchase.addLine')} aria-label={t('purchase.addLine')}
@@ -348,31 +381,31 @@ export default function StockIps() {
             </tbody>
             <tfoot>
               <tr className="no-print">
-                <td colSpan={showItem ? 15 : 10} className="num">
+                <td colSpan={beforeTotal} className="num">
                   <label className="ips-disc-all">{t('ips.discAll')}{' '}
                     <input type="number" min="0" max="100" step="0.01" aria-label={t('ips.discAll')}
                       value={allDisc} onChange={(e) => discAllLines(e.target.value)} />
                   </label>
                 </td>
-                <td colSpan={7} className="muted">{t('ips.discAllHint')}</td>
+                <td colSpan={afterTotal + 1} className="muted">{t('ips.discAllHint')}</td>
               </tr>
               <tr>
-                <td colSpan={showItem ? 15 : 10} className="num"><b>{t('purchase.sumTotal')}</b></td>
+                <td colSpan={beforeTotal} className="num"><b>{t('purchase.sumTotal')}</b></td>
                 <td className="num"><b>{money(sum)}</b></td>
-                <td colSpan={6} />
+                <td colSpan={afterTotal} />
               </tr>
               <tr>
-                <td colSpan={showItem ? 15 : 10} className="num">
+                <td colSpan={beforeTotal} className="num">
                   <label className="round-off"><input type="checkbox" checked={head.round_off}
                     onChange={(e) => setHead((h) => ({ ...h, round_off: e.target.checked }))} /> <b>{t('pharma.roundOff')}</b></label>
                 </td>
                 <td className="num">{roundOff > 0 ? '+ ' : roundOff < 0 ? '− ' : ''}{money(Math.abs(roundOff))}</td>
-                <td colSpan={6} />
+                <td colSpan={afterTotal} />
               </tr>
               <tr className="sale-total-row">
-                <td colSpan={showItem ? 15 : 10} className="num"><b>{t('pharma.netAmount')}</b></td>
+                <td colSpan={beforeTotal} className="num"><b>{t('pharma.netAmount')}</b></td>
                 <td className="num po-sum">{money(sum + roundOff)}</td>
-                <td colSpan={6} />
+                <td colSpan={afterTotal} />
               </tr>
             </tfoot>
           </table>

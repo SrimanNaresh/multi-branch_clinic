@@ -1202,6 +1202,15 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .ips-lines .table thead tr.ips-groups th.ips-g-po { background: var(--warning-50); color: var(--warning); }
 .ips-lines .table thead tr.ips-groups th.ips-g-si { background: #e3f4e8; color: #1f7a3d; }
 .ips-lines td input { min-width: 0; }
+/* extra columns shown with a group's ›: tinted in the group's colour */
+.ips-lines .table thead th.ips-x-item { background: #eef5fb; }
+.ips-lines .table tbody td.ips-x-item { background: #f6fafd; }
+.ips-lines .table thead th.ips-x-po { background: #fdf0d9; color: #8a5a00; border-bottom-color: #d99a1e; }
+.ips-lines .table tbody td.ips-x-po { background: #fffaf0; }
+.ips-lines .table thead th.ips-x-si { background: #ddf5ea; color: #0d6b45; border-bottom-color: #2ba36f; }
+.ips-lines .table tbody td.ips-x-si { background: #f2fbf6; }
+.po-more.ips-more-po.open { background: #d99a1e; border-color: #d99a1e; }
+.po-more.ips-more-si.open { background: #2ba36f; border-color: #2ba36f; }
 .ips-new { display: block; font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; }
 
 /* Scan Bill (Three in One): Upload → Select table → Match columns → Fill the table */
