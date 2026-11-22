@@ -1169,6 +1169,8 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 }
 
 /* Round Off tick box in the totals of Purchase / Order and Sales */
+.ips-disc-all { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; font-weight: 600; }
+.table .ips-disc-all input { width: 72px; text-align: right; }
 .round-off { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; justify-content: flex-end; }
 .table .round-off input[type='checkbox'], .round-off input[type='checkbox'] { width: 16px; height: 16px; min-width: 16px; padding: 0; margin: 0; flex: none; }
 
@@ -1177,6 +1179,11 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .stat-danger { border-top: 3px solid var(--danger); }
 .stat-link { cursor: pointer; }
 .stat-link:hover { border-color: var(--brand); }
+.pdash-quick { margin-bottom: 12px; }
+.pdash-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.pdash-action { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.pdash-action:hover, .pdash-action:focus-visible { border-color: var(--brand); background: var(--brand-50); color: var(--brand); }
 .pdash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 12px; }
 @media (max-width: 900px) { .pdash-grid { grid-template-columns: 1fr; } }
 .pdash-bars { display: flex; align-items: flex-end; gap: 8px; height: 180px; padding-top: 18px; }

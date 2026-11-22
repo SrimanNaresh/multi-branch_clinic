@@ -11,7 +11,7 @@ import { navigate } from '../../lib/router.jsx';
 import { fmtDate, money, todayLocal } from '../../lib/format.js';
 import { arrowMove } from '../../lib/tableKeys.js';
 import { mmyyToMonth, monthToMMYY, typeMMYY } from '../../lib/months.js';
-import { Button, Card, ErrorBox, Input, Loading, Select, useAsync, useToast } from '../../components/ui.jsx';
+import { Button, Card, ErrorBox, Input, Loading, Select, useAsync, useDebounced, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 import VendorPicker from '../../components/VendorPicker.jsx';
 import { selAmount, unitPrice } from '../../../../shared/stockin.js';
@@ -129,12 +129,26 @@ export default function StockInForm({ params }) {
   }));
   const hasProblem = problems.some((p) => Object.values(p).some(Boolean));
 
+  // the vendor's Bill No may be saved only once: live check (the server checks again on save)
+  const billQ = useDebounced(head.bill_no.trim(), 400);
+  const [billTaken, setBillTaken] = useState(null);
+  useEffect(() => {
+    setBillTaken(null);
+    if (!head.supplier_id || !billQ || readOnly) return undefined;
+    let live = true;
+    api('/stock-in/bill-no', { query: { supplier_id: head.supplier_id, bill_no: billQ, except: id || undefined } })
+      .then((r) => { if (live) setBillTaken(r.taken); }).catch(() => {});
+    return () => { live = false; };
+  }, [head.supplier_id, billQ, id, readOnly]);
+  const billError = billTaken ? t('stockin.billTaken', { bill: billQ, si: billTaken }) : '';
+
   async function submit(e) {
     e.preventDefault();
     if (readOnly) return;
     if (!head.supplier_id) { setError(t('purchase.chooseVendor')); return; }
     if (!head.po_id) { setError(t('stockin.chooseOrder')); return; }
     if (hasProblem) { setError(t('stockin.fixRed')); return; }
+    if (billError) { setError(billError); return; }
     setSaving(true);
     setError('');
     const body = {
@@ -260,7 +274,7 @@ export default function StockInForm({ params }) {
               onChange={(e) => { setHead((h) => ({ ...h, po_id: e.target.value })); loadRows(e.target.value); }} />
             <Input label={t('purchase.date')} type="date" required value={head.si_date}
               onChange={(e) => setHead((h) => ({ ...h, si_date: e.target.value }))} />
-            <Input label={t('pharma.billNo')} maxLength={50} placeholder={t('pharma.billNoHint')} value={head.bill_no}
+            <Input label={t('pharma.billNo')} maxLength={50} placeholder={t('pharma.billNoHint')} value={head.bill_no} error={billError}
               onChange={(e) => setHead((h) => ({ ...h, bill_no: e.target.value.toUpperCase() }))} />
           </div>
           {head.supplier_id && !orders.loading && !orderOptions.length && <p className="muted">{t('stockin.noOrders')}</p>}

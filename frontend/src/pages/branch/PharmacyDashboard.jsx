@@ -23,6 +23,19 @@ function Stat({ label, value, sub, tone, to }) {
   );
 }
 
+// Quick Actions: the everyday entry screens, each shown only to users who may open it
+const QUICK = [
+  { to: '/sales/new', label: 'pdash.qaSale', icon: 'receipt', perm: 'dispense' },
+  { to: '/stock-in/ips', label: 'menu.threeInOne', icon: 'scan', perm: 'stock.manage' },
+  { to: '/purchase/new', label: 'pdash.qaOrder', icon: 'truck', perm: 'stock.manage' },
+  { to: '/stock-in/new', label: 'pdash.qaStockIn', icon: 'box', perm: 'stock.manage' },
+  { to: '/items/new', label: 'pdash.qaItem', icon: 'plus', perm: 'item.manage' },
+  { to: '/sales-returns/new', label: 'menu.salesReturn', icon: 'history', perm: 'sales.return' },
+  { to: '/vendor-payments', label: 'pdash.qaPay', icon: 'receipt', perm: 'vendor.pay' },
+  { to: '/stock-adjustments/new', label: 'menu.adjustmentEntry', icon: 'edit', perm: 'stock.adjust' },
+  { to: '/reports/stock', label: 'menu.stockReport', icon: 'list', perm: 'item.view' },
+];
+
 export default function PharmacyDashboard() {
   const { t } = useT();
   const auth = useAuth();
@@ -54,6 +67,18 @@ export default function PharmacyDashboard() {
             <Stat tone={data.expired.count ? 'danger' : undefined} label={t('pdash.expired')} value={num(data.expired.count)} sub={t('pdash.expiredSub')}
               to={auth.can('stock.adjust') ? '/stock-adjustments/new' : undefined} />
           </div>
+
+          {QUICK.some((a) => auth.can(a.perm)) && (
+            <Card title={t('pdash.quick')} className="pdash-quick">
+              <div className="pdash-actions">
+                {QUICK.filter((a) => auth.can(a.perm)).map((a) => (
+                  <button key={a.to} type="button" className="pdash-action" onClick={() => navigate(a.to)}>
+                    <Icon name={a.icon} size={16} /> <span>{t(a.label)}</span>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
 
           <div className="pdash-grid">
             <Card title={t('pdash.week')}>

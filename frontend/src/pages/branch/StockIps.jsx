@@ -29,7 +29,7 @@ const fromItem = (i) => ({
   category: i.category || '', pack: i.pack || '', unit: i.unit || '', rack: i.rack || '', mrp: Number(i.mrp) || '', p_rate: Number(i.purchase_rate) || '',
   gst: Number(i.gst_percent) || (Number(i.cgst_percent) + Number(i.sgst_percent)) || '',
 });
-const EMPTY_HEAD = () => ({ supplier_id: '', date: todayLocal(), bill_no: '', round_off: false });
+const EMPTY_HEAD = () => ({ supplier_id: '', date: todayLocal(), bill_no: '', round_off: true });
 const two = (n) => Number(n || 0).toFixed(2);
 const filled = (r) => r.item_id || r.name.trim();
 const calcOf = (r) => calcLine({ p_rate: r.p_rate, disc_percent: r.disc_percent, qty: r.qty, cgst_percent: Number(r.gst || 0) / 2, sgst_percent: Number(r.gst || 0) / 2 });
@@ -71,6 +71,10 @@ export default function StockIps() {
   const drafts = useAsync(() => api('/ips/drafts'), []);
 
   const setRow = (key, patch) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  // Disc % on all lines: for a supplier bill with one discount; every line's Disc % is set (each can still be
+  // changed after), so each Total and the Sum of Total come down
+  const [allDisc, setAllDisc] = useState('');
+  const discAllLines = (v) => { setAllDisc(v); setRows((rs) => rs.map((r) => ({ ...r, disc_percent: v }))); };
   const addAfter = (key) => setRows((rs) => rs.flatMap((r) => (r.key === key ? [r, emptyRow()] : [r])));
   const remove = (key) => setRows((rs) => (rs.length > 1 ? rs.filter((r) => r.key !== key) : [emptyRow()]));
 
@@ -192,6 +196,7 @@ export default function StockIps() {
       setDone(r);
       toast(t('ips.saved', { po: r.po_no, si: r.si_no }));
       setHead(EMPTY_HEAD());
+      setAllDisc('');
       setRows([emptyRow()]);
       setDraftId(null);
       drafts.reload();
@@ -336,6 +341,15 @@ export default function StockIps() {
               })}
             </tbody>
             <tfoot>
+              <tr className="no-print">
+                <td colSpan={showItem ? 15 : 10} className="num">
+                  <label className="ips-disc-all">{t('ips.discAll')}{' '}
+                    <input type="number" min="0" max="100" step="0.01" aria-label={t('ips.discAll')}
+                      value={allDisc} onChange={(e) => discAllLines(e.target.value)} />
+                  </label>
+                </td>
+                <td colSpan={7} className="muted">{t('ips.discAllHint')}</td>
+              </tr>
               <tr>
                 <td colSpan={showItem ? 15 : 10} className="num"><b>{t('purchase.sumTotal')}</b></td>
                 <td className="num"><b>{money(sum)}</b></td>

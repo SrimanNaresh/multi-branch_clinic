@@ -46,7 +46,7 @@ export default function PurchaseForm({ params }) {
   const { t } = useT();
   const toast = useToast();
   const id = params.id;
-  const [head, setHead] = useState({ supplier_id: '', po_date: todayLocal(), details: '', round_off: false });
+  const [head, setHead] = useState({ supplier_id: '', po_date: todayLocal(), details: '', round_off: true });
   const [lines, setLines] = useState([newLine()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -119,7 +119,7 @@ export default function PurchaseForm({ params }) {
       const po = id ? await api(`/purchases/${id}`, { method: 'PUT', body }) : await api('/purchases', { method: 'POST', body });
       toast(t('purchase.saved', { no: po.po_no }));
       if (id) navigate('/purchase');
-      else { setHead({ supplier_id: '', po_date: todayLocal(), details: '', round_off: false }); setLines([newLine()]); }
+      else { setHead({ supplier_id: '', po_date: todayLocal(), details: '', round_off: true }); setLines([newLine()]); }
     } catch (err) {
       setError(err.message);
     } finally {

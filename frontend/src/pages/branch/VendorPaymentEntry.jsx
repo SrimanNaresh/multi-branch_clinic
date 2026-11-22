@@ -1,6 +1,6 @@
 // Pharmacy → Vendor → Payments: pay a vendor against one of its Stock Ins (bills), and the list of payments.
 // Picking a vendor lists its bills with Bill − Returned − Paid = Balance; the amount starts at the balance and
-// cannot be more. Cheque / NEFT / UPI need a reference no. Only an Admin may delete a payment.
+// cannot be more. Every mode except Cash needs a reference no. Only an Admin may delete a payment.
 import { useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
@@ -15,7 +15,7 @@ import ExportButtons from '../../components/ExportButtons.jsx';
 import { fetchAll } from '../../lib/exportTable.js';
 
 const MODES = ['cash', 'upi', 'card', 'cheque', 'neft', 'other'];
-const NEEDS_REF = ['cheque', 'neft', 'upi'];
+const needsRef = (mode) => mode !== 'cash';
 const EMPTY = () => ({ supplier_id: '', stock_in_id: '', pay_date: todayLocal(), amount: '', pay_mode: 'cash', reference_no: '', notes: '' });
 
 export default function VendorPaymentEntry() {
@@ -46,7 +46,7 @@ export default function VendorPaymentEntry() {
     if (!form.stock_in_id) { setError(t('vpay.chooseBill')); return; }
     if (!(Number(form.amount) > 0)) { setError(t('vpay.enterAmount')); return; }
     if (over) { setError(t('vpay.overBalance', { n: money(bill.balance) })); return; }
-    if (NEEDS_REF.includes(form.pay_mode) && !form.reference_no.trim()) { setError(t('vpay.needRef')); return; }
+    if (needsRef(form.pay_mode) && !form.reference_no.trim()) { setError(t('vpay.needRef')); return; }
     setSaving(true);
     setError('');
     try {
@@ -121,7 +121,7 @@ export default function VendorPaymentEntry() {
               hint={bill ? t('vpay.billHint', { bill: money(bill.bill_amount), ret: money(bill.returned_amount), paid: money(bill.paid_amount), bal: money(bill.balance) }) : undefined} />
             <Select label={t('vpay.mode')} required value={form.pay_mode}
               options={MODES.map((m) => ({ value: m, label: t(`vpay.mode.${m}`) }))} onChange={(e) => set({ pay_mode: e.target.value })} />
-            <Input label={t('vpay.refNo')} required={NEEDS_REF.includes(form.pay_mode)} maxLength={50} value={form.reference_no}
+            <Input label={t('vpay.refNo')} required={needsRef(form.pay_mode)} maxLength={50} value={form.reference_no}
               onChange={(e) => set({ reference_no: e.target.value })} />
             <TextArea label={t('vpay.notes')} rows={1} maxLength={300} value={form.notes} onChange={(e) => set({ notes: e.target.value })} />
           </div>

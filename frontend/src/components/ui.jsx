@@ -149,8 +149,8 @@ export function Field({ label, required, hint, error, children, full }) {
   );
 }
 
-export function Input({ label, required, hint, full, ...props }) {
-  return <Field label={label} required={required} hint={hint} full={full}><input required={required} {...props} /></Field>;
+export function Input({ label, required, hint, error, full, ...props }) {
+  return <Field label={label} required={required} hint={hint} error={error} full={full}><input required={required} {...props} /></Field>;
 }
 
 export function Select({ label, required, hint, full, options, placeholder, ...props }) {
