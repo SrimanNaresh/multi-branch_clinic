@@ -981,7 +981,7 @@ CREATE TABLE dbo.stock_ins (
   CONSTRAINT uq_si_clinic_no UNIQUE (clinic_id, si_no)
 );
 GO
--- sel_amount = rate + sales_percent, less disc_percent (shared/stockin.js)
+-- sel_amount = mrp less disc_percent (S.Disc %) (shared/stockin.js); sales_percent is no longer used (kept 0)
 IF OBJECT_ID(N'dbo.stock_in_items', N'U') IS NULL
 CREATE TABLE dbo.stock_in_items (
   id             INT IDENTITY(1,1) PRIMARY KEY,
@@ -1184,6 +1184,22 @@ IF COL_LENGTH(N'dbo.purchase_orders', N'round_off') IS NULL
 GO
 IF COL_LENGTH(N'dbo.sales', N'round_off') IS NULL
   ALTER TABLE dbo.sales ADD round_off DECIMAL(10,2) NOT NULL CONSTRAINT df_sale_round DEFAULT 0;
+GO
+-- Optional whole-bill discount on a purchase order (docs/02_pharmacy_prompt_22-11_gaps.md, P1):
+-- disc_amount = Sum of Total × disc_percent / 100, taken off before Round Off. 0 from the screens;
+-- Vendor Payments take the same % off each Stock In made from the order.
+IF COL_LENGTH(N'dbo.purchase_orders', N'disc_percent') IS NULL
+  ALTER TABLE dbo.purchase_orders ADD disc_percent DECIMAL(5,2) NOT NULL CONSTRAINT df_po_disc DEFAULT 0;
+GO
+IF COL_LENGTH(N'dbo.purchase_orders', N'disc_amount') IS NULL
+  ALTER TABLE dbo.purchase_orders ADD disc_amount DECIMAL(12,2) NOT NULL CONSTRAINT df_po_discamt DEFAULT 0;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'chk_po_disc')
+  ALTER TABLE dbo.purchase_orders ADD CONSTRAINT chk_po_disc CHECK (disc_percent BETWEEN 0 AND 100);
+GO
+-- Bill No look-up per vendor (a vendor's Bill No may be saved only once)
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_si_bill' AND object_id = OBJECT_ID(N'dbo.stock_ins'))
+  CREATE INDEX ix_si_bill ON dbo.stock_ins(clinic_id, supplier_id, bill_no);
 GO
 
 -- Vendor → Payments: money paid to a vendor against one Stock In (its bill)

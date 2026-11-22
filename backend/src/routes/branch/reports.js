@@ -23,14 +23,17 @@ function dateRange(req, col) {
   return { sql: parts.length ? ` AND ${parts.join(' AND ')}` : '', params };
 }
 
-// Stock In lines with their GST % (from the purchase order line)
+// Stock In lines with their GST % (from the purchase order line), less the order's whole-bill Disc % (0 unless set)
 const STOCK_IN = `FROM stock_ins si JOIN stock_in_items l ON l.stock_in_id = si.id
-  LEFT JOIN purchase_order_items p ON p.id = l.po_item_id
-  CROSS APPLY (SELECT ROUND(l.qty * l.rate, 2) AS taxable, ROUND(l.qty * l.rate * COALESCE(p.gst_percent, 0) / 100, 2) AS gst) a`;
+  LEFT JOIN purchase_order_items p ON p.id = l.po_item_id JOIN purchase_orders bd ON bd.id = si.po_id
+  CROSS APPLY (SELECT ROUND(l.qty * l.rate * (1 - bd.disc_percent / 100), 2) AS taxable,
+                      ROUND(l.qty * l.rate * COALESCE(p.gst_percent, 0) / 100 * (1 - bd.disc_percent / 100), 2) AS gst) a`;
 // Return lines with the GST % of the Stock In line they came from
 const RETURN = `FROM purchase_returns r JOIN purchase_return_items ri ON ri.return_id = r.id
   JOIN stock_in_items l ON l.id = ri.stock_in_item_id LEFT JOIN purchase_order_items p ON p.id = l.po_item_id
-  CROSS APPLY (SELECT ri.amount AS taxable, ROUND(ri.amount * COALESCE(p.gst_percent, 0) / 100, 2) AS gst) a`;
+  JOIN stock_ins bs ON bs.id = l.stock_in_id JOIN purchase_orders bd ON bd.id = bs.po_id
+  CROSS APPLY (SELECT ROUND(ri.amount * (1 - bd.disc_percent / 100), 2) AS taxable,
+                      ROUND(ri.amount * COALESCE(p.gst_percent, 0) / 100 * (1 - bd.disc_percent / 100), 2) AS gst) a`;
 
 const totals = (x) => {
   const taxable = r2(x?.taxable);

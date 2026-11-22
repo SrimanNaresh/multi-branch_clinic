@@ -26,3 +26,15 @@ export const orderTotal = (lines) => r2(lines.reduce((s, l) => s + calcLine(l).t
 
 /** Round Off: what takes the total to the nearest rupee (102.40 → −0.40, 102.50 → +0.50) */
 export const roundOffOf = (total) => r2(Math.round(r2(total)) - r2(total));
+
+/**
+ * The order's footer: Sum of Total, an optional whole-bill discount (disc_percent of the Sum, taken off before
+ * Round Off), Round Off (when asked) and Net Amount. With no discount this is Sum + Round Off, as before.
+ */
+export function orderTotals(sum, discPercent = 0, round = false) {
+  const s = r2(sum);
+  const discAmount = r2((s * Number(discPercent || 0)) / 100);
+  const afterDisc = r2(s - discAmount);
+  const roundOff = round ? roundOffOf(afterDisc) : 0;
+  return { sum: s, disc_amount: discAmount, round_off: roundOff, total: r2(afterDisc + roundOff) };
+}

@@ -1,7 +1,7 @@
 // Pharmacy → Vendor → Payments: money paid to a vendor against one of its Stock Ins (the supplier's bill).
 // A bill's amount is worked out the same way as the Vendor Payments report:
 //   Bill = Σ paid qty × Cur.Rate (+ GST % of the order line); Returned = Σ returned amount (+ GST);
-//   Balance = Bill − Returned − Paid. A payment cannot be more than the balance.
+//   both less the order's whole-bill Disc % (0 unless set); Balance = Bill − Returned − Paid. A payment cannot be more than the balance.
 // Only an Admin may delete a payment.
 import { Router } from '../../lib/mini-express.js';
 import { query, tx, insertRow, pageSql } from '../../config/db.js';
@@ -20,7 +20,9 @@ const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 /** SQL: one row per Stock In of the clinic with its bill, returned and paid amounts (filter with WHERE si.…). */
 const INVOICES = `
   SELECT si.id AS stock_in_id, si.si_no, si.si_date, si.bill_no, si.supplier_id, s.name AS supplier_name, po.po_no,
-         COALESCE(b.bill, 0) AS bill_amount, COALESCE(r.returned, 0) AS returned_amount, COALESCE(p.paid, 0) AS paid_amount
+         ROUND(COALESCE(b.bill, 0) * (1 - po.disc_percent / 100), 2) AS bill_amount,
+         ROUND(COALESCE(r.returned, 0) * (1 - po.disc_percent / 100), 2) AS returned_amount, COALESCE(p.paid, 0) AS paid_amount,
+         po.disc_percent AS bill_disc_percent
     FROM stock_ins si
     JOIN suppliers s ON s.id = si.supplier_id
     JOIN purchase_orders po ON po.id = si.po_id
@@ -94,7 +96,8 @@ router.post('/', async (req, res) => {
   const mode = String(b.pay_mode || 'cash').toLowerCase();
   if (!PAY_MODES.includes(mode)) throw badRequest('Choose the payment mode', 'VALIDATION');
   const refNo = String(b.reference_no ?? '').trim().slice(0, 50) || null;
-  if (['cheque', 'neft', 'upi'].includes(mode) && !refNo) throw badRequest('Enter the Cheque / Transaction No', 'VALIDATION');
+  // every mode except Cash needs the cheque / transaction / reference number
+  if (mode !== 'cash' && !refNo) throw badRequest('Enter the Reference No (needed for every mode except Cash)', 'VALIDATION');
   const notes = String(b.notes ?? '').trim().slice(0, 300) || null;
 
   const id = await tx(async (q) => {

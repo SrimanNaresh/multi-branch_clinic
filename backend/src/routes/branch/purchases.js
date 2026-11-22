@@ -7,7 +7,7 @@ import { clinicScope, requirePermission } from '../../middleware/access.js';
 import { badRequest, forbidden, notFound, paging, toAmount, toId, like } from '../../utils/http.js';
 import { isISODate, todayISO } from '../../utils/dates.js';
 import { nextSequence, formatPurchaseNo } from '../../utils/codes.js';
-import { calcLine, roundOffOf } from '../../../../shared/purchase.js';
+import { calcLine, orderTotals } from '../../../../shared/purchase.js';
 import { isAdmin } from '../../utils/stock.js';
 
 const router = Router();
@@ -54,10 +54,18 @@ async function clean(body, clinicId) {
     };
   });
   const sum = Math.round(lines.reduce((s, l) => s + l.total, 0) * 100) / 100;
-  // round_off: true rounds the Sum of Total to the nearest rupee; total_amount includes it
-  const roundOff = body?.round_off ? roundOffOf(sum) : 0;
-  const total = Math.round((sum + roundOff) * 100) / 100;
-  return { order: { supplier_id: supplierId, po_date: poDate, details, round_off: roundOff, total_amount: total }, lines };
+  // optional whole-bill discount (0 from the screens), then round_off: true rounds to the nearest rupee;
+  // total_amount (Net Amount) includes both
+  const discPercent = toAmount(body?.disc_percent, 'Bill Disc %');
+  if (discPercent > 100) throw badRequest('Bill Disc % must be 0–100', 'VALIDATION');
+  const f = orderTotals(sum, discPercent, Boolean(body?.round_off));
+  return {
+    order: {
+      supplier_id: supplierId, po_date: poDate, details, disc_percent: discPercent, disc_amount: f.disc_amount,
+      round_off: f.round_off, total_amount: f.total,
+    },
+    lines,
+  };
 }
 
 const saveLines = async (q, clinicId, poId, lines) => {
@@ -125,7 +133,7 @@ router.get('/:id', async (req, res) => {
   res.json(await loadOrder(req.clinicId, toId(req.params.id)));
 });
 
-// POST /api/purchases { supplier_id, po_date, details, round_off: bool, lines: [{ item_id, mrp, p_rate, free_qty, disc_percent, qty, cgst_percent, sgst_percent }] }
+// POST /api/purchases { supplier_id, po_date, details, disc_percent?, round_off: bool, lines: [{ item_id, mrp, p_rate, free_qty, disc_percent, qty, cgst_percent, sgst_percent }] }
 router.post('/', async (req, res) => {
   const { order, lines } = await clean(req.body, req.clinicId);
   const id = await tx(async (q) => {
@@ -148,8 +156,10 @@ router.put('/:id', async (req, res) => {
     const [received] = await q('SELECT TOP 1 si_no FROM stock_ins WHERE po_id = ? AND clinic_id = ?', [id, req.clinicId]);
     if (received) throw badRequest(`Stock In ${received.si_no} is already made for this order – it can no longer be changed`, 'VALIDATION');
     const r = await q(
-      'UPDATE purchase_orders SET supplier_id = ?, po_date = ?, details = ?, round_off = ?, total_amount = ?, updated_at = NOW() WHERE id = ? AND clinic_id = ?',
-      [order.supplier_id, order.po_date, order.details, order.round_off, order.total_amount, id, req.clinicId],
+      `UPDATE purchase_orders SET supplier_id = ?, po_date = ?, details = ?, disc_percent = ?, disc_amount = ?, round_off = ?,
+              total_amount = ?, updated_at = NOW() WHERE id = ? AND clinic_id = ?`,
+      [order.supplier_id, order.po_date, order.details, order.disc_percent, order.disc_amount, order.round_off,
+        order.total_amount, id, req.clinicId],
     );
     if (!r.affectedRows) throw notFound('Purchase order');
     await saveLines(q, req.clinicId, id, lines);
