@@ -1,7 +1,7 @@
 // Pharmacy formulas shared by the screens and the server: Purchase / Order, Stock In and Sales.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calcLine, splitGst } from '../../shared/purchase.js';
+import { calcLine, orderTotals, roundOffOf, splitGst } from '../../shared/purchase.js';
 import { packSize, selAmount, unitPrice } from '../../shared/stockin.js';
 import { lineAmount, lineCost, packsOf, perSaleUnit, saleTotals } from '../../shared/sale.js';
 
@@ -34,4 +34,16 @@ test('Sales: unit sales take a part of a pack; amount less Disc %; bill discount
     { qty: 1, price: 20, sale_unit: 'pack', pack_size: 1, cost: 15 },
   ], 10);
   assert.deepEqual(s, { sub_total: 110, discount_amount: 11, total_amount: 99, cost: 95 });
+});
+
+test('Round Off = round(total) − total', () => {
+  assert.equal(roundOffOf(99.75), 0.25);
+  assert.equal(roundOffOf(24.25), -0.25);
+  assert.equal(roundOffOf(24.5), 0.5);
+});
+
+test('Order footer: whole-bill discount comes off before Round Off', () => {
+  assert.deepEqual(orderTotals(268.8, 0, true), { sum: 268.8, disc_amount: 0, round_off: 0.2, total: 269 });
+  assert.deepEqual(orderTotals(268.8, 10, true), { sum: 268.8, disc_amount: 26.88, round_off: 0.08, total: 242 });
+  assert.deepEqual(orderTotals(268.8, 10, false), { sum: 268.8, disc_amount: 26.88, round_off: 0, total: 241.92 });
 });

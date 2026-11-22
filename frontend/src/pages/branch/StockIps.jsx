@@ -11,6 +11,7 @@ import { fmtDate, money, todayLocal } from '../../lib/format.js';
 import { arrowMove, focusNewRow } from '../../lib/tableKeys.js';
 import { mmyyToMonth, monthToMMYY, typeMMYY } from '../../lib/months.js';
 import { buildIndex, matchName } from '../../lib/billScan.js';
+import { packSizeOf } from '../../lib/billColumns.js';
 import { Button, Card, Empty, Input, Modal, useAsync, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
@@ -107,7 +108,7 @@ export default function StockIps() {
       const sDisc = num(l.sDisc) !== '' ? num(l.sDisc) : (mrp && num(l.sel) ? r2((1 - Number(l.sel) / mrp) * 100) : '');
       const base = item ? fromItem(item) : {
         name: l.name, generic_name: l.generic || '', manufacturer: l.manufacturer || '', hsn_code: l.hsnCode || '',
-        category: l.batch ? (l.category || '') : '', pack: l.pack || '', unit: l.unit || '', rack: l.rack || '',
+        category: l.batch ? (l.category || '') : '', pack: l.pack || '', unit: l.unit || packSizeOf(l.pack), rack: l.rack || '',
       };
       return {
         ...emptyRow(), ...base,
