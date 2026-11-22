@@ -3,7 +3,7 @@
 // on the Item, Purchase / Order and Stock In screens. Save All adds the new items, saves the order and the
 // Stock In in one go (the server checks every row; if anything is wrong nothing is saved).
 // Save Draft keeps the screen as it is (any time, rows may be incomplete) – Drafts (n) lists and reopens them.
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useT } from '../../lib/i18n.jsx';
 import { navigate } from '../../lib/router.jsx';
@@ -12,6 +12,7 @@ import { arrowMove, focusNewRow } from '../../lib/tableKeys.js';
 import { mmyyToMonth, monthToMMYY, typeMMYY } from '../../lib/months.js';
 import { buildIndex, matchName } from '../../lib/billScan.js';
 import { packSizeOf } from '../../lib/billColumns.js';
+import { useGridColumns } from '../../lib/gridColumns.js';
 import { Button, Card, Empty, Input, Modal, useAsync, useToast } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
 import ItemPicker from '../../components/ItemPicker.jsx';
@@ -57,16 +58,58 @@ function rowProblems(r, thisMonth, t) {
   return p;
 }
 
+// The grid's columns: width share, group (Item / Purchase / Stock In), extra = hidden until the group's › or the
+// Columns list shows it, fixed = always shown, problem = the row check that forces the column into view
+const COL_SPEC = [
+  { key: 'no', w: 2.5, fixed: true },
+  { key: 'name', w: 12, group: 'item', fixed: true },
+  { key: 'generic_name', w: 6.5, group: 'item', extra: true },
+  { key: 'manufacturer', w: 8.5, group: 'item', extra: true },
+  { key: 'hsn_code', w: 6, group: 'item', extra: true },
+  { key: 'category', w: 6, group: 'item', extra: true },
+  { key: 'pack', w: 5, group: 'item', extra: true },
+  { key: 'unit', w: 4, group: 'item' },
+  { key: 'mrp', w: 5, group: 'po', problem: 'mrp' },
+  { key: 'old', w: 5, group: 'po', extra: true },
+  { key: 'disc_percent', w: 4.5, group: 'po', problem: 'disc_percent' },
+  { key: 'p_rate', w: 5, group: 'po', problem: 'p_rate' },
+  { key: 'qty', w: 4.5, group: 'po', problem: 'qty' },
+  { key: 'free_qty', w: 4, group: 'po' },
+  { key: 'amount', w: 6, group: 'po', extra: true },
+  { key: 'gst', w: 4, group: 'po', problem: 'gst' },
+  { key: 'gst_amount', w: 5.5, group: 'po', extra: true },
+  { key: 'total', w: 6.5, group: 'po', fixed: true },
+  { key: 'batch_no', w: 6.5, group: 'si' },
+  { key: 'mfg', w: 5.5, group: 'si', extra: true, problem: 'mfg' },
+  { key: 'exp', w: 5.5, group: 'si', problem: 'exp' },
+  { key: 's_disc', w: 5, group: 'si', extra: true, problem: 's_disc' },
+  { key: 'sel', w: 6, group: 'si' },
+  { key: 'unit_price', w: 5.5, group: 'si', extra: true },
+  { key: 'actions', w: 4, fixed: true },
+];
+const NUM_COLS = new Set(['mrp', 'old', 'disc_percent', 'p_rate', 'qty', 'free_qty', 'amount', 'gst', 'gst_amount', 'total', 's_disc', 'sel', 'unit_price']);
+const GROUPS = [['item', 'ips.gItem'], ['po', 'ips.gPurchase'], ['si', 'ips.gStockIn']];
+const xCls = (c) => (c.extra ? `ips-x-${c.group}` : '');
+
 export default function StockIps() {
   const { t } = useT();
   const toast = useToast();
   const [head, setHead] = useState(EMPTY_HEAD);
   const [rows, setRows] = useState([emptyRow()]);
   const [draftId, setDraftId] = useState(null);
-  // column groups that open / close with the › in their heading: Item details, Purchase extras, Stock In extras
-  const [showItem, setShowItem] = useState(false);
-  const [showPo, setShowPo] = useState(false);
-  const [showSi, setShowSi] = useState(false);
+  // which columns are shown and their widths (kept on this PC): group ›, Columns list, drag a heading's edge
+  const gc = useGridColumns('sc_ips_cols', COL_SPEC);
+  const tableRef = useRef(null);
+  const [colsOpen, setColsOpen] = useState(false);
+  const colsBox = useRef(null);
+  useEffect(() => {
+    if (!colsOpen) return undefined;
+    const close = (e) => { if (!colsBox.current?.contains(e.target)) setColsOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setColsOpen(false); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
+  }, [colsOpen]);
   const [showDrafts, setShowDrafts] = useState(false);
   const [showScan, setShowScan] = useState(false);
   const [busy, setBusy] = useState('');
@@ -88,15 +131,17 @@ export default function StockIps() {
   const thisMonth = todayLocal().slice(0, 7);
   const used = rows.filter(filled);
   const problems = new Map(rows.map((r) => [r.key, rowProblems(r, thisMonth, t)]));
-  // the Stock In extras open by themselves when one of their boxes has a problem, so nothing wrong is hidden
-  const siOpen = showSi || [...problems.values()].some((p) => p.mfg || p.s_disc);
+  // shown columns: fixed ones, the ones not hidden, and any hidden one with a problem in a row (nothing wrong is hidden)
+  const forced = new Set(COL_SPEC.filter((c) => c.problem && [...problems.values()].some((p) => p[c.problem])).map((c) => c.key));
+  const visible = COL_SPEC.filter((c) => c.fixed || forced.has(c.key) || !gc.isHidden(c.key));
+  const shown = (key) => visible.some((c) => c.key === key);
   // Old Price: this vendor's last P.Rate for each item already in the Item List (0 when never ordered from them)
   const oldIds = [...new Set(rows.filter((r) => r.item_id).map((r) => r.item_id))].sort((a, b) => a - b).join(',');
   const oldPrices = useAsync(
-    () => (showPo && head.supplier_id && oldIds
+    () => (shown('old') && head.supplier_id && oldIds
       ? api('/purchases/old-prices', { query: { supplier_id: head.supplier_id, item_ids: oldIds } })
       : Promise.resolve({})),
-    [showPo, head.supplier_id, oldIds],
+    [shown('old'), head.supplier_id, oldIds],
   );
   const hasProblem = [...problems.values()].some((p) => Object.keys(p).length);
   const sum = Math.round(used.reduce((s, r) => s + calcOf(r).total, 0) * 100) / 100;
@@ -137,7 +182,7 @@ export default function StockIps() {
       };
     });
     setRows((rs) => [...rs.filter(filled), ...scanned, emptyRow()]);
-    if (scanned.some((r) => r.mfg || r.s_disc)) setShowSi(true);   // the bill filled Mf.Date / S.Disc %: show them
+    if (scanned.some((r) => r.mfg || r.s_disc)) gc.showCols(['mfg', 's_disc'], true);   // the bill filled them: show them
     if (scanned.some((r) => !r.item_id)) setShowItem(true);
     const gstNo = String(header?.gstNo || '').toUpperCase();
     const v = gstNo && (vendors.data?.rows || []).find((x) => String(x.gstin || '').toUpperCase() === gstNo);
@@ -149,7 +194,7 @@ export default function StockIps() {
     toast(t('scan.added', { n: scanned.length }));
   }
 
-  const screen = () => ({ head, rows: rows.map(({ key, ...r }) => r), showItem, showPo, showSi });
+  const screen = () => ({ head, rows: rows.map(({ key, ...r }) => r) });
   async function saveDraft() {
     if (!head.supplier_id && !head.bill_no.trim()) { setError(t('ips.draftNeeds')); return; }
     setBusy('draft');
@@ -175,9 +220,6 @@ export default function StockIps() {
       const data = d.data || {};
       setHead({ ...EMPTY_HEAD(), ...(data.head || {}) });
       setRows((data.rows || []).length ? data.rows.map((r) => ({ ...emptyRow(), ...r, key: emptyRow().key })) : [emptyRow()]);
-      setShowItem(!!data.showItem);
-      setShowPo(!!data.showPo);
-      setShowSi(!!data.showSi);
       setDraftId(d.id);
       setShowDrafts(false);
       setError('');
@@ -234,19 +276,81 @@ export default function StockIps() {
     const msg = problems.get(r.key)?.[field];
     return <td className={[cls, msg ? 'cell-bad' : ''].filter(Boolean).join(' ') || undefined} title={msg}>{input}</td>;
   };
-  // footer: the columns before Total (# … GST %, with the open groups) and after it (Stock In + the + / bin column)
-  const beforeTotal = 9 + (showItem ? 5 : 0) + (showPo ? 3 : 0);
-  const afterTotal = (siOpen ? 6 : 3) + 1;
+  // footer: the columns before Total and after it (Stock In + the + / bin column)
+  const beforeTotal = visible.findIndex((c) => c.key === 'total');
+  const afterTotal = visible.length - beforeTotal - 1;
+  // the group heading row: one cell per run of shown columns of the same group
+  const groupSpans = visible.reduce((acc, c) => {
+    const last = acc[acc.length - 1];
+    if (c.group && last?.group === c.group) last.span += 1; else acc.push({ group: c.group || null, span: 1 });
+    return acc;
+  }, []);
   // a group's heading: its name and the round › / ‹ that shows / hides its extra columns
-  const groupHead = (label, open, setOpen, tone) => (
-    <span className="po-item-head">
-      <span>{label}</span>
-      <button type="button" className={`po-more ips-more-${tone} ${open ? 'open' : ''}`} aria-expanded={open}
-        title={open ? t('purchase.hideDetails') : t('purchase.showDetails')} onClick={() => setOpen(!open)}>
-        <Icon name={open ? 'chevronLeft' : 'chevronRight'} size={14} />
-      </button>
-    </span>
-  );
+  const groupHead = (group) => {
+    const open = gc.groupOpen(group);
+    return (
+      <span className="po-item-head">
+        <span>{t(GROUPS.find(([g]) => g === group)[1])}</span>
+        <button type="button" className={`po-more ips-more-${group} ${open ? 'open' : ''}`} aria-expanded={open}
+          title={open ? t('purchase.hideDetails') : t('purchase.showDetails')} onClick={() => gc.toggleGroup(group)}>
+          <Icon name={open ? 'chevronLeft' : 'chevronRight'} size={14} />
+        </button>
+      </span>
+    );
+  };
+  const colLabel = {
+    no: '#', name: t('items.name'), generic_name: t('items.generic'), manufacturer: t('items.manufacturer'), hsn_code: 'HSN',
+    category: t('items.category'), pack: t('items.pack'), unit: t('purchase.unit'), mrp: t('items.mrp'), old: t('purchase.oldPrice'),
+    disc_percent: t('purchase.disc'), p_rate: t('purchase.pRate'), qty: t('items.quantity'), free_qty: t('purchase.free'),
+    amount: t('purchase.amount'), gst: t('purchase.gst'), gst_amount: t('purchase.gstAmount'), total: t('purchase.total'),
+    batch_no: t('stockin.batch'), mfg: t('stockin.mfg'), exp: t('stockin.exp'), s_disc: t('stockin.sDisc'), sel: t('stockin.sel'),
+    unit_price: t('stockin.unitPrice'), actions: '',
+  };
+  /** One cell of a row (x = the row's worked-out sums: c, sel, old) */
+  function renderCell(col, r, n, x) {
+    const cls = xCls(col);
+    switch (col.key) {
+      case 'no': return <td className="muted">{n + 1}{r.name && !r.item_id && <small className="ips-new">{t('ips.newItem')}</small>}</td>;
+      case 'name': return (
+        <td className="po-item">
+          <ItemPicker browse value={r.name} ariaLabel={t('items.name')} placeholder={t('ips.itemHint')}
+            onPick={({ item, medicine_name: typed }) => setRow(r.key, item ? fromItem(item) : { item_id: null, name: typed })} />
+        </td>
+      );
+      case 'generic_name': case 'manufacturer': case 'hsn_code': case 'category': case 'pack': return (
+        <td className={cls}><input aria-label={colLabel[col.key]} disabled={!!r.item_id} maxLength={col.key === 'hsn_code' ? 20 : 150}
+          value={r[col.key]} onChange={(e) => setRow(r.key, { [col.key]: e.target.value })} /></td>
+      );
+      case 'unit': return <td><input aria-label={t('purchase.unit')} disabled={!!r.item_id} maxLength={30} value={r.unit} onChange={(e) => setRow(r.key, { unit: e.target.value })} /></td>;
+      case 'mrp': return cell(r, 'mrp', <input {...num} aria-label={t('items.mrp')} value={r.mrp} onChange={(e) => setPrice(r.key, { mrp: e.target.value })} />);
+      case 'old': return <td className={`num muted ${cls}`}>{x.old == null ? '—' : two(x.old)}</td>;
+      case 'disc_percent': return cell(r, 'disc_percent', <input {...num} max="100" aria-label={t('purchase.disc')} value={r.disc_percent} onChange={(e) => setPrice(r.key, { disc_percent: e.target.value })} />);
+      case 'p_rate': return cell(r, 'p_rate', <input {...num} aria-label={t('purchase.pRate')} value={r.p_rate} onChange={(e) => setPrice(r.key, { p_rate: e.target.value })} />);
+      case 'qty': return cell(r, 'qty', <input {...num} aria-label={t('items.quantity')} value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} />);
+      case 'free_qty': return <td><input {...num} aria-label={t('purchase.free')} value={r.free_qty} onChange={(e) => setRow(r.key, { free_qty: e.target.value })} /></td>;
+      case 'amount': return <td className={`num ${cls}`}>{filled(r) ? two(x.c.amount) : ''}</td>;
+      case 'gst': return cell(r, 'gst', <input {...num} max="28" aria-label={t('purchase.gst')} value={r.gst} onChange={(e) => setRow(r.key, { gst: e.target.value })} />);
+      case 'gst_amount': return <td className={`num ${cls}`}>{filled(r) ? two(x.c.gst_amount) : ''}</td>;
+      case 'total': return <td className="num"><b>{filled(r) ? two(x.c.total) : ''}</b></td>;
+      case 'batch_no': return <td><input className="si-batch" aria-label={t('stockin.batch')} maxLength={50} value={r.batch_no} onChange={(e) => setRow(r.key, { batch_no: e.target.value })} /></td>;
+      case 'mfg': return cell(r, 'mfg', <input className="si-month" inputMode="numeric" placeholder="MM/YY" aria-label={t('stockin.mfg')} value={r.mfg} onChange={(e) => setRow(r.key, { mfg: typeMMYY(e.target.value) })} />, cls);
+      case 'exp': return cell(r, 'exp', <input className="si-month" inputMode="numeric" placeholder="MM/YY" aria-label={t('stockin.exp')} value={r.exp} onChange={(e) => setRow(r.key, { exp: typeMMYY(e.target.value) })} />);
+      case 's_disc': return cell(r, 's_disc', <input {...num} max="100" aria-label={t('stockin.sDisc')} value={r.s_disc} onChange={(e) => setRow(r.key, { s_disc: e.target.value })} />, cls);
+      case 'sel': return <td className="num">{x.sel != null ? two(x.sel) : ''}</td>;
+      case 'unit_price': return <td className={`num ${cls}`}>{x.sel != null ? two(unitPrice(x.sel, r.unit)) : ''}</td>;
+      case 'actions': return (
+        <td>
+          <span className="po-row-actions">
+            <button type="button" className="icon-btn rx-add" title={t('purchase.addLine')} aria-label={t('purchase.addLine')}
+              onClick={(e) => { addAfter(r.key); focusNewRow(e.currentTarget); }}><Icon name="plus" size={16} /></button>
+            <button type="button" className="icon-btn" title={t('common.delete')} aria-label={t('common.delete')} onClick={() => remove(r.key)}>
+              <Icon name="trash" size={15} /></button>
+          </span>
+        </td>
+      );
+      default: return <td />;
+    }
+  }
   const draftRows = drafts.data?.rows || [];
 
   return (
@@ -262,6 +366,32 @@ export default function StockIps() {
             <Button type="button" variant="ghost" size="sm" onClick={() => setShowScan(true)}><Icon name="scan" size={15} /> {t('scan.title')}</Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => setShowDrafts(true)}><Icon name="file" size={15} /> {t('ips.drafts', { n: draftRows.length })}</Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/stock-in')}><Icon name="list" size={15} /> {t('stockin.viewList')}</Button>
+            <span className="ips-cols" ref={colsBox}>
+              <Button type="button" variant="ghost" size="sm" className={colsOpen ? 'on' : ''} aria-expanded={colsOpen} onClick={() => setColsOpen((o) => !o)}>
+                <Icon name="grip" size={15} /> {t('ips.columns')}
+              </Button>
+              {colsOpen && (
+                <div className="ips-cols-menu" role="dialog" aria-label={t('ips.columns')}>
+                  <p className="muted">{t('ips.columnsHint')}</p>
+                  <div className="ips-cols-groups">
+                    {GROUPS.map(([g, label]) => (
+                      <div key={g} className={`ips-cols-group ips-cols-g-${g}`}>
+                        <b>{t(label)}</b>
+                        {COL_SPEC.filter((c) => c.group === g && !c.fixed).map((c) => (
+                          <label key={c.key} className="ips-cols-item">
+                            <input type="checkbox" checked={!gc.isHidden(c.key)} onChange={() => gc.toggle(c.key)} /> {colLabel[c.key]}
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="ips-cols-actions">
+                    <Button type="button" size="sm" variant="ghost" onClick={gc.resetColumns}>{t('ips.defaultCols')}</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={gc.resetWidths}>{t('ips.resetWidths')}</Button>
+                  </div>
+                </div>
+              )}
+            </span>
           </div>
         </div>
 
@@ -281,100 +411,42 @@ export default function StockIps() {
         )}
 
         <div className="table-wrap po-lines ips-lines">
-          <table className="table">
-            {/* fixed column shares (adding up to 100 %), so the table fits the screen with any group open or closed */}
+          <table className="table" ref={tableRef}>
+            {/* column shares (adding up to 100 %): the table fits the screen; a widened column takes room from the others */}
             <colgroup>
               {(() => {
-                const w = [
-                  2.5, 12, ...(showItem ? [6.5, 8.5, 6, 6, 5] : []), 4,
-                  5, ...(showPo ? [5] : []), 4.5, 5, 4.5, 4, ...(showPo ? [6] : []), 4, ...(showPo ? [5.5] : []), 6.5,
-                  6.5, ...(siOpen ? [5.5] : []), 5.5, ...(siOpen ? [5] : []), 6, ...(siOpen ? [5.5] : []), 4,
-                ];
-                const total = w.reduce((a, x) => a + x, 0);
-                return w.map((x, i) => <col key={i} style={{ width: `${(x / total) * 100}%` }} />);
+                const total = visible.reduce((a, c) => a + gc.widthOf(c), 0);
+                return visible.map((c) => <col key={c.key} style={{ width: `${(gc.widthOf(c) / total) * 100}%` }} />);
               })()}
             </colgroup>
             <thead>
               <tr className="ips-groups">
-                <th />
-                <th colSpan={showItem ? 7 : 2} className="ips-g-item">{groupHead(t('ips.gItem'), showItem, setShowItem, 'item')}</th>
-                <th colSpan={showPo ? 10 : 7} className="ips-g-po">{groupHead(t('ips.gPurchase'), showPo, setShowPo, 'po')}</th>
-                <th colSpan={siOpen ? 6 : 3} className="ips-g-si">{groupHead(t('ips.gStockIn'), siOpen, setShowSi, 'si')}</th>
-                <th />
+                {groupSpans.map((g, i) => (g.group
+                  ? <th key={g.group} colSpan={g.span} className={`ips-g-${g.group}`}>{groupHead(g.group)}</th>
+                  : <th key={`blank-${i}`} />))}
               </tr>
               <tr>
-                <th>#</th>
-                <th className="po-item">{t('items.name')}</th>
-                {showItem && (
-                  <>
-                    <th className="ips-x-item">{t('items.generic')}</th>
-                    <th className="ips-x-item">{t('items.manufacturer')}</th>
-                    <th className="ips-x-item">HSN</th>
-                    <th className="ips-x-item">{t('items.category')}</th>
-                    <th className="ips-x-item">{t('items.pack')}</th>
-                  </>
-                )}
-                <th>{t('purchase.unit')}</th>
-                <th className="num">{t('items.mrp')}</th>
-                {showPo && <th className="num ips-x-po">{t('purchase.oldPrice')}</th>}
-                <th className="num">{t('purchase.disc')}</th>
-                <th className="num">{t('purchase.pRate')}</th>
-                <th className="num">{t('items.quantity')}</th>
-                <th className="num">{t('purchase.free')}</th>
-                {showPo && <th className="num ips-x-po">{t('purchase.amount')}</th>}
-                <th className="num">{t('purchase.gst')}</th>
-                {showPo && <th className="num ips-x-po">{t('purchase.gstAmount')}</th>}
-                <th className="num">{t('purchase.total')}</th>
-                <th>{t('stockin.batch')}</th>
-                {siOpen && <th className="ips-x-si">{t('stockin.mfg')}</th>}
-                <th>{t('stockin.exp')}</th>
-                {siOpen && <th className="num ips-x-si">{t('stockin.sDisc')}</th>}
-                <th className="num">{t('stockin.sel')}</th>
-                {siOpen && <th className="num ips-x-si">{t('stockin.unitPrice')}</th>}
-                <th />
+                {visible.map((c) => (
+                  <th key={c.key} className={[NUM_COLS.has(c.key) ? 'num' : '', c.key === 'name' ? 'po-item' : '', xCls(c)].filter(Boolean).join(' ') || undefined}>
+                    {colLabel[c.key]}
+                    {c.key !== 'actions' && (
+                      <span className="col-resize" title={t('ips.dragWiden')} aria-hidden="true"
+                        onPointerDown={(e) => gc.startResize(e, c.key, visible, tableRef.current)} onDoubleClick={() => gc.resetWidth(c.key)} />
+                    )}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody onKeyDown={arrowMove}>
               {rows.map((r, n) => {
-                const c = calcOf(r);
-                const sel = Number(r.mrp) > 0 ? selAmount({ mrp: r.mrp, disc_percent: r.s_disc }) : null;
-                const old = r.item_id && head.supplier_id ? Number(oldPrices.data?.[r.item_id] || 0) : null;
+                const x = {
+                  c: calcOf(r),
+                  sel: Number(r.mrp) > 0 ? selAmount({ mrp: r.mrp, disc_percent: r.s_disc }) : null,
+                  old: r.item_id && head.supplier_id ? Number(oldPrices.data?.[r.item_id] || 0) : null,
+                };
                 return (
                   <tr key={r.key}>
-                    <td className="muted">{n + 1}{r.name && !r.item_id && <small className="ips-new">{t('ips.newItem')}</small>}</td>
-                    <td className="po-item">
-                      <ItemPicker browse value={r.name} ariaLabel={t('items.name')} placeholder={t('ips.itemHint')}
-                        onPick={({ item, medicine_name: typed }) => setRow(r.key, item ? fromItem(item) : { item_id: null, name: typed })} />
-                    </td>
-                    {showItem && ['generic_name', 'manufacturer', 'hsn_code', 'category', 'pack'].map((f) => (
-                      <td key={f} className="ips-x-item"><input aria-label={f} disabled={!!r.item_id} maxLength={f === 'hsn_code' ? 20 : 150} value={r[f]}
-                        onChange={(e) => setRow(r.key, { [f]: e.target.value })} /></td>
-                    ))}
-                    <td><input aria-label={t('purchase.unit')} disabled={!!r.item_id} maxLength={30} value={r.unit} onChange={(e) => setRow(r.key, { unit: e.target.value })} /></td>
-                    {cell(r, 'mrp', <input {...num} aria-label={t('items.mrp')} value={r.mrp} onChange={(e) => setPrice(r.key, { mrp: e.target.value })} />)}
-                    {showPo && <td className="num muted ips-x-po">{old == null ? '—' : two(old)}</td>}
-                    {cell(r, 'disc_percent', <input {...num} max="100" aria-label={t('purchase.disc')} value={r.disc_percent} onChange={(e) => setPrice(r.key, { disc_percent: e.target.value })} />)}
-                    {cell(r, 'p_rate', <input {...num} aria-label={t('purchase.pRate')} value={r.p_rate} onChange={(e) => setPrice(r.key, { p_rate: e.target.value })} />)}
-                    {cell(r, 'qty', <input {...num} aria-label={t('items.quantity')} value={r.qty} onChange={(e) => setRow(r.key, { qty: e.target.value })} />)}
-                    <td><input {...num} aria-label={t('purchase.free')} value={r.free_qty} onChange={(e) => setRow(r.key, { free_qty: e.target.value })} /></td>
-                    {showPo && <td className="num ips-x-po">{filled(r) ? two(c.amount) : ''}</td>}
-                    {cell(r, 'gst', <input {...num} max="28" aria-label={t('purchase.gst')} value={r.gst} onChange={(e) => setRow(r.key, { gst: e.target.value })} />)}
-                    {showPo && <td className="num ips-x-po">{filled(r) ? two(c.gst_amount) : ''}</td>}
-                    <td className="num"><b>{filled(r) ? two(c.total) : ''}</b></td>
-                    <td><input className="si-batch" aria-label={t('stockin.batch')} maxLength={50} value={r.batch_no} onChange={(e) => setRow(r.key, { batch_no: e.target.value })} /></td>
-                    {siOpen && cell(r, 'mfg', <input className="si-month" inputMode="numeric" placeholder="MM/YY" aria-label={t('stockin.mfg')} value={r.mfg} onChange={(e) => setRow(r.key, { mfg: typeMMYY(e.target.value) })} />, 'ips-x-si')}
-                    {cell(r, 'exp', <input className="si-month" inputMode="numeric" placeholder="MM/YY" aria-label={t('stockin.exp')} value={r.exp} onChange={(e) => setRow(r.key, { exp: typeMMYY(e.target.value) })} />)}
-                    {siOpen && cell(r, 's_disc', <input {...num} max="100" aria-label={t('stockin.sDisc')} value={r.s_disc} onChange={(e) => setRow(r.key, { s_disc: e.target.value })} />, 'ips-x-si')}
-                    <td className="num">{sel != null ? two(sel) : ''}</td>
-                    {siOpen && <td className="num ips-x-si">{sel != null ? two(unitPrice(sel, r.unit)) : ''}</td>}
-                    <td>
-                      <span className="po-row-actions">
-                        <button type="button" className="icon-btn rx-add" title={t('purchase.addLine')} aria-label={t('purchase.addLine')}
-                          onClick={(e) => { addAfter(r.key); focusNewRow(e.currentTarget); }}><Icon name="plus" size={16} /></button>
-                        <button type="button" className="icon-btn" title={t('common.delete')} aria-label={t('common.delete')} onClick={() => remove(r.key)}>
-                          <Icon name="trash" size={15} /></button>
-                      </span>
-                    </td>
+                    {visible.map((c) => <Fragment key={c.key}>{renderCell(c, r, n, x)}</Fragment>)}
                   </tr>
                 );
               })}
@@ -392,7 +464,7 @@ export default function StockIps() {
               <tr>
                 <td colSpan={beforeTotal} className="num"><b>{t('purchase.sumTotal')}</b></td>
                 <td className="num"><b>{money(sum)}</b></td>
-                <td colSpan={afterTotal} />
+                {afterTotal > 0 && <td colSpan={afterTotal} />}
               </tr>
               <tr>
                 <td colSpan={beforeTotal} className="num">
@@ -400,12 +472,12 @@ export default function StockIps() {
                     onChange={(e) => setHead((h) => ({ ...h, round_off: e.target.checked }))} /> <b>{t('pharma.roundOff')}</b></label>
                 </td>
                 <td className="num">{roundOff > 0 ? '+ ' : roundOff < 0 ? '− ' : ''}{money(Math.abs(roundOff))}</td>
-                <td colSpan={afterTotal} />
+                {afterTotal > 0 && <td colSpan={afterTotal} />}
               </tr>
               <tr className="sale-total-row">
                 <td colSpan={beforeTotal} className="num"><b>{t('pharma.netAmount')}</b></td>
                 <td className="num po-sum">{money(sum + roundOff)}</td>
-                <td colSpan={afterTotal} />
+                {afterTotal > 0 && <td colSpan={afterTotal} />}
               </tr>
             </tfoot>
           </table>

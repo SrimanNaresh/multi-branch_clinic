@@ -1211,6 +1211,31 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .ips-lines .table tbody td.ips-x-si { background: #f2fbf6; }
 .po-more.ips-more-po.open { background: #d99a1e; border-color: #d99a1e; }
 .po-more.ips-more-si.open { background: #2ba36f; border-color: #2ba36f; }
+/* Three in One: drag a heading's right edge to widen the column */
+.ips-lines .table thead tr:last-child th { position: relative; }
+.col-resize { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; z-index: 2; touch-action: none; }
+.col-resize:hover, body.col-resizing .col-resize:active { background: linear-gradient(90deg, transparent 2px, var(--brand) 2px, var(--brand) 4px, transparent 4px); }
+body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none; }
+@media (max-width: 900px) { .col-resize { display: none; } }
+/* Three in One: Columns list */
+.ips-cols { position: relative; }
+.ips-cols-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: min(560px, 92vw); padding: 12px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-lg); text-align: left; }
+.ips-cols-menu > p { margin: 0 0 10px; font-size: 12px; }
+.ips-cols-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ips-cols-group { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 8px; }
+.ips-cols-group > b { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+.ips-cols-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); white-space: nowrap; cursor: pointer; }
+.ips-cols-item input { width: 15px; height: 15px; min-height: 0; margin: 0; }
+.ips-cols-item:hover { color: var(--brand); }
+.ips-cols-group.ips-cols-g-item { background: #e8f1f8; }
+.ips-cols-group.ips-cols-g-po { background: var(--warning-50); }
+.ips-cols-group.ips-cols-g-si { background: #e3f4e8; }
+.ips-cols-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+@media (max-width: 640px) {
+  .ips-cols-groups { grid-template-columns: 1fr; }
+  .ips-cols-menu { position: fixed; left: 8px; right: 8px; top: 64px; width: auto; max-height: calc(100vh - 80px); overflow-y: auto; }
+}
 .ips-new { display: block; font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; }
 
 /* Scan Bill (Three in One): Upload → Select table → Match columns → Fill the table */
