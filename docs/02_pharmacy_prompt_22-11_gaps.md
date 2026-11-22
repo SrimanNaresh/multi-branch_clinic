@@ -48,3 +48,31 @@ Payments report, All in One. These already match the prompt:
 4. **Check pass:** P8 in the browser at 375 px and desktop; fix what differs; list any new shared class/component.
 
 No existing billing, GST, stock or batch rule changes. P1 adds an optional discount that is 0 for every saved order.
+
+## 5. Result (22-11-2026, branch `Naresh`)
+
+| Phase | Commit | Done |
+|---|---|---|
+| 1 | 16bc62a | P1 `purchase_orders.disc_percent` / `disc_amount` (+ `shared/purchase.js orderTotals`, Payments and report take it off), P2 server Bill No check + `GET /api/stock-in/bill-no`, P4 Reference No for every mode except Cash, P6 comment |
+| 2 | 00e0fda | P2 live Bill No warning on Stock In, P3 Disc % on all lines, P4 on screen, P5 Quick Actions; Round Off ticked by default on a new order / Three in One |
+| 3 | 581ff0c | P7 tests (`backend/test/billScan.test.js`, Round Off and order totals in `pharmacy.test.js`; Scan Bill helpers moved unchanged to `lib/billColumns.js`); Scan Bill fills pack size from "10's" / "1x15"; P9 prompt file |
+| 4 | (this commit) | P8: no sideways page scroll on all 24 pharmacy screens at 375 px and 1366 px; fixed the header (clinic name shortens on phones), Stock In and Purchase Order headers (one column under 900 px) |
+
+Checked against the dev DB (`T_multi_branch`) with test documents that were deleted afterwards: order with 10 % bill
+discount (268.80 → 26.88 off → Round Off +0.08 → 242.00), Stock In Bill No duplicate refused, invoice and Vendor
+Payments report at 80.64, card payment without Reference No refused, cash without it saved. 74 unit tests pass.
+
+New shared pieces: `Input` now passes `error` to `Field` (already supported there); classes `.ips-disc-all`,
+`.pdash-quick` / `.pdash-actions` / `.pdash-action` (no existing class for a box inside a table footer or a grid of
+action buttons).
+
+### Still different from the prompt
+
+- **Purchase line formula (needs your decision, billing logic):** the prompt links MRP, Disc % and P.Rate
+  (P.Rate = MRP less Disc %, Amount = Qty × P.Rate). Here Disc % is taken off P.Rate (Rate = P.Rate less Disc %,
+  Amount = Qty × Rate), as in All In One. Both give the same Amount when Disc % is 0, which is how Scan Bill fills lines.
+  Not changed.
+- Item Master is 10 + 6 boxes a row and Vendor Master 4 + 7 + 1 on desktop (prompt: 8 + 8 and 7 a row); these layouts
+  were set on purpose earlier (wider name boxes). Not changed.
+- Pay modes are Cash / UPI / Card / Cheque / NEFT / Other (prompt: … Bank …); saved payments use them. Not changed.
+- D1–D4 above (kept on purpose).

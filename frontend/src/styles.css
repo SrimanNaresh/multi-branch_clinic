@@ -440,7 +440,7 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .si-lines .table td input.si-date { width: 128px; text-align: left; }
 .si-lines .po-item { min-width: 160px; white-space: normal; }
 .si-lines td.si-over { color: var(--danger); }
-@media (max-width: 900px) { .form-grid.si-head { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .form-grid.si-head, .form-grid.si-head:has(> :nth-child(4)) { grid-template-columns: 1fr; } }
 /* Pharmacy → Report → Stock Report */
 .sr-formula { margin: -4px 0 8px; font-size: 12px; }
 .sr-table td, .sr-table th { white-space: nowrap; }
@@ -562,7 +562,7 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
 .picker-menu.picker-browse { min-width: 260px; overflow-x: hidden; }
 .picker-browse .pick-title, .picker-browse .pick-generic { white-space: normal; }
 .po-sum { font-size: 15px; font-weight: 700; color: var(--brand); }
-@media (max-width: 900px) { .form-grid.po-head { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .form-grid.po-head, .form-grid.po-head.po-head-short { grid-template-columns: 1fr; } }
 /* compact list page (Pharmacy → Vendor → List): less padding, shorter rows */
 .card.crud-compact { padding: 10px 12px; }
 .crud-compact .toolbar { margin-bottom: 6px; }
@@ -991,6 +991,10 @@ html[lang='ta'] .nav-title { text-transform: none; letter-spacing: 0; font-size:
   .clinic-switcher select { max-width: 150px; }
   .topbar-right { gap: 8px; }
   .lang-toggle button { padding: 6px 8px; }
+  /* phones: the clinic name shortens (…) so the header never pushes the page sideways */
+  .clinic-chip { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; }
+  .clinic-chip .icon, .clinic-chip .muted { display: none; }
+  .app-header .user-btn { padding: 2px; }
   .stats { grid-template-columns: 1fr 1fr; gap: 8px; }
   .stat { padding: 10px 12px; }
   .stat-value { font-size: 20px; }
